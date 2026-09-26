@@ -254,8 +254,10 @@ pre {
 }
 
 .doc-content h2,
-.doc-content h3 {
+.doc-content h3,
+.doc-content h4 {
   letter-spacing: -0.04em;
+  scroll-margin-top: calc(var(--docs-header-offset) + 16px);
 }
 
 .doc-content h2 {
