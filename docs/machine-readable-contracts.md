@@ -11,7 +11,7 @@ Three commands are meant for scripts and agents. Each command below uses the sam
   <dt><a href="#status-short"><code>gitrole status --short</code></a></dt>
   <dd>One line. Order is <code>role scope override commit remote auth policy overall</code>.</dd>
   <dt><a href="#doctor-json"><code>gitrole doctor --json</code></a></dt>
-  <dd>Full diagnosis as JSON. HTTPS auth is an <code>info</code> check.</dd>
+  <dd>Full diagnosis as JSON. HTTPS auth is <code>info</code> only when a pin allows the role; otherwise it is <code>warn</code>.</dd>
   <dt><a href="#resolve-json"><code>gitrole resolve --json</code></a></dt>
   <dd>The <code>.gitrole</code> file as JSON.</dd>
   <dt><a href="#role-name-format">Role name format</a></dt>
@@ -40,10 +40,22 @@ role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overal
 
 A pin is the repo's `.gitrole` file (what `gitrole pin` writes). It names `defaultRole` and `allowedRoles` for that repo. See [Pin a repo to one role]({{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}#pin-a-repo-to-one-role).
 
-HTTPS origin whose pin allows the effective role. `auth=na` and `overall=aligned` together. Exit `0`.
+HTTPS origin whose pin allows the effective role, and that role has a `githubUser`. `auth=na` and `overall=aligned` together. Exit `0`.
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=na policy=ok overall=aligned
+```
+
+HTTPS origin with no pin. `auth=warn` and `overall=warning`. Exit `2`.
+
+```text
+role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
+```
+
+HTTPS origin whose pin does not allow the effective role. `auth=warn` and `overall=warning`. Exit `2`.
+
+```text
+role=personal scope=local override=true commit=ok remote=ok auth=warn policy=warn overall=warning
 ```
 
 Effective role is outside `allowedRoles`. `policy=warn` and `overall=warning`. Exit `2`.
@@ -75,14 +87,14 @@ Exactly one line. Eight `key=value` fields, in this order, separated by single s
 | `override` | Whether a repo-local Git config is active | `true`, `false` |
 | `commit`   | Commit identity check | `ok`, `warn`, `na` |
 | `remote`   | Remote and repo alignment | `ok`, `warn`, `na` |
-| `auth`     | SSH `githubUser` probe on SSH origins | `ok`, `warn`, `na` |
+| `auth`     | SSH `githubUser` probe, or the HTTPS pin check | `ok`, `warn`, `na` |
 | `policy`   | `.gitrole` against the effective role | `ok`, `warn`, `na` |
 | `overall`  | Summary | `aligned`, `warning` |
 
 | Field | `na` when |
 | ----- | --------- |
 | `remote` | Not inside a Git repo |
-| `auth` | Not inside a Git repo, no `origin`, or `origin` is HTTPS |
+| `auth` | Not inside a Git repo, no `origin`, or HTTPS whose pin allows the active role and that role has a `githubUser` |
 | `policy` | No `.gitrole` file |
 
 <h4 id="status-short-na">How <code>na</code> rolls into <code>overall</code></h4>
@@ -95,9 +107,9 @@ Exactly one line. Eight `key=value` fields, in this order, separated by single s
 | Working directory is outside a Git repo | `warning` | `2` |
 | Those checks are only `ok` or `na`, inside a Git repo | `aligned` | `0` |
 
-Only `warn` on those checks, or being outside a Git repo, drives `overall=warning`. `auth=na` on an HTTPS origin and `policy=na` when there is no `.gitrole` file can sit next to `overall=aligned` when nothing is `warn`.
+Only `warn` on those checks, or being outside a Git repo, drives `overall=warning`. `policy=na` when there is no `.gitrole` file can sit next to `overall=aligned` when nothing is `warn`.
 
-`auth` on SSH is `ok` or `warn` from the `githubUser` probe.
+`auth` on SSH is `ok` or `warn` from the `githubUser` probe. On HTTPS, `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. That `na` does not by itself set `overall=warning` or exit `2`. No pin, or a pin that does not allow the active role, is `auth=warn` and exit `2`.
 
 `policy=ok` when `.gitrole` allows the effective role: that role is `defaultRole`, or it is listed in `allowedRoles`. `policy=warn` when the evaluation is `notAllowed`.
 
@@ -105,7 +117,7 @@ Only `warn` on those checks, or being outside a Git repo, drives `overall=warnin
 
 | Code | Meaning |
 | ---- | ------- |
-| `0` | `overall=aligned`. The line was written to stdout. This includes a clean HTTPS repo. |
+| `0` | `overall=aligned`. The line was written to stdout. An HTTPS repo reaches this only when the pin allows the active role, that role has a `githubUser`, and no other field is `warn`. |
 | `2` | `overall=warning`. The line was written to stdout. |
 | `1` | Failure. Error on stderr. Stdout empty. No line. |
 
@@ -206,7 +218,7 @@ gitrole doctor --json
 }
 ```
 
-HTTPS origins add an auth check with `status` `info` and this message: `origin uses HTTPS; SSH auth verification does not apply`. That check is not `warn`. `sshAuth` is omitted when no SSH probe runs.
+HTTPS auth is `info`, with message `origin uses HTTPS; SSH auth verification does not apply`, only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a pin that does not allow the active role, is `warn` and exit `2`. `sshAuth` is omitted when no SSH probe runs.
 
 <h3 id="doctor-json-fields">Fields</h3>
 
@@ -216,7 +228,7 @@ HTTPS origins add an auth check with `status` `info` and this message: `origin u
 | -------------------- | ----------------- |
 | `role`               | Saved role that matches the current commit identity. Omitted if no role matches. |
 | `overall`            | `aligned` or `warning` |
-| `commitIdentity`     | Effective name and email, plus where each comes from: `local`, `global`, or `unset` |
+| `commitIdentity`     | Effective name and email, plus where each comes from: `local`, `global`, `env`, or `unset` |
 | `configuredIdentity` | Raw local and global Git config values |
 | `scope`              | Aggregate view of where the commit identity comes from |
 | `repository`         | Repo context, branch, and parsed remote info |
@@ -229,9 +241,9 @@ HTTPS origins add an auth check with `status` `info` and this message: `origin u
 | Field             | Meaning | Values |
 | ----------------- | ------- | ------ |
 | `fullName.value`  | Effective commit author name | string, or omitted when unset |
-| `fullName.source` | Where the effective name came from | `local`, `global`, `unset` |
+| `fullName.source` | Where the effective name came from | `local`, `global`, `env`, `unset` |
 | `email.value`     | Effective commit author email | string, or omitted when unset |
-| `email.source`    | Where the effective email came from | `local`, `global`, `unset` |
+| `email.source`    | Where the effective email came from | `local`, `global`, `env`, `unset` |
 
 <h4 id="doctor-json-configured-identity"><code>configuredIdentity</code></h4>
 
@@ -308,7 +320,7 @@ HTTPS origins add an auth check with `status` `info` and this message: `origin u
 | `label` | Diagnostic category string | short string such as `role`, `remote`, or `auth` |
 | `message` | Human-readable explanation | string; do not parse this |
 
-On an HTTPS origin the auth entry is `info`, not `warn`:
+When a pin allows the active role and that role has a `githubUser`, the HTTPS auth entry is `info`:
 
 ```json
 {
@@ -318,7 +330,31 @@ On an HTTPS origin the auth entry is `info`, not `warn`:
 }
 ```
 
-`info` does not set `overall` to `warning` and does not cause exit `2`. Exit `0` with `overall` `aligned` is reachable on HTTPS when identity and policy are fine.
+No pin is `warn`. With no `githubUser` on the active role:
+
+```json
+{
+  "status": "warn",
+  "label": "auth",
+  "message": "origin uses HTTPS and no identity pin is configured"
+}
+```
+
+With a `githubUser` but no allowing `.gitrole`, the message is `origin uses HTTPS and no repo pin is configured`.
+
+A pin that does not allow the active role is `warn`. When both github users are known and differ:
+
+```json
+{
+  "status": "warn",
+  "label": "auth",
+  "message": "origin uses HTTPS; github user thisyearearth does not match pin alex-dev"
+}
+```
+
+Otherwise the message is `origin uses HTTPS; active identity does not match pinned role <defaultRole>`.
+
+`info` does not set `overall` to `warning` and does not cause exit `2`. A `warn` auth check does. Exit `0` with `overall` `aligned` on HTTPS requires the pin to allow the active role, that role to have a `githubUser`, and no other `warn` check.
 
 <h3 id="doctor-json-exit-codes">Exit codes</h3>
 
@@ -328,7 +364,7 @@ On an HTTPS origin the auth entry is `info`, not `warn`:
 | `2` | Diagnosis complete, at least one `warn` check. JSON on stdout. |
 | `1` | Failure. Error on stderr. No JSON. |
 
-An HTTPS auth check is `info`, so it does not by itself select exit `2`.
+An HTTPS auth check selects exit `2` when it is `warn` (no pin, or a pin that does not allow the active role). It stays `info`, and does not by itself select exit `2`, only when the pin allows the active role and that role has a `githubUser`.
 
 <h3 id="doctor-json-failures">When it fails</h3>
 

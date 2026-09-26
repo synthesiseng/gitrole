@@ -9,6 +9,10 @@
   * a missing `.gitrole` file still leaves `status` and `doctor` usable; only an invalid policy hard-fails those commands
   * valid policy files and the `status --short` field contract are unchanged
 
+### Bug Fixes
+
+* **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
+
 ## [0.7.6](https://github.com/synthesiseng/gitrole/compare/v0.7.5...v0.7.6) (2026-09-26)
 
 
