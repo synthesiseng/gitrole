@@ -151,11 +151,11 @@ function createDoctorDependencies(role: Role, options: {
         return 'origin/main';
       },
       async getOriginUrl() {
-        return options.remoteUrl ?? 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git';
+        return options.remoteUrl ?? 'git@github.com-acmedeploy:acmedeploy/gitrole.git';
       },
       async getOriginRemote() {
         return getOriginRemote(
-          options.remoteUrl ?? 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git'
+          options.remoteUrl ?? 'git@github.com-acmedeploy:acmedeploy/gitrole.git'
         );
       },
       async setOriginUrl() {
@@ -178,7 +178,7 @@ function createDoctorDependencies(role: Role, options: {
       async probeGithubUser() {
         return options.sshAuth ?? {
           ok: true,
-          host: role.githubHost ?? 'github.com-synsoftworksdev',
+          host: role.githubHost ?? 'github.com-acmedeploy',
           githubUser: role.githubUser
         };
       }
@@ -1027,9 +1027,9 @@ test('use-role returns repo-aware warnings when the selected role does not match
   const role: Role = {
     name: 'work',
     fullName: 'Sara Loera',
-    email: 'sara@synthesissoftworks.com',
-    githubUser: 'synsoftworksdev',
-    githubHost: 'github.com-synsoftworksdev'
+    email: 'sara@acme.example',
+    githubUser: 'acmedeploy',
+    githubHost: 'github.com-acmedeploy'
   };
   const { dependencies } = createDependencies(role);
 
@@ -1056,10 +1056,10 @@ test('use-role returns repo-aware warnings when the selected role does not match
           return 'origin/main';
         },
         async getOriginUrl() {
-          return 'git@github.com-saraeloop:synsoftworksdev/gitrole.git';
+          return 'git@github.com-saraeloop:acmedeploy/gitrole.git';
         },
         async getOriginRemote() {
-          return getOriginRemote('git@github.com-saraeloop:synsoftworksdev/gitrole.git');
+          return getOriginRemote('git@github.com-saraeloop:acmedeploy/gitrole.git');
         },
         async setOriginUrl() {
           return undefined;
@@ -1102,7 +1102,7 @@ test('use-role returns repo-aware warnings when the selected role does not match
   assert.equal(
     result.alignment?.checks.some(
       (check) =>
-        check.label === 'auth' && check.message.includes('expected synsoftworksdev')
+        check.label === 'auth' && check.message.includes('expected acmedeploy')
     ),
     true
   );
@@ -1131,8 +1131,8 @@ test('current-role prefers the effective local identity when a repo-local overri
   };
   const localRole: Role = {
     name: 'work',
-    fullName: 'Synthesis Softworks',
-    email: 'dev@synthesissoftworks.com'
+    fullName: 'Acme Examples',
+    email: 'dev@acme-examples.test'
   };
   const { dependencies } = createDependencies(globalRole);
 
@@ -1163,18 +1163,18 @@ test('current-role prefers the effective local identity when a repo-local overri
   });
 
   assert.equal(result.role?.name, 'work');
-  assert.equal(result.identity.fullName, 'Synthesis Softworks');
-  assert.equal(result.identity.email, 'dev@synthesissoftworks.com');
+  assert.equal(result.identity.fullName, 'Acme Examples');
+  assert.equal(result.identity.email, 'dev@acme-examples.test');
 });
 
 test('doctor aligns commit identity, remote metadata, and SSH auth', async () => {
   const role: Role = {
     name: 'work',
     fullName: 'Sara Loera',
-    email: 'sara@synthesissoftworks.com',
-    sshKeyPath: '~/.ssh/id_ed25519_synsoftworksdev',
-    githubUser: 'synsoftworksdev',
-    githubHost: 'github.com-synsoftworksdev'
+    email: 'sara@acme.example',
+    sshKeyPath: '~/.ssh/id_ed25519_acmedeploy',
+    githubUser: 'acmedeploy',
+    githubHost: 'github.com-acmedeploy'
   };
   const dependencies: DoctorDependencies = {
     roleStore: {
@@ -1216,7 +1216,7 @@ test('doctor aligns commit identity, remote metadata, and SSH auth', async () =>
         return {
           sha: 'abc123',
           authorName: 'Sara Loera',
-          authorEmail: 'sara@synthesissoftworks.com',
+          authorEmail: 'sara@acme.example',
           subject: 'feat: align identity'
         };
       },
@@ -1230,10 +1230,10 @@ test('doctor aligns commit identity, remote metadata, and SSH auth', async () =>
         return 'origin/main';
       },
       async getOriginUrl() {
-        return 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git';
+        return 'git@github.com-acmedeploy:acmedeploy/gitrole.git';
       },
       async getOriginRemote() {
-        return getOriginRemote('git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git');
+        return getOriginRemote('git@github.com-acmedeploy:acmedeploy/gitrole.git');
       },
       async setOriginUrl() {
         return undefined;
@@ -1253,11 +1253,11 @@ test('doctor aligns commit identity, remote metadata, and SSH auth', async () =>
     },
     sshAuthProbe: {
       async probeGithubUser(host: string) {
-        assert.equal(host, 'github.com-synsoftworksdev');
+        assert.equal(host, 'github.com-acmedeploy');
         return {
           ok: true,
           host,
-          githubUser: 'synsoftworksdev'
+          githubUser: 'acmedeploy'
         };
       }
     }
@@ -1268,21 +1268,21 @@ test('doctor aligns commit identity, remote metadata, and SSH auth', async () =>
   assert.equal(result.role?.name, 'work');
   assert.equal(result.overall, 'aligned');
   assert.equal(result.commitIdentity.fullName.source, 'global');
-  assert.equal(result.repository.remote?.owner, 'synsoftworksdev');
-  assert.equal(result.sshAuth?.githubUser, 'synsoftworksdev');
+  assert.equal(result.repository.remote?.owner, 'acmedeploy');
+  assert.equal(result.sshAuth?.githubUser, 'acmedeploy');
   assert.equal(result.checks.some((check) => check.status === 'warn'), false);
   assert.equal(result.checks.some((check) => check.label === 'identity'), false);
 
   const status = await getStatus(dependencies);
   assert.equal(status.roleName, 'work');
-  assert.equal(status.commitIdentity, 'Sara Loera <sara@synthesissoftworks.com>');
-  assert.equal(status.pushAuth, 'synsoftworksdev via github.com-synsoftworksdev');
+  assert.equal(status.commitIdentity, 'Sara Loera <sara@acme.example>');
+  assert.equal(status.pushAuth, 'acmedeploy via github.com-acmedeploy');
   assert.equal(status.scope, 'global');
   assert.equal(status.localOverride, false);
   assert.deepEqual(status.lastNonMergeCommit, {
     sha: 'abc123',
     authorName: 'Sara Loera',
-    authorEmail: 'sara@synthesissoftworks.com',
+    authorEmail: 'sara@acme.example',
     subject: 'feat: align identity'
   });
   assert.equal(status.historyNote, undefined);
@@ -1514,11 +1514,11 @@ test('doctor stays aligned for org remotes when auth and host match the role', a
 
 test('status stays aligned when current identity is correct but the last commit used an older identity', async () => {
   const role: Role = {
-    name: 'synsoftworksdev',
-    fullName: 'synsoftworks',
-    email: 'synthesissoftworks@gmail.com',
-    githubUser: 'synsoftworksdev',
-    githubHost: 'github.com-synsoftworksdev'
+    name: 'acmedeploy',
+    fullName: 'acme-examples',
+    email: 'acmedeploy@gmail.com',
+    githubUser: 'acmedeploy',
+    githubHost: 'github.com-acmedeploy'
   };
 
   const status = await getStatus(
@@ -1529,14 +1529,14 @@ test('status stays aligned when current identity is correct but the last commit 
       },
       latestCommit: {
         sha: 'abc123',
-        authorName: 'synsoftworks',
-        authorEmail: 'sara@synthesissoftworks.com',
+        authorName: 'acme-examples',
+        authorEmail: 'sara@acme.example',
         subject: 'docs: previous account commit'
       },
       sshAuth: {
         ok: true,
-        host: 'github.com-synsoftworksdev',
-        githubUser: 'synsoftworksdev'
+        host: 'github.com-acmedeploy',
+        githubUser: 'acmedeploy'
       }
     })
   );
@@ -1546,18 +1546,18 @@ test('status stays aligned when current identity is correct but the last commit 
   assert.equal(status.auth, 'ok');
   assert.equal(
     status.historyNote,
-    'last non-merge commit used synsoftworks <sara@synthesissoftworks.com>'
+    'last non-merge commit used acme-examples <sara@acme.example>'
   );
 });
 
 test('status stays aligned when the effective role matches repo defaultRole', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-policy-default-'));
   const role: Role = {
-    name: 'synsoftworksdev',
-    fullName: 'Synthesis Softworks',
-    email: 'dev@synthesissoftworks.com',
-    githubUser: 'synsoftworksdev',
-    githubHost: 'github.com-synsoftworksdev'
+    name: 'acmedeploy',
+    fullName: 'Acme Examples',
+    email: 'dev@acme-examples.test',
+    githubUser: 'acmedeploy',
+    githubHost: 'github.com-acmedeploy'
   };
 
   await writeFile(
@@ -1565,8 +1565,8 @@ test('status stays aligned when the effective role matches repo defaultRole', as
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -1616,8 +1616,8 @@ test('status stays aligned when the effective role is allowed but not default', 
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -1644,7 +1644,7 @@ test('status stays aligned when the effective role is allowed but not default', 
       (check) =>
         check.label === 'policy' &&
         check.status === 'info' &&
-        check.message.includes('allowed here, but repo defaultRole is synsoftworksdev')
+        check.message.includes('allowed here, but repo defaultRole is acmedeploy')
     ),
     true
   );
@@ -1669,8 +1669,8 @@ test('status warns when the effective role is not allowed by repo policy', async
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -1710,11 +1710,11 @@ test('status warns when the effective role is not allowed by repo policy', async
 
 test('status summary evaluation derives warnings from observed state, not diagnosis labels', () => {
   const role: Role = {
-    name: 'synsoftworksdev',
-    fullName: 'synsoftworks',
-    email: 'synthesissoftworks@gmail.com',
-    githubUser: 'synsoftworksdev',
-    githubHost: 'github.com-synsoftworksdev'
+    name: 'acmedeploy',
+    fullName: 'acme-examples',
+    email: 'acmedeploy@gmail.com',
+    githubUser: 'acmedeploy',
+    githubHost: 'github.com-acmedeploy'
   };
 
   const summary = summarizeAlignment({
@@ -1737,7 +1737,7 @@ test('status summary evaluation derives warnings from observed state, not diagno
         hasCommits: true,
         remote: parseRemoteUrl(
           'origin',
-          'git@github.com-saraeloop:synsoftworksdev/gitrole.git'
+          'git@github.com-saraeloop:acmedeploy/gitrole.git'
         )
       },
       sshAuth: {
@@ -1798,8 +1798,8 @@ test('doctor records HTTPS auth as info and still warns when history is missing'
   const role: Role = {
     name: 'work',
     fullName: 'Sara Loera',
-    email: 'sara@synthesissoftworks.com',
-    githubUser: 'synsoftworksdev'
+    email: 'sara@acme.example',
+    githubUser: 'acmedeploy'
   };
   const dependencies: DoctorDependencies = {
     roleStore: {
@@ -1850,10 +1850,10 @@ test('doctor records HTTPS auth as info and still warns when history is missing'
         return 'origin/main';
       },
       async getOriginUrl() {
-        return 'https://github.com/synsoftworksdev/gitrole.git';
+        return 'https://github.com/acmedeploy/gitrole.git';
       },
       async getOriginRemote() {
-        return getOriginRemote('https://github.com/synsoftworksdev/gitrole.git');
+        return getOriginRemote('https://github.com/acmedeploy/gitrole.git');
       },
       async setOriginUrl() {
         return undefined;
@@ -2020,8 +2020,8 @@ test('useRemoteForRole rewrites origin to the role host alias', async () => {
   const role: Role = {
     name: 'work',
     fullName: 'Sara Loera',
-    email: 'sara@synthesissoftworks.com',
-    githubHost: 'github.com-synsoftworksdev'
+    email: 'sara@acme.example',
+    githubHost: 'github.com-acmedeploy'
   };
   const calls: string[] = [];
 
@@ -2061,10 +2061,10 @@ test('useRemoteForRole rewrites origin to the role host alias', async () => {
           return 'origin/main';
         },
         async getOriginUrl() {
-          return 'git@github.com:synsoftworksdev/gitrole.git';
+          return 'git@github.com:acmedeploy/gitrole.git';
         },
         async getOriginRemote() {
-          return getOriginRemote('git@github.com:synsoftworksdev/gitrole.git');
+          return getOriginRemote('git@github.com:acmedeploy/gitrole.git');
         },
         async setOriginUrl(url: string) {
           calls.push(url);
@@ -2086,8 +2086,8 @@ test('useRemoteForRole rewrites origin to the role host alias', async () => {
     'work'
   );
 
-  assert.equal(result.nextUrl, 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git');
-  assert.deepEqual(calls, ['git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git']);
+  assert.equal(result.nextUrl, 'git@github.com-acmedeploy:acmedeploy/gitrole.git');
+  assert.deepEqual(calls, ['git@github.com-acmedeploy:acmedeploy/gitrole.git']);
 });
 
 test('doctor adds a fix hint when no saved role matches the active commit identity', async () => {

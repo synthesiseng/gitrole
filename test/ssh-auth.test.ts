@@ -16,17 +16,17 @@ test('ssh auth probe extracts the GitHub username from the SSH handshake output'
       };
       error.code = '1';
       error.stderr =
-        "Hi synsoftworksdev! You've successfully authenticated, but GitHub does not provide shell access.\n";
+        "Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\n";
       throw error;
     }
   });
 
-  const result = await probe.probeGithubUser('github.com-synsoftworksdev');
+  const result = await probe.probeGithubUser('github.com-acmedeploy');
 
   assert.deepEqual(result, {
     ok: true,
-    host: 'github.com-synsoftworksdev',
-    githubUser: 'synsoftworksdev'
+    host: 'github.com-acmedeploy',
+    githubUser: 'acmedeploy'
   });
 });
 
