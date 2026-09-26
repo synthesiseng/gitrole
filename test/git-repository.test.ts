@@ -42,7 +42,7 @@ test('git repository adapter reads repository state', async () => {
       }
 
       if (args[0] === 'remote') {
-        return { stdout: 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git\n', stderr: '' };
+        return { stdout: 'git@github.com-acmedeploy:acmedeploy/gitrole.git\n', stderr: '' };
       }
 
       if (args.at(-1) === 'user.name') {
@@ -50,7 +50,7 @@ test('git repository adapter reads repository state', async () => {
       }
 
       if (args.at(-1) === 'user.email') {
-        return { stdout: 'sara@synthesissoftworks.com\n', stderr: '' };
+        return { stdout: 'sara@acme.example\n', stderr: '' };
       }
 
       return { stdout: '', stderr: '' };
@@ -70,22 +70,22 @@ test('git repository adapter reads repository state', async () => {
   });
   assert.equal(
     await adapter.getOriginUrl(),
-    'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git'
+    'git@github.com-acmedeploy:acmedeploy/gitrole.git'
   );
   assert.deepEqual(await adapter.getOriginRemote(), {
     name: 'origin',
-    url: 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git',
+    url: 'git@github.com-acmedeploy:acmedeploy/gitrole.git',
     protocol: 'ssh',
-    host: 'github.com-synsoftworksdev',
-    owner: 'synsoftworksdev',
+    host: 'github.com-acmedeploy',
+    owner: 'acmedeploy',
     repository: 'gitrole'
   });
   assert.equal(await adapter.getLocalUserName(), 'Sara Loera');
-  assert.equal(await adapter.getLocalUserEmail(), 'sara@synthesissoftworks.com');
+  assert.equal(await adapter.getLocalUserEmail(), 'sara@acme.example');
   await adapter.setLocalUserName('Alex Developer');
   await adapter.setLocalUserEmail('alex@work.example');
 
-  await adapter.setOriginUrl('git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git');
+  await adapter.setOriginUrl('git@github.com-acmedeploy:acmedeploy/gitrole.git');
 
   assert.equal(calls[0]?.file, 'git');
   assert.deepEqual(calls.at(-3), {
@@ -98,7 +98,7 @@ test('git repository adapter reads repository state', async () => {
   });
   assert.deepEqual(calls.at(-1), {
     file: 'git',
-    args: ['remote', 'set-url', 'origin', 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git']
+    args: ['remote', 'set-url', 'origin', 'git@github.com-acmedeploy:acmedeploy/gitrole.git']
   });
 });
 
@@ -116,13 +116,13 @@ test('git repository adapter raises a clear error when git is missing', async ()
 
 test('parseRemoteUrl parses ssh host aliases and https remotes', () => {
   assert.deepEqual(
-    parseRemoteUrl('origin', 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git'),
+    parseRemoteUrl('origin', 'git@github.com-acmedeploy:acmedeploy/gitrole.git'),
     {
       name: 'origin',
-      url: 'git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git',
+      url: 'git@github.com-acmedeploy:acmedeploy/gitrole.git',
       protocol: 'ssh',
-      host: 'github.com-synsoftworksdev',
-      owner: 'synsoftworksdev',
+      host: 'github.com-acmedeploy',
+      owner: 'acmedeploy',
       repository: 'gitrole'
     }
   );

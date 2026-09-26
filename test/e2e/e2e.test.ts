@@ -449,13 +449,13 @@ test('e2e shared org repo stays aligned when the effective role is allowed but n
   });
   setOrigin(workspace, 'git@github.com-saraeloop:open-source-org/gitrole.git');
   await writeRepoPolicy(workspace, {
-    defaultRole: 'synsoftworksdev',
-    allowedRoles: ['synsoftworksdev', 'saraeloop']
+    defaultRole: 'acmedeploy',
+    allowedRoles: ['acmedeploy', 'saraeloop']
   });
 
   const statusResult = runCli(workspace, ['status']);
   mustSucceed(statusResult, 'gitrole status failed for shared org repo');
-  assert.match(statusResult.stdout, /policy\s+allowed role saraeloop \(default: synsoftworksdev\)/);
+  assert.match(statusResult.stdout, /policy\s+allowed role saraeloop \(default: acmedeploy\)/);
   assert.doesNotMatch(statusResult.stdout, /\bwarning\b/);
 
   const statusShortResult = runCli(workspace, ['status', '--short']);
@@ -468,9 +468,9 @@ test('e2e shared org repo stays aligned when the effective role is allowed but n
   const doctorResult = runCli(workspace, ['doctor']);
   mustSucceed(doctorResult, 'gitrole doctor failed for shared org repo');
   assert.match(doctorResult.stdout, /policy\s+\.gitrole \(v1\)/);
-  assert.match(doctorResult.stdout, /default\s+synsoftworksdev/);
-  assert.match(doctorResult.stdout, /allowed\s+synsoftworksdev, saraeloop/);
-  assert.match(doctorResult.stdout, /\n\s*info policy\s+effective role saraeloop is allowed here, but repo defaultRole is synsoftworksdev/);
+  assert.match(doctorResult.stdout, /default\s+acmedeploy/);
+  assert.match(doctorResult.stdout, /allowed\s+acmedeploy, saraeloop/);
+  assert.match(doctorResult.stdout, /\n\s*info policy\s+effective role saraeloop is allowed here, but repo defaultRole is acmedeploy/);
   assert.doesNotMatch(doctorResult.stdout, /\n\s*warn policy\s+/);
 
   const doctorJson = parseJsonOutput<{
@@ -488,8 +488,8 @@ test('e2e shared org repo stays aligned when the effective role is allowed but n
   assert.equal(doctorJson.overall, 'aligned');
   assert.deepEqual(doctorJson.repoPolicy, {
     version: 1,
-    defaultRole: 'synsoftworksdev',
-    allowedRoles: ['synsoftworksdev', 'saraeloop'],
+    defaultRole: 'acmedeploy',
+    allowedRoles: ['acmedeploy', 'saraeloop'],
     effectiveRole: 'saraeloop',
     status: 'allowed'
   });

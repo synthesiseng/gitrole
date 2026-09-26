@@ -61,8 +61,8 @@ test('loadRepoPolicy reads a valid v1 repo policy file', async () => {
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -74,8 +74,8 @@ test('loadRepoPolicy reads a valid v1 repo policy file', async () => {
 
   assert.deepEqual(repoPolicy, {
     version: 1,
-    defaultRole: 'synsoftworksdev',
-    allowedRoles: ['synsoftworksdev', 'saraeloop']
+    defaultRole: 'acmedeploy',
+    allowedRoles: ['acmedeploy', 'saraeloop']
   });
 });
 
@@ -205,7 +205,7 @@ test('loadRepoPolicy fails when defaultRole is not in allowedRoles', async () =>
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
+        defaultRole: 'acmedeploy',
         allowedRoles: ['saraeloop']
       },
       null,
@@ -232,11 +232,11 @@ test('loadRepoPolicy fails when .gitrole is missing', async () => {
 test('evaluateRepoPolicy distinguishes default, allowed, and notAllowed roles', () => {
   const repoPolicy = {
     version: 1 as const,
-    defaultRole: 'synsoftworksdev',
-    allowedRoles: ['synsoftworksdev', 'saraeloop']
+    defaultRole: 'acmedeploy',
+    allowedRoles: ['acmedeploy', 'saraeloop']
   };
 
-  assert.equal(evaluateRepoPolicy(repoPolicy, 'synsoftworksdev').status, 'default');
+  assert.equal(evaluateRepoPolicy(repoPolicy, 'acmedeploy').status, 'default');
   assert.equal(evaluateRepoPolicy(repoPolicy, 'saraeloop').status, 'allowed');
   assert.equal(evaluateRepoPolicy(repoPolicy, 'client-acme').status, 'notAllowed');
 });

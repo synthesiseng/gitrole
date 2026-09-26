@@ -436,9 +436,9 @@ process.exit(0);
       '--email',
       'sara@example.com',
       '--github-user',
-      'synsoftworksdev',
+      'acmedeploy',
       '--github-host',
-      'github.com-synsoftworksdev'
+      'github.com-acmedeploy'
     ],
     { encoding: 'utf8', env }
   );
@@ -460,8 +460,8 @@ process.exit(0);
   );
 
   assert.match(rolesFile, /"name": "sara"/);
-  assert.match(rolesFile, /"githubUser": "synsoftworksdev"/);
-  assert.match(rolesFile, /"githubHost": "github.com-synsoftworksdev"/);
+  assert.match(rolesFile, /"githubUser": "acmedeploy"/);
+  assert.match(rolesFile, /"githubHost": "github.com-acmedeploy"/);
 });
 
 test('cli doctor exits with code 2 when warnings are present', async () => {
@@ -782,8 +782,8 @@ test('cli resolve returns the repo default role from .gitrole', async () => {
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -797,7 +797,7 @@ test('cli resolve returns the repo default role from .gitrole', async () => {
   });
 
   assert.equal(result.status, 0);
-  assert.equal(result.stdout.trim(), 'synsoftworksdev');
+  assert.equal(result.stdout.trim(), 'acmedeploy');
   assert.equal(result.stderr, '');
 });
 
@@ -809,8 +809,8 @@ test('cli resolve --json emits valid JSON matching the repo policy', async () =>
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -827,8 +827,8 @@ test('cli resolve --json emits valid JSON matching the repo policy', async () =>
   assert.equal(result.stderr, '');
   assert.deepEqual(JSON.parse(result.stdout), {
     version: 1,
-    defaultRole: 'synsoftworksdev',
-    allowedRoles: ['synsoftworksdev', 'saraeloop']
+    defaultRole: 'acmedeploy',
+    allowedRoles: ['acmedeploy', 'saraeloop']
   });
 });
 
@@ -906,7 +906,7 @@ test('cli resolve fails when .gitrole has an invalid schema', async () => {
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
+        defaultRole: 'acmedeploy',
         allowedRoles: ['saraeloop']
       },
       null,
@@ -1192,8 +1192,8 @@ test('cli doctor --json includes repo policy state when .gitrole allows the effe
     JSON.stringify(
       {
         version: 1,
-        defaultRole: 'synsoftworksdev',
-        allowedRoles: ['synsoftworksdev', 'saraeloop']
+        defaultRole: 'acmedeploy',
+        allowedRoles: ['acmedeploy', 'saraeloop']
       },
       null,
       2
@@ -1296,8 +1296,8 @@ process.exit(1);
   assert.equal(parsed.overall, 'aligned');
   assert.deepEqual(parsed.repoPolicy, {
     version: 1,
-    defaultRole: 'synsoftworksdev',
-    allowedRoles: ['synsoftworksdev', 'saraeloop'],
+    defaultRole: 'acmedeploy',
+    allowedRoles: ['acmedeploy', 'saraeloop'],
     effectiveRole: 'saraeloop',
     status: 'allowed'
   });
@@ -1718,11 +1718,11 @@ if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && arg
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--local' && args[2] === '--get' && args[3] === 'user.name') {
-  process.stdout.write('Synthesis Softworks\\n');
+  process.stdout.write('Acme Examples\\n');
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--local' && args[2] === '--get' && args[3] === 'user.email') {
-  process.stdout.write('dev@synthesissoftworks.com\\n');
+  process.stdout.write('dev@acme-examples.test\\n');
   process.exit(0);
 }
 if (args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
@@ -1746,11 +1746,11 @@ if (args[0] === 'branch' && args[1] === '--show-current') {
   process.exit(0);
 }
 if (args[0] === 'log' && args[1] === '--no-merges') {
-  process.stdout.write('abc123\\u001fSynthesis Softworks\\u001fdev@synthesissoftworks.com\\u001ffeat: aligned local commit\\n');
+  process.stdout.write('abc123\\u001fAcme Examples\\u001fdev@acme-examples.test\\u001ffeat: aligned local commit\\n');
   process.exit(0);
 }
 if (args[0] === 'remote' && args[1] === 'get-url' && args[2] === 'origin') {
-  process.stdout.write('git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git\\n');
+  process.stdout.write('git@github.com-acmedeploy:acmedeploy/gitrole.git\\n');
   process.exit(0);
 }
 process.exit(1);
@@ -1761,7 +1761,7 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
-process.stderr.write("Hi synsoftworksdev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
+process.stderr.write("Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
     'utf8'
@@ -1774,11 +1774,11 @@ process.exit(1);
       {
         roles: [
           {
-            name: 'synsoft',
-            fullName: 'Synthesis Softworks',
-            email: 'dev@synthesissoftworks.com',
-            githubUser: 'synsoftworksdev',
-            githubHost: 'github.com-synsoftworksdev'
+            name: 'acme',
+            fullName: 'Acme Examples',
+            email: 'dev@acme-examples.test',
+            githubUser: 'acmedeploy',
+            githubHost: 'github.com-acmedeploy'
           }
         ]
       },
@@ -1827,11 +1827,11 @@ if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && arg
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--local' && args[2] === '--get' && args[3] === 'user.name') {
-  process.stdout.write('Synthesis Softworks\\n');
+  process.stdout.write('Acme Examples\\n');
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--local' && args[2] === '--get' && args[3] === 'user.email') {
-  process.stdout.write('dev@synthesissoftworks.com\\n');
+  process.stdout.write('dev@acme-examples.test\\n');
   process.exit(0);
 }
 if (args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
@@ -1855,11 +1855,11 @@ if (args[0] === 'branch' && args[1] === '--show-current') {
   process.exit(0);
 }
 if (args[0] === 'log' && args[1] === '--no-merges') {
-  process.stdout.write('abc123\\u001fSynthesis Softworks\\u001fdev@synthesissoftworks.com\\u001ffeat: aligned local commit\\n');
+  process.stdout.write('abc123\\u001fAcme Examples\\u001fdev@acme-examples.test\\u001ffeat: aligned local commit\\n');
   process.exit(0);
 }
 if (args[0] === 'remote' && args[1] === 'get-url' && args[2] === 'origin') {
-  process.stdout.write('git@github.com-synsoftworksdev:synsoftworksdev/gitrole.git\\n');
+  process.stdout.write('git@github.com-acmedeploy:acmedeploy/gitrole.git\\n');
   process.exit(0);
 }
 process.exit(1);
@@ -1870,7 +1870,7 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
-process.stderr.write("Hi synsoftworksdev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
+process.stderr.write("Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
     'utf8'
@@ -1883,11 +1883,11 @@ process.exit(1);
       {
         roles: [
           {
-            name: 'synsoft',
-            fullName: 'Synthesis Softworks',
-            email: 'dev@synthesissoftworks.com',
-            githubUser: 'synsoftworksdev',
-            githubHost: 'github.com-synsoftworksdev'
+            name: 'acme',
+            fullName: 'Acme Examples',
+            email: 'dev@acme-examples.test',
+            githubUser: 'acmedeploy',
+            githubHost: 'github.com-acmedeploy'
           }
         ]
       },
@@ -1911,11 +1911,11 @@ process.exit(1);
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^synsoft\s+aligned/m);
-  assert.match(result.stdout, /commit\s+Synthesis Softworks <dev@synthesissoftworks\.com>/);
+  assert.match(result.stdout, /^acme\s+aligned/m);
+  assert.match(result.stdout, /commit\s+Acme Examples <dev@acme-examples\.test>/);
   assert.match(
     result.stdout,
-    /push\s+synsoftworksdev via github\.com-synsoftworksdev/
+    /push\s+acmedeploy via github\.com-acmedeploy/
   );
   assert.match(result.stdout, /scope\s+local override/);
   assert.doesNotMatch(result.stdout, /history\s+last non-merge commit used/);
@@ -2294,19 +2294,19 @@ test('cli status stays aligned when the current identity is correct and only the
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
-  process.stdout.write('Synthesis Softworks\\n');
+  process.stdout.write('Acme Examples\\n');
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.email') {
-  process.stdout.write('dev@synthesissoftworks.com\\n');
+  process.stdout.write('dev@acme-examples.test\\n');
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--local' && args[2] === '--get' && args[3] === 'user.name') {
-  process.stdout.write('synsoftworks\\n');
+  process.stdout.write('acme-examples\\n');
   process.exit(0);
 }
 if (args[0] === 'config' && args[1] === '--local' && args[2] === '--get' && args[3] === 'user.email') {
-  process.stdout.write('synthesissoftworks@gmail.com\\n');
+  process.stdout.write('acmedeploy@gmail.com\\n');
   process.exit(0);
 }
 if (args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
@@ -2330,11 +2330,11 @@ if (args[0] === 'branch' && args[1] === '--show-current') {
   process.exit(0);
 }
 if (args[0] === 'log' && args[1] === '--no-merges') {
-  process.stdout.write('abc123\\u001fsynsoftworks\\u001fsara@synthesissoftworks.com\\u001fdocs: previous account commit\\n');
+  process.stdout.write('abc123\\u001facme-examples\\u001fsara@acme.example\\u001fdocs: previous account commit\\n');
   process.exit(0);
 }
 if (args[0] === 'remote' && args[1] === 'get-url' && args[2] === 'origin') {
-  process.stdout.write('git@github.com-synsoftworksdev:synsoftworks/gitrole.git\\n');
+  process.stdout.write('git@github.com-acmedeploy:acme-examples/gitrole.git\\n');
   process.exit(0);
 }
 process.exit(1);
@@ -2346,7 +2346,7 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
-process.stderr.write("Hi synsoftworksdev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
+process.stderr.write("Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
     'utf8'
@@ -2360,11 +2360,11 @@ process.exit(1);
       {
         roles: [
           {
-            name: 'synsoftworksdev',
-            fullName: 'synsoftworks',
-            email: 'synthesissoftworks@gmail.com',
-            githubUser: 'synsoftworksdev',
-            githubHost: 'github.com-synsoftworksdev'
+            name: 'acmedeploy',
+            fullName: 'acme-examples',
+            email: 'acmedeploy@gmail.com',
+            githubUser: 'acmedeploy',
+            githubHost: 'github.com-acmedeploy'
           }
         ]
       },
@@ -2388,16 +2388,16 @@ process.exit(1);
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^synsoftworksdev\s+aligned/m);
-  assert.match(result.stdout, /commit\s+synsoftworks <synthesissoftworks@gmail\.com>/);
+  assert.match(result.stdout, /^acmedeploy\s+aligned/m);
+  assert.match(result.stdout, /commit\s+acme-examples <acmedeploy@gmail\.com>/);
   assert.match(
     result.stdout,
-    /push\s+synsoftworksdev via github\.com-synsoftworksdev/
+    /push\s+acmedeploy via github\.com-acmedeploy/
   );
   assert.match(result.stdout, /scope\s+local override/);
   assert.match(
     result.stdout,
-    /history\s+last non-merge commit used synsoftworks <sara@synthesissoftworks\.com>/
+    /history\s+last non-merge commit used acme-examples <sara@acme\.example>/
   );
   assert.equal(result.stderr, '');
 });
@@ -2425,7 +2425,7 @@ import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(gitLogPath)}, JSON.stringify(args) + "\\n");
 if (args[0] === 'remote' && args[1] === 'get-url' && args[2] === 'origin') {
-  process.stdout.write('git@github.com:synsoftworksdev/gitrole.git\\n');
+  process.stdout.write('git@github.com:acmedeploy/gitrole.git\\n');
   process.exit(0);
 }
 if (args[0] === 'remote' && args[1] === 'set-url' && args[2] === 'origin') {
@@ -2445,8 +2445,8 @@ process.exit(1);
           {
             name: 'work',
             fullName: 'Sara Loera',
-            email: 'sara@synthesissoftworks.com',
-            githubHost: 'github.com-synsoftworksdev'
+            email: 'sara@acme.example',
+            githubHost: 'github.com-acmedeploy'
           }
         ]
       },
@@ -2471,7 +2471,7 @@ process.exit(1);
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /updated remote\s+origin/);
-  assert.match(log, /"remote","set-url","origin","git@github.com-synsoftworksdev:synsoftworksdev\/gitrole.git"/);
+  assert.match(log, /"remote","set-url","origin","git@github.com-acmedeploy:acmedeploy\/gitrole.git"/);
   assert.equal(result.stderr, '');
 });
 

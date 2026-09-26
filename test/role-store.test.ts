@@ -24,8 +24,8 @@ test('role store adds, lists, gets, and removes roles', async () => {
     fullName: 'Sara Loera',
     email: 'sara@example.com',
     sshKeyPath: '/tmp/id_sara',
-    githubUser: 'synsoftworksdev',
-    githubHost: 'github.com-synsoftworksdev'
+    githubUser: 'acmedeploy',
+    githubHost: 'github.com-acmedeploy'
   });
 
   const saved = await store.get('sara');
@@ -33,8 +33,8 @@ test('role store adds, lists, gets, and removes roles', async () => {
 
   assert.equal(saved?.name, 'sara');
   assert.equal(saved?.fullName, 'Sara Loera');
-  assert.equal(saved?.githubUser, 'synsoftworksdev');
-  assert.equal(saved?.githubHost, 'github.com-synsoftworksdev');
+  assert.equal(saved?.githubUser, 'acmedeploy');
+  assert.equal(saved?.githubHost, 'github.com-acmedeploy');
   assert.equal(listed.length, 1);
 
   const removed = await store.remove('sara');
