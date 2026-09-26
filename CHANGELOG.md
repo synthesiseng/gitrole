@@ -9,6 +9,13 @@
   * a missing `.gitrole` file still leaves `status` and `doctor` usable; only an invalid policy hard-fails those commands
   * valid policy files and the `status --short` field contract are unchanged
 
+## [0.7.6](https://github.com/synthesiseng/gitrole/compare/v0.7.5...v0.7.6) (2026-09-26)
+
+
+### Bug Fixes
+
+* **status:** let HTTPS setups align and expose policy on --short ([#57](https://github.com/synthesiseng/gitrole/issues/57)) ([4b841e4](https://github.com/synthesiseng/gitrole/commit/4b841e4a4ca69cd208c31f459bd0871a392b8c1f))
+
 ## [0.7.5](https://github.com/synthesiseng/gitrole/compare/v0.7.4...v0.7.5) (2026-04-15)
 
 
