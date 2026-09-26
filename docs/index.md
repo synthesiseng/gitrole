@@ -119,6 +119,13 @@ Use the main guide when you want the normal setup. Use a focused page when you n
     </div>
     <span aria-hidden="true">&rarr;</span>
   </a>
+  <a class="reference-card" href="{{ '/guides/import-the-current-git-identity/' | url }}">
+    <div>
+      <strong>Guide: Import the current Git identity</strong>
+      <span>Save the identity Git is already using with <code>gitrole import current --name &lt;role&gt;</code>.</span>
+    </div>
+    <span aria-hidden="true">&rarr;</span>
+  </a>
   <a class="reference-card" href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">
     <div>
       <strong>Guide: Use repo-local identity policy with .gitrole</strong>

@@ -38,11 +38,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/synsoftworks/gitrole.git"
+    "url": "git+https://github.com/synthesiseng/gitrole.git"
   },
   "homepage": "https://docs.gitrole.dev",
   "bugs": {
-    "url": "https://github.com/synsoftworks/gitrole/issues"
+    "url": "https://github.com/synthesiseng/gitrole/issues"
   },
   "dependencies": {
     "chalk": "^5.4.1",

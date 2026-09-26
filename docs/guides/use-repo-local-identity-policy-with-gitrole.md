@@ -3,7 +3,7 @@ layout: layouts/base.njk
 title: Use repo-local identity policy with .gitrole
 eyebrow: Guide
 summary: Use .gitrole to declare the preferred Git identity role for a repository and the small set of roles that are allowed there.
-order: 2
+order: 3
 ---
 
 <h2 id="what-this-is">What this is</h2>
@@ -70,6 +70,8 @@ What each field means:
 
 The default role must also appear in <code>allowedRoles</code>.
 
+<code>defaultRole</code> and every <code>allowedRoles</code> entry must also be a valid role name: lowercase letters, numbers, <code>-</code>, and <code>_</code>. <code>company-main</code> and <code>agent_bot</code> are valid. <code>client acme</code>, <code>Work</code>, and <code>Client</code> are not.
+
 <h2 id="resolve-the-default-role">Resolve the default role</h2>
 
 Run this inside the repository:
@@ -103,6 +105,36 @@ Example:
 ```
 
 If no <code>.gitrole</code> file exists, <code>resolve</code> fails clearly. <code>status</code> and <code>doctor</code> still work normally without repo policy.
+
+An invalid role name is a different failure. See <a href="#invalid-role-names-fail-closed">Invalid role names fail closed</a>.
+
+<h2 id="invalid-role-names-fail-closed">Invalid role names fail closed</h2>
+
+If <code>defaultRole</code> or any <code>allowedRoles</code> entry is outside that name format, gitrole does not warn and continue. These commands exit <code>1</code>, write the error to stderr, and print nothing on stdout:
+
+<ul>
+  <li><code>gitrole resolve</code></li>
+  <li><code>gitrole resolve --json</code></li>
+  <li><code>gitrole status</code></li>
+  <li><code>gitrole doctor</code></li>
+  <li><code>gitrole doctor --json</code></li>
+</ul>
+
+A <code>defaultRole</code> of <code>client acme</code> looks like this on stderr:
+
+```text
+error: repo policy file .gitrole is invalid: defaultRole invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
+```
+
+An invalid allowed role is named the same way. With <code>defaultRole</code> set to <code>work</code> and <code>Client</code> in <code>allowedRoles</code>, stderr includes:
+
+```text
+error: repo policy file .gitrole is invalid: allowedRoles invalid role name "Client"; use lowercase letters, numbers, "-" or "_"
+```
+
+A missing <code>.gitrole</code> file does not do this. <code>resolve</code> still fails when the file is absent, but <code>status</code> and <code>doctor</code> keep working without repo policy. Valid names such as <code>client-acme</code> and <code>agent_bot</code> still succeed.
+
+The machine-readable exit contract is in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.
 
 <h2 id="how-status-and-doctor-use-policy">How status and doctor use policy</h2>
 
