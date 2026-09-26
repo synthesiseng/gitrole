@@ -176,6 +176,8 @@ export function renderStatus(result: StatusResult): string {
 }
 
 export function renderShortStatus(result: StatusResult): string {
+  // Field order is the status --short contract:
+  // role scope override commit remote auth policy overall
   return [
     `role=${result.roleName}`,
     `scope=${result.scope}`,
@@ -183,6 +185,7 @@ export function renderShortStatus(result: StatusResult): string {
     `commit=${result.commit}`,
     `remote=${result.remote}`,
     `auth=${result.auth}`,
+    `policy=${result.policy}`,
     `overall=${result.overall}`
   ].join(' ');
 }

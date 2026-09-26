@@ -134,6 +134,7 @@ export interface StatusResult {
   commit: 'ok' | 'warn' | 'na';
   remote: 'ok' | 'warn' | 'na';
   auth: 'ok' | 'warn' | 'na';
+  policy: 'ok' | 'warn' | 'na';
   repoPolicy?: RepoPolicyEvaluation;
 }
 

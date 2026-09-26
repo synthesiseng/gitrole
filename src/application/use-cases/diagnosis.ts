@@ -279,9 +279,9 @@ function buildRoleAlignmentChecks(input: {
 
   if (observedState.repository.remote.protocol === 'https') {
     checks.push({
-      status: 'warn',
+      status: 'info',
       label: 'auth',
-      message: 'origin uses HTTPS; gitrole cannot verify GitHub SSH auth identity for pushes'
+      message: 'origin uses HTTPS; SSH auth verification does not apply'
     });
     return dedupeChecks(checks);
   }

@@ -337,12 +337,17 @@ Views:
   default   compact human-readable summary
   --short   stable one-line format for scripts, prompts, and automation
 
+--short fields, in order:
+  role scope override commit remote auth policy overall
+
 Use this when you want to know whether the repo looks ready to commit or push.
 Use 'gitrole current' when you only want to know which saved role matches the active commit identity.
 
 Policy:
   status warns only on actionable mismatches.
   Observed context alone does not degrade the overall result.
+  policy is ok, warn, or na. na means no .gitrole file is present.
+  HTTPS origins report auth=na. SSH githubUser checks apply only to SSH remotes.
 
 Examples:
   $ gitrole status
@@ -373,6 +378,7 @@ Policy:
   gitrole warns on violated expectations, not assumptions.
   githubUser checks SSH auth. githubHost checks the remote host.
   Remote owner/repository is context, not a warning by default.
+  HTTPS origins record auth as info because SSH verification does not apply.
 
 Example:
   $ gitrole doctor

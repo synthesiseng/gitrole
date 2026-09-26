@@ -5,6 +5,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  httpsPinAligned,
+  sshAuthMatch,
+  sshAuthMismatch,
+  statusShortBaseline,
+  statusShortPolicyOk,
+  statusShortPolicyWarn
+} from '../fixtures/status-short.js';
+import {
   assertNoWarnChecks,
   commitEmpty,
   createHermeticWorkspace,
@@ -54,10 +62,7 @@ test('e2e status --short is exact for an aligned local override on an org remote
 
   const statusResult = runCli(workspace, ['status', '--short']);
   mustSucceed(statusResult, 'gitrole status --short failed');
-  assert.equal(
-    statusResult.stdout.trim(),
-    'role=work scope=local override=true commit=ok remote=ok auth=ok overall=aligned'
-  );
+  assert.equal(statusResult.stdout.trim(), statusShortBaseline.line, statusShortBaseline.id);
   assert.equal(getLocalConfigValue(workspace, 'user.name'), 'Alex Developer');
   assert.equal(getLocalConfigValue(workspace, 'user.email'), 'alex@work.example');
 });
@@ -106,32 +111,213 @@ test('e2e doctor --json keeps org ownership as context, not a warning', async ()
   assert.equal(parsed.checks.some((check) => check.label === 'owner'), false);
 });
 
-test('e2e status --short warns on HTTPS remotes even when identity matches', async () => {
+test('e2e https-pin-aligned: status and doctor reach aligned on an HTTPS origin', async () => {
   const workspace = await createHermeticWorkspace();
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com'
+  });
+  mustSucceed(runCli(workspace, ['use', 'work', '--local']), 'gitrole use work --local failed');
+  commitEmpty(workspace, {
+    message: 'feat: https pin aligned'
+  });
+  setOrigin(workspace, 'https://github.com/acme-corp/service.git');
+  mustSucceed(runCli(workspace, ['pin', 'work']), 'gitrole pin work failed');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  mustSucceed(statusResult, `${httpsPinAligned.id}: gitrole status --short failed`);
+  assert.equal(statusResult.stdout.trim(), httpsPinAligned.line, httpsPinAligned.id);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  mustSucceed(doctorResult, `${httpsPinAligned.id}: gitrole doctor --json failed`);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+
+  assert.equal(doctor.overall, 'aligned');
+  assert.equal(
+    doctor.checks.some(
+      (check) =>
+        check.label === 'auth' &&
+        check.status === 'info' &&
+        check.message.includes('SSH auth verification does not apply')
+    ),
+    true
+  );
+  assertNoWarnChecks(doctor);
+});
+
+test('e2e ssh-auth-match: SSH githubUser match stays auth=ok', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'alex-dev'
+    }
+  });
 
   await initRepo(workspace);
   setGlobalIdentity(workspace, {
     name: 'Alex Developer',
     email: 'alex@work.example'
   });
-  commitEmpty(workspace, {
-    message: 'feat: https remote state'
-  });
-  setOrigin(workspace, 'https://github.com/acme-corp/service.git');
   await saveRole(workspace, {
     name: 'work',
     fullName: 'Alex Developer',
     email: 'alex@work.example',
-    githubUser: 'alex-dev'
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  commitEmpty(workspace, {
+    message: 'feat: ssh auth match'
+  });
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  mustSucceed(statusResult, `${sshAuthMatch.id}: gitrole status --short failed`);
+  assert.equal(statusResult.stdout.trim(), sshAuthMatch.line, sshAuthMatch.id);
+
+  const doctor = parseJsonOutput<{
+    overall: string;
+    checks: Array<{ label: string; status: string }>;
+  }>(runCli(workspace, ['doctor', '--json']), `${sshAuthMatch.id}: gitrole doctor --json failed`);
+  assert.equal(doctor.overall, 'aligned');
+  assert.equal(
+    doctor.checks.some((check) => check.label === 'auth' && check.status === 'ok'),
+    true
+  );
+});
+
+test('e2e ssh-auth-mismatch: SSH githubUser mismatch stays auth=warn', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'someone-else'
+    }
+  });
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  commitEmpty(workspace, {
+    message: 'feat: ssh auth mismatch'
+  });
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.stdout.trim(), sshAuthMismatch.line, sshAuthMismatch.id);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  assert.equal(doctorResult.status, 2);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+  assert.equal(doctor.overall, 'warning');
+  assert.equal(
+    doctor.checks.some(
+      (check) =>
+        check.label === 'auth' &&
+        check.status === 'warn' &&
+        check.message.includes('expected alex-dev')
+    ),
+    true
+  );
+});
+
+test('e2e status-short-policy-warn: short line exposes a policy violation separately from auth', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-client-acme': 'acme-dev'
+    }
+  });
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-work'
+  });
+  await saveRole(workspace, {
+    name: 'client-acme',
+    fullName: 'Sara Loera',
+    email: 'sara@consulting.example',
+    githubUser: 'acme-dev',
+    githubHost: 'github.com-client-acme'
+  });
+  mustSucceed(
+    runCli(workspace, ['use', 'client-acme', '--local']),
+    'gitrole use client-acme --local failed'
+  );
+  commitEmpty(workspace, {
+    message: 'feat: policy violation'
+  });
+  setOrigin(workspace, 'git@github.com-client-acme:acme-platform/client-portal.git');
+  await writeRepoPolicy(workspace, {
+    defaultRole: 'work',
+    allowedRoles: ['work']
   });
 
   const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.stdout.trim(), statusShortPolicyWarn.line, statusShortPolicyWarn.id);
+  assert.match(statusResult.stdout, /auth=ok/);
+  assert.match(statusResult.stdout, /policy=warn/);
+  assert.match(statusResult.stdout, /overall=warning/);
+});
 
-  assert.equal(statusResult.status, 2);
-  assert.equal(
-    statusResult.stdout.trim(),
-    'role=work scope=global override=false commit=ok remote=ok auth=warn overall=warning'
-  );
+test('e2e status-short-policy-ok: short line reports policy=ok when the pin allows the role', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'alex-dev'
+    }
+  });
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  mustSucceed(runCli(workspace, ['use', 'work', '--local']), 'gitrole use work --local failed');
+  commitEmpty(workspace, {
+    message: 'feat: policy ok'
+  });
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+  mustSucceed(runCli(workspace, ['pin', 'work']), 'gitrole pin work failed');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  mustSucceed(statusResult, `${statusShortPolicyOk.id}: gitrole status --short failed`);
+  assert.equal(statusResult.stdout.trim(), statusShortPolicyOk.line, statusShortPolicyOk.id);
 });
 
 test('e2e status --short warns when origin is missing', async () => {
@@ -156,7 +342,7 @@ test('e2e status --short warns when origin is missing', async () => {
   assert.equal(statusResult.status, 2);
   assert.equal(
     statusResult.stdout.trim(),
-    'role=work scope=global override=false commit=ok remote=warn auth=na overall=warning'
+    'role=work scope=global override=false commit=ok remote=warn auth=na policy=na overall=warning'
   );
 });
 
@@ -186,7 +372,7 @@ test('e2e status --short warns on a new repo with no commits yet', async () => {
   assert.equal(statusResult.status, 2);
   assert.equal(
     statusResult.stdout.trim(),
-    'role=work scope=global override=false commit=ok remote=warn auth=ok overall=warning'
+    'role=work scope=global override=false commit=ok remote=warn auth=ok policy=na overall=warning'
   );
 });
 
@@ -276,7 +462,7 @@ test('e2e shared org repo stays aligned when the effective role is allowed but n
   mustSucceed(statusShortResult, 'gitrole status --short failed for shared org repo');
   assert.equal(
     statusShortResult.stdout.trim(),
-    'role=saraeloop scope=global override=false commit=ok remote=ok auth=ok overall=aligned'
+    'role=saraeloop scope=global override=false commit=ok remote=ok auth=ok policy=ok overall=aligned'
   );
 
   const doctorResult = runCli(workspace, ['doctor']);

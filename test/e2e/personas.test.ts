@@ -207,7 +207,7 @@ test('persona: work repo stays aligned with a local override on an org remote', 
     remoteRepository: 'payments-api',
     commitMessage: 'feat: ship work repo scenario',
     expectedStatusShort:
-      'role=work scope=local override=true commit=ok remote=ok auth=ok overall=aligned',
+      'role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned',
     expectOwnerToDifferFromAuth: true
   });
 });
@@ -227,7 +227,7 @@ test('persona: personal repo stays aligned on the personal account', async () =>
     remoteRepository: 'dotfiles',
     commitMessage: 'feat: keep personal repos aligned',
     expectedStatusShort:
-      'role=personal scope=global override=false commit=ok remote=ok auth=ok overall=aligned',
+      'role=personal scope=global override=false commit=ok remote=ok auth=ok policy=na overall=aligned',
     expectOwnerToDifferFromAuth: false
   });
 });
@@ -251,7 +251,7 @@ test('persona: client repo stays aligned with a local override and client auth',
     remoteRepository: 'client-portal',
     commitMessage: 'feat: keep client repos isolated',
     expectedStatusShort:
-      'role=client-acme scope=local override=true commit=ok remote=ok auth=ok overall=aligned',
+      'role=client-acme scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned',
     expectOwnerToDifferFromAuth: true
   });
 });
@@ -271,7 +271,7 @@ test('persona: open-source org repo stays aligned under a personal identity', as
     remoteRepository: 'cli-toolkit',
     commitMessage: 'docs: contribute to an org repo safely',
     expectedStatusShort:
-      'role=saraeloop scope=global override=false commit=ok remote=ok auth=ok overall=aligned',
+      'role=saraeloop scope=global override=false commit=ok remote=ok auth=ok policy=na overall=aligned',
     expectOwnerToDifferFromAuth: true
   });
 });

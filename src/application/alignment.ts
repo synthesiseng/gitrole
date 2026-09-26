@@ -10,6 +10,7 @@ export interface AlignmentSummary {
   commit: StatusResult['commit'];
   remote: StatusResult['remote'];
   auth: StatusResult['auth'];
+  policy: StatusResult['policy'];
 }
 
 export function findMatchingRole(
@@ -32,12 +33,13 @@ export function summarizeAlignment(input: {
   const commit = getCommitStatus(input);
   const remote = getRemoteStatus(input);
   const auth = getAuthStatus(input);
+  const policy = getPolicyStatus(input.repoPolicy);
   const overall =
     !input.observedState.repository.isInsideWorkTree ||
     commit === 'warn' ||
     remote === 'warn' ||
     auth === 'warn' ||
-    input.repoPolicy?.status === 'notAllowed'
+    policy === 'warn'
       ? 'warning'
       : 'aligned';
 
@@ -45,7 +47,8 @@ export function summarizeAlignment(input: {
     overall,
     commit,
     remote,
-    auth
+    auth,
+    policy
   };
 }
 
@@ -106,8 +109,9 @@ function getAuthStatus(input: {
     return 'na';
   }
 
+  // SSH auth identity cannot be checked on HTTPS. That is not an actionable mismatch.
   if (observedState.repository.remote.protocol === 'https') {
-    return 'warn';
+    return 'na';
   }
 
   if (!observedState.sshAuth || !observedState.sshAuth.ok) {
@@ -115,6 +119,18 @@ function getAuthStatus(input: {
   }
 
   if (role?.githubUser && observedState.sshAuth.githubUser !== role.githubUser) {
+    return 'warn';
+  }
+
+  return 'ok';
+}
+
+function getPolicyStatus(repoPolicy?: RepoPolicyEvaluation): StatusResult['policy'] {
+  if (!repoPolicy) {
+    return 'na';
+  }
+
+  if (repoPolicy.status === 'notAllowed') {
     return 'warn';
   }
 
