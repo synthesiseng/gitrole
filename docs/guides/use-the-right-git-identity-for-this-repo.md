@@ -58,6 +58,8 @@ What those extra flags mean:
 - <code>--github-user</code> is the GitHub user you expect SSH auth to resolve to
 - <code>--github-host</code> is the SSH host alias you expect the repo remote to use
 
+If Git is already using the identity you want, you can save it without retyping the name and email. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.
+
 <h2 id="step-2-switch-this-repo">Step 2: Switch this repo to that role</h2>
 
 Use <code>--local</code> when you want this repository to use that role without changing the rest of your machine:

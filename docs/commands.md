@@ -13,11 +13,20 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dt><code>gitrole add &lt;name&gt; --name "..." --email "..." [--ssh ...] [--github-user ...] [--github-host ...]</code></dt>
   <dd>Create or update a saved role profile.</dd>
 
+  <dt><code>gitrole import current --name &lt;role&gt;</code></dt>
+  <dd>Save the effective current commit identity as a named role. <code>--name &lt;role&gt;</code> is required. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.</dd>
+
   <dt><code>gitrole use &lt;name&gt; [--global | --local]</code></dt>
   <dd>Apply a saved role globally or only in the current repository.</dd>
 
+  <dt><code>gitrole pin &lt;role&gt;</code></dt>
+  <dd>Create a strict repo-local <code>.gitrole</code> policy for one role.</dd>
+
   <dt><code>gitrole resolve</code></dt>
   <dd>Print the repo-local default role from <code>.gitrole</code>.</dd>
+
+  <dt><code>gitrole resolve --json</code></dt>
+  <dd>Write the repo policy as JSON.</dd>
 
   <dt><code>gitrole current</code></dt>
   <dd>Show which saved role matches the active commit identity.</dd>

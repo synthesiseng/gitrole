@@ -63,6 +63,8 @@ fi
 | `2`  | Warning - valid output was emitted, but something is off |
 | `1`  | Failure - error written to stderr, no output             |
 
+An invalid `.gitrole` role name is this exit `1` failure for `gitrole status`, including `gitrole status --short`. Policy is loaded before either view is written, so stdout stays empty and the one-line contract is not emitted. See [Role name format](#role-name-format).
+
 ### What's stable
 
 Field names, field order, and the value vocabularies above are the contract. If any of those change, it is a breaking change.
@@ -273,6 +275,8 @@ Each entry looks like:
 | `2`  | Diagnosis complete, at least one `warn` check |
 | `1`  | Failure - error written to stderr, no JSON    |
 
+An invalid `.gitrole` `defaultRole` or `allowedRoles` name is this exit `1` failure: stderr gets the error and stdout stays empty, so no JSON is emitted. See [Role name format](#role-name-format).
+
 ### What's stable
 
 The top-level field names are the contract. The meaning of `overall`, `scope`, the presence of `checks`, and the `checks[].status` vocabulary are stable. Key order is not. `checks[].message` is descriptive text, not an automation surface. Adding new fields is not a breaking change; removing or renaming documented top-level fields is.
@@ -314,6 +318,7 @@ gitrole resolve --json
 | Not inside a Git repo                                 | exit `1`, stderr message, no JSON |
 | No `.gitrole` file exists                             | exit `1`, stderr message, no JSON |
 | `.gitrole` is invalid JSON or fails schema validation | exit `1`, stderr message, no JSON |
+| invalid `defaultRole` or `allowedRoles` name          | exit `1`, stderr message, no JSON |
 
 ### Exit codes
 
@@ -350,3 +355,27 @@ If you try to create a role with an invalid name, you will get:
 ```text
 error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
 ```
+
+The same rules apply to `.gitrole` `defaultRole` and every `allowedRoles` entry. An invalid policy name is fail-closed. These commands exit `1`, write the error to stderr, and write nothing to stdout:
+
+- `gitrole resolve`
+- `gitrole resolve --json`
+- `gitrole status`
+- `gitrole doctor`
+- `gitrole doctor --json`
+
+`gitrole status --short` takes the same path as `gitrole status`: the policy is loaded before the one-line contract is written, so an invalid name also exits `1` with empty stdout. The field names and order for a valid policy are unchanged.
+
+A `defaultRole` of `client acme` produces this stderr line and no stdout:
+
+```text
+error: repo policy file .gitrole is invalid: defaultRole invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
+```
+
+An invalid allowed role is reported on that field. With `defaultRole` set to `work` and `Client` in `allowedRoles`:
+
+```text
+error: repo policy file .gitrole is invalid: allowedRoles invalid role name "Client"; use lowercase letters, numbers, "-" or "_"
+```
+
+A missing `.gitrole` file is not this failure for `status` or `doctor`. Those commands still run without repo policy when the file is absent. `resolve` and `resolve --json` still exit `1` when the file is missing. Valid names such as `client-acme` and `agent_bot` still succeed.
