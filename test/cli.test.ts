@@ -2026,14 +2026,14 @@ process.exit(1);
   assert.equal(result.stderr, '');
   assert.equal(
     result.stdout.trim(),
-    'role=work scope=global override=false commit=ok remote=ok auth=ok overall=aligned'
+    'role=work scope=global override=false commit=ok remote=ok auth=ok policy=na overall=aligned'
   );
   assert.deepEqual(
     result.stdout
       .trim()
       .split(' ')
       .map((field) => field.split('=')[0]),
-    ['role', 'scope', 'override', 'commit', 'remote', 'auth', 'overall']
+    ['role', 'scope', 'override', 'commit', 'remote', 'auth', 'policy', 'overall']
   );
 });
 
