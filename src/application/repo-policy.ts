@@ -5,6 +5,7 @@ import { writeFile } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { InvalidRoleNameError, validateRoleName } from '../domain/role.js';
 import type {
   GitRepository,
   RepoPolicy,
@@ -167,8 +168,8 @@ function validateRepoPolicy(input: unknown): RepoPolicy {
   }
 
   const version = Reflect.get(input, 'version');
-  const defaultRole = normalizeNonEmptyString(Reflect.get(input, 'defaultRole'));
-  const allowedRoles = normalizeAllowedRoles(Reflect.get(input, 'allowedRoles'));
+  const defaultRole = readNonEmptyString(Reflect.get(input, 'defaultRole'));
+  const allowedRoles = readAllowedRoles(Reflect.get(input, 'allowedRoles'));
 
   if (version !== 1) {
     throw new InvalidRepoPolicyError('version must be exactly 1');
@@ -182,34 +183,48 @@ function validateRepoPolicy(input: unknown): RepoPolicy {
     throw new InvalidRepoPolicyError('allowedRoles must be a non-empty array of non-empty strings');
   }
 
-  if (!allowedRoles.includes(defaultRole)) {
+  const validatedDefaultRole = requirePolicyRoleName(defaultRole, 'defaultRole');
+  const validatedAllowedRoles = allowedRoles.map((roleName) =>
+    requirePolicyRoleName(roleName, 'allowedRoles')
+  );
+
+  if (!validatedAllowedRoles.includes(validatedDefaultRole)) {
     throw new InvalidRepoPolicyError('defaultRole must appear in allowedRoles');
   }
 
   return {
     version: 1,
-    defaultRole,
-    allowedRoles
+    defaultRole: validatedDefaultRole,
+    allowedRoles: validatedAllowedRoles
   };
 }
 
-function normalizeAllowedRoles(input: unknown): string[] {
+function requirePolicyRoleName(value: string, field: 'defaultRole' | 'allowedRoles'): string {
+  try {
+    return validateRoleName(value);
+  } catch (error) {
+    if (error instanceof InvalidRoleNameError) {
+      throw new InvalidRepoPolicyError(`${field} ${error.message}`);
+    }
+
+    throw error;
+  }
+}
+
+function readAllowedRoles(input: unknown): string[] {
   if (!Array.isArray(input)) {
     return [];
   }
 
-  const values = input
-    .map((value) => normalizeNonEmptyString(value))
+  return input
+    .map((value) => readNonEmptyString(value))
     .filter((value): value is string => Boolean(value));
-
-  return values;
 }
 
-function normalizeNonEmptyString(input: unknown): string | undefined {
-  if (typeof input !== 'string') {
+function readNonEmptyString(input: unknown): string | undefined {
+  if (typeof input !== 'string' || input.trim() === '') {
     return undefined;
   }
 
-  const value = input.trim();
-  return value ? value : undefined;
+  return input;
 }

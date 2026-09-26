@@ -26,6 +26,32 @@ function createRepositoryStub(repoDir?: string) {
   };
 }
 
+async function writeRepoPolicy(prefix: string, policy: unknown): Promise<string> {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), prefix));
+
+  await writeFile(path.join(tempDir, '.gitrole'), JSON.stringify(policy, null, 2), 'utf8');
+
+  return tempDir;
+}
+
+async function assertInvalidRoleName(
+  load: () => Promise<unknown>,
+  field: 'defaultRole' | 'allowedRoles',
+  roleName: string
+) {
+  await assert.rejects(load, (error: unknown) => {
+    assert.ok(error instanceof InvalidRepoPolicyError);
+    assert.match(error.message, new RegExp(`repo policy file \\.gitrole is invalid: ${field} `));
+    assert.match(
+      error.message,
+      new RegExp(
+        `invalid role name "${roleName}"; use lowercase letters, numbers, "-" or "_"`
+      )
+    );
+    return true;
+  });
+}
+
 test('loadRepoPolicy reads a valid v1 repo policy file', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-policy-'));
 
@@ -68,6 +94,106 @@ test('loadRepoPolicy fails on invalid JSON', async () => {
   await assert.rejects(
     () => loadRepoPolicy(createRepositoryStub(tempDir)),
     InvalidRepoPolicyError
+  );
+});
+
+test('loadRepoPolicy accepts fixture valid-role-names', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-valid-role-names-', {
+    version: 1,
+    defaultRole: 'client-acme',
+    allowedRoles: ['client-acme', 'agent_bot']
+  });
+
+  const repoPolicy = await loadRepoPolicy(createRepositoryStub(tempDir));
+
+  assert.deepEqual(repoPolicy, {
+    version: 1,
+    defaultRole: 'client-acme',
+    allowedRoles: ['client-acme', 'agent_bot']
+  });
+});
+
+test('loadRepoPolicy rejects fixture invalid-default-role-spaces', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-invalid-default-role-spaces-', {
+    version: 1,
+    defaultRole: 'client acme',
+    allowedRoles: ['client acme']
+  });
+
+  await assertInvalidRoleName(
+    () => loadRepoPolicy(createRepositoryStub(tempDir)),
+    'defaultRole',
+    'client acme'
+  );
+});
+
+test('loadRepoPolicy rejects fixture invalid-default-role-uppercase', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-invalid-default-role-uppercase-', {
+    version: 1,
+    defaultRole: 'Work',
+    allowedRoles: ['Work']
+  });
+
+  await assertInvalidRoleName(
+    () => loadRepoPolicy(createRepositoryStub(tempDir)),
+    'defaultRole',
+    'Work'
+  );
+});
+
+test('loadRepoPolicy rejects fixture invalid-allowed-role-uppercase', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-invalid-allowed-role-uppercase-', {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work', 'Client']
+  });
+
+  await assertInvalidRoleName(
+    () => loadRepoPolicy(createRepositoryStub(tempDir)),
+    'allowedRoles',
+    'Client'
+  );
+});
+
+test('loadRepoPolicy rejects fixture invalid-allowed-role-spaces', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-invalid-allowed-role-spaces-', {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work', 'client acme']
+  });
+
+  await assertInvalidRoleName(
+    () => loadRepoPolicy(createRepositoryStub(tempDir)),
+    'allowedRoles',
+    'client acme'
+  );
+});
+
+test('loadOptionalRepoPolicy rejects fixture invalid-default-role-spaces', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-optional-invalid-default-role-spaces-', {
+    version: 1,
+    defaultRole: 'client acme',
+    allowedRoles: ['client acme']
+  });
+
+  await assertInvalidRoleName(
+    () => loadOptionalRepoPolicy(createRepositoryStub(tempDir)),
+    'defaultRole',
+    'client acme'
+  );
+});
+
+test('loadOptionalRepoPolicy rejects fixture invalid-allowed-role-uppercase', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-optional-invalid-allowed-role-uppercase-', {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work', 'Client']
+  });
+
+  await assertInvalidRoleName(
+    () => loadOptionalRepoPolicy(createRepositoryStub(tempDir)),
+    'allowedRoles',
+    'Client'
   );
 });
 
