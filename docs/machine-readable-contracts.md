@@ -5,45 +5,52 @@ eyebrow: Reference
 summary: Public contract reference for gitrole machine readable CLI output, including status --short, doctor --json, and resolve --json for scripts and automation.
 ---
 
-gitrole has three commands designed to be consumed by scripts, agents, and automation:
+Three commands are meant for scripts and agents. Each command below uses the same order: signature, example, fields, exit codes, when it fails, what's stable. Shared role-name rules are at the end.
 
-- `gitrole status --short` - fast preflight check, one line of output
-- `gitrole doctor --json` - full structured diagnosis
-- `gitrole resolve --json` - repo-local identity policy
+<dl class="command-list">
+  <dt><a href="#status-short"><code>gitrole status --short</code></a></dt>
+  <dd>One line. Order is <code>role scope override commit remote auth policy overall</code>.</dd>
+  <dt><a href="#doctor-json"><code>gitrole doctor --json</code></a></dt>
+  <dd>Full diagnosis as JSON. HTTPS auth is an <code>info</code> check.</dd>
+  <dt><a href="#resolve-json"><code>gitrole resolve --json</code></a></dt>
+  <dd>The <code>.gitrole</code> file as JSON.</dd>
+  <dt><a href="#role-name-format">Role name format</a></dt>
+  <dd>Saved role names that can show up in <code>role=</code>.</dd>
+</dl>
 
-This page tells you what each one outputs, what the fields mean, and what you can rely on staying stable.
+<h2 id="status-short"><code>gitrole status --short</code></h2>
 
----
+<p>One line: is this repo aligned to commit or push?</p>
 
-## `gitrole status --short`
+<p><a href="#status-short-signature">Signature</a> · <a href="#status-short-example">Example</a> · <a href="#status-short-fields">Fields</a> · <a href="#status-short-exit-codes">Exit codes</a> · <a href="#status-short-failures">When it fails</a> · <a href="#status-short-stable">What's stable</a></p>
 
-The fastest way to ask "is this repo ready to commit or push?"
+<h3 id="status-short-signature">Signature</h3>
 
 ```bash
 gitrole status --short
 ```
 
-Output is exactly one line:
+<h3 id="status-short-example">Example</h3>
+
+No `.gitrole` file. `policy=na`.
 
 ```text
-role=work scope=local override=true commit=ok remote=ok auth=ok overall=aligned
+role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned
 ```
 
-### Fields
+HTTPS origin whose pin allows the effective role. `auth=na` and `overall=aligned` together. Exit `0`.
 
-| Field      | What it tells you                                    | Values                              |
-| ---------- | ---------------------------------------------------- | ----------------------------------- |
-| `role`     | Which saved role matches the current commit identity | role name, or `no-role`             |
-| `scope`    | Where the commit identity is coming from             | `global`, `local`, `mixed`, `unset` |
-| `override` | Whether a repo-local Git config is active            | `true`, `false`                     |
-| `commit`   | Commit identity check result                         | `ok`, `warn`, `na`                  |
-| `remote`   | Remote/repo alignment check result                   | `ok`, `warn`, `na`                  |
-| `auth`     | SSH push-auth check result                           | `ok`, `warn`, `na`                  |
-| `overall`  | Summary                                              | `aligned`, `warning`                |
+```text
+role=work scope=local override=true commit=ok remote=ok auth=na policy=ok overall=aligned
+```
 
-`na` means the check was not applicable. For example, `remote=na` when you are not inside a Git repo.
+Effective role is outside `allowedRoles`. `policy=warn` and `overall=warning`. Exit `2`.
 
-### Using it in a script
+```text
+role=client-acme scope=local override=true commit=ok remote=ok auth=ok policy=warn overall=warning
+```
+
+Read `overall` by name. It is the eighth field, after `policy`.
 
 ```bash
 result=$(gitrole status --short)
@@ -55,31 +62,81 @@ if [ "$overall" != "aligned" ]; then
 fi
 ```
 
-### Exit codes
+<h3 id="status-short-fields">Fields</h3>
 
-| Code | Meaning                                                  |
-| ---- | -------------------------------------------------------- |
-| `0`  | Aligned - valid output was emitted                       |
-| `2`  | Warning - valid output was emitted, but something is off |
-| `1`  | Failure - error written to stderr, no output             |
+Exactly one line. Eight `key=value` fields, in this order, separated by single spaces.
 
-An invalid `.gitrole` role name is this exit `1` failure for `gitrole status`, including `gitrole status --short`. Policy is loaded before either view is written, so stdout stays empty and the one-line contract is not emitted. See [Role name format](#role-name-format).
+| Field      | What it tells you | Values |
+| ---------- | ----------------- | ------ |
+| `role`     | Saved role that matches the current commit identity | role name, or `no-role` |
+| `scope`    | Where the commit identity comes from | `global`, `local`, `mixed`, `unset` |
+| `override` | Whether a repo-local Git config is active | `true`, `false` |
+| `commit`   | Commit identity check | `ok`, `warn`, `na` |
+| `remote`   | Remote and repo alignment | `ok`, `warn`, `na` |
+| `auth`     | SSH `githubUser` probe on SSH origins | `ok`, `warn`, `na` |
+| `policy`   | `.gitrole` against the effective role | `ok`, `warn`, `na` |
+| `overall`  | Summary | `aligned`, `warning` |
 
-### What's stable
+`na` means that check does not apply.
 
-Field names, field order, and the value vocabularies above are the contract. If any of those change, it is a breaking change.
+| Field | `na` when |
+| ----- | --------- |
+| `remote` | Not inside a Git repo |
+| `auth` | Not inside a Git repo, no `origin`, or `origin` is HTTPS |
+| `policy` | No `.gitrole` file |
 
----
+`auth` on SSH is `ok` or `warn` from the `githubUser` probe. `auth=na` on HTTPS is not a warning. It does not by itself set `overall=warning` or exit `2`.
 
-## `gitrole doctor --json`
+`policy=ok` when `.gitrole` allows the effective role: that role is `defaultRole`, or it is listed in `allowedRoles`. `policy=warn` when the evaluation is `notAllowed`.
 
-The full picture. Use this when you need to understand exactly what is going on: commit identity, push identity, SSH auth, repo policy.
+`overall=warning` when the working directory is outside a Git repo, or when `commit`, `remote`, `auth`, or `policy` is `warn`. Otherwise `overall=aligned`.
+
+<h3 id="status-short-exit-codes">Exit codes</h3>
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | `overall=aligned`. The line was written to stdout. This includes a clean HTTPS repo. |
+| `2` | `overall=warning`. The line was written to stdout. |
+| `1` | Failure. Error on stderr. Stdout empty. No line. |
+
+<h3 id="status-short-failures">When it fails</h3>
+
+Exit `1` writes the error to stderr and does not print the line.
+
+| Condition | Result |
+| --------- | ------ |
+| Saved role data contains a name outside the [role name format](#role-name-format) | exit `1`, empty stdout, stderr `error: saved role data is invalid; fix or recreate the roles file` |
+| `.gitrole` is invalid JSON or fails schema validation | exit `1`, stderr, empty stdout |
+| Invalid `.gitrole` `defaultRole` or `allowedRoles` name | exit `1`, empty stdout. Policy is loaded before the line is written. See [Role name format](#role-name-format). |
+| Another operational failure before the line is written | exit `1`, stderr, empty stdout |
+
+A missing `.gitrole` file still prints the line, with `policy=na`.
+
+<h3 id="status-short-stable">What's stable</h3>
+
+Field names, this order, and the value vocabularies above are the contract:
+
+```text
+role scope override commit remote auth policy overall
+```
+
+`policy` is the seventh field. `overall` is the eighth. Read them by name. A parser that treated the seventh field as `overall` is reading `policy` now.
+
+Changing a name, the order, or a vocabulary is a breaking change.
+
+<h2 id="doctor-json"><code>gitrole doctor --json</code></h2>
+
+<p>Structured diagnosis: commit identity, repo context, SSH auth, and <code>.gitrole</code> policy.</p>
+
+<p><a href="#doctor-json-signature">Signature</a> · <a href="#doctor-json-example">Example</a> · <a href="#doctor-json-fields">Fields</a> · <a href="#doctor-json-exit-codes">Exit codes</a> · <a href="#doctor-json-failures">When it fails</a> · <a href="#doctor-json-stable">What's stable</a></p>
+
+<h3 id="doctor-json-signature">Signature</h3>
 
 ```bash
 gitrole doctor --json
 ```
 
-### Example output
+<h3 id="doctor-json-example">Example</h3>
 
 ```json
 {
@@ -139,119 +196,93 @@ gitrole doctor --json
 }
 ```
 
-### Top-level fields
+HTTPS origins add an auth check with `status` `info` and this message: `origin uses HTTPS; SSH auth verification does not apply`. That check is not `warn`. `sshAuth` is omitted when no SSH probe runs.
 
-| Field                | What it tells you                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `role`               | The saved role that matches the current commit identity. Omitted if no role matches.    |
-| `overall`            | `aligned` or `warning`                                                                  |
-| `commitIdentity`     | Effective name and email, plus where each is coming from: `local`, `global`, or `unset` |
-| `configuredIdentity` | Raw local and global Git config values                                                  |
-| `scope`              | Aggregate view of where the commit identity comes from                                  |
-| `repository`         | Repo context, branch, and parsed remote info                                            |
-| `sshAuth`            | SSH probe result. Omitted if no SSH probe was run.                                      |
-| `repoPolicy`         | `.gitrole` policy evaluation. Omitted if no policy file exists.                         |
-| `checks`             | Ordered list of individual check results                                                |
+<h3 id="doctor-json-fields">Fields</h3>
 
-The top-level field names above are the stable contract for `doctor --json`.
+<h4 id="doctor-json-top-level">Top-level fields</h4>
 
-### Safe automation targets
+| Field                | What it tells you |
+| -------------------- | ----------------- |
+| `role`               | Saved role that matches the current commit identity. Omitted if no role matches. |
+| `overall`            | `aligned` or `warning` |
+| `commitIdentity`     | Effective name and email, plus where each comes from: `local`, `global`, or `unset` |
+| `configuredIdentity` | Raw local and global Git config values |
+| `scope`              | Aggregate view of where the commit identity comes from |
+| `repository`         | Repo context, branch, and parsed remote info |
+| `sshAuth`            | SSH probe result. Omitted if no SSH probe was run, including HTTPS origins. |
+| `repoPolicy`         | `.gitrole` policy evaluation. Omitted if no policy file exists. |
+| `checks`             | Ordered list of individual check results |
 
-Use these parts for automation:
+<h4 id="doctor-json-commit-identity"><code>commitIdentity</code></h4>
 
-| Surface              | Safe to automate against                                                       |
-| -------------------- | ------------------------------------------------------------------------------ |
-| `overall`            | yes                                                                            |
-| `commitIdentity`     | yes                                                                            |
-| `configuredIdentity` | yes                                                                            |
-| `scope`              | yes                                                                            |
-| `repository`         | yes, but prefer presence/absence and documented fields over incidental details |
-| `sshAuth`            | yes                                                                            |
-| `repoPolicy`         | yes                                                                            |
-| `checks`             | yes, as an ordered list of results                                             |
+| Field             | Meaning | Values |
+| ----------------- | ------- | ------ |
+| `fullName.value`  | Effective commit author name | string, or omitted when unset |
+| `fullName.source` | Where the effective name came from | `local`, `global`, `unset` |
+| `email.value`     | Effective commit author email | string, or omitted when unset |
+| `email.source`    | Where the effective email came from | `local`, `global`, `unset` |
 
-Do not treat every descriptive field as the same kind of contract:
+<h4 id="doctor-json-configured-identity"><code>configuredIdentity</code></h4>
 
-| Surface                    | Guidance                                                                                  |
-| -------------------------- | ----------------------------------------------------------------------------------------- |
-| `checks[].message`         | human-readable text; do not parse this                                                    |
-| `checks[].label`           | diagnostic category string; useful for display and debugging, but not a closed vocabulary |
-| `repository.currentBranch` | useful context, but not the primary contract surface                                      |
-| `repository.topLevelPath`  | useful context, but not the primary contract surface                                      |
+| Field | Meaning |
+| ----- | ------- |
+| `configuredIdentity.local.fullName` | Raw repo-local `user.name`, if present |
+| `configuredIdentity.local.email` | Raw repo-local `user.email`, if present |
+| `configuredIdentity.global.fullName` | Raw global `user.name`, if present |
+| `configuredIdentity.global.email` | Raw global `user.email`, if present |
 
-### Important nested fields
+<h4 id="doctor-json-scope"><code>scope</code></h4>
 
-These nested fields are documented for meaning and current shape. Additive changes may happen over time.
+| Field | Meaning | Values |
+| ----- | ------- | ------ |
+| `effective` | Aggregate source for the active commit identity | `local`, `global`, `mixed`, `unset` |
+| `hasLocalOverride` | Whether either commit-identity field is sourced from repo-local config | `true`, `false` |
 
-#### `commitIdentity`
+<h4 id="doctor-json-repository"><code>repository</code></h4>
 
-| Field             | Meaning                             | Values                        |
-| ----------------- | ----------------------------------- | ----------------------------- |
-| `fullName.value`  | Effective commit author name        | string, or omitted when unset |
-| `fullName.source` | Where the effective name came from  | `local`, `global`, `unset`    |
-| `email.value`     | Effective commit author email       | string, or omitted when unset |
-| `email.source`    | Where the effective email came from | `local`, `global`, `unset`    |
+| Field | Meaning |
+| ----- | ------- |
+| `isInsideWorkTree` | Whether the current working directory is inside a Git work tree |
+| `hasCommits` | Whether `HEAD` exists. Omitted outside a Git repo. |
+| `topLevelPath` | Absolute path to the repo root. Omitted outside a Git repo. |
+| `currentBranch` | Current branch name, when available |
+| `upstreamBranch` | Configured upstream branch, when available |
+| `remote` | Parsed `origin` remote info. Omitted when `origin` is not configured. |
 
-#### `configuredIdentity`
+<h4 id="doctor-json-remote"><code>repository.remote</code></h4>
 
-| Field                                | Meaning                                 |
-| ------------------------------------ | --------------------------------------- |
-| `configuredIdentity.local.fullName`  | Raw repo-local `user.name`, if present  |
-| `configuredIdentity.local.email`     | Raw repo-local `user.email`, if present |
-| `configuredIdentity.global.fullName` | Raw global `user.name`, if present      |
-| `configuredIdentity.global.email`    | Raw global `user.email`, if present     |
+| Field | Meaning | Values |
+| ----- | ------- | ------ |
+| `name` | Remote name | currently `origin` |
+| `url` | Raw remote URL | string |
+| `protocol` | Parsed remote protocol | `ssh`, `https`, `unknown` |
+| `host` | Parsed remote host | string when parseable |
+| `owner` | Parsed repository owner or org | string when parseable |
+| `repository` | Parsed repository name | string when parseable |
 
-#### `scope`
+<h4 id="doctor-json-ssh-auth"><code>sshAuth</code></h4>
 
-| Field              | Meaning                                                                | Values                              |
-| ------------------ | ---------------------------------------------------------------------- | ----------------------------------- |
-| `effective`        | Aggregate source for the active commit identity                        | `local`, `global`, `mixed`, `unset` |
-| `hasLocalOverride` | Whether either commit-identity field is sourced from repo-local config | `true`, `false`                     |
-
-#### `repository`
-
-| Field              | Meaning                                                               |
-| ------------------ | --------------------------------------------------------------------- |
-| `isInsideWorkTree` | Whether the current working directory is inside a Git work tree       |
-| `hasCommits`       | Whether `HEAD` exists. Omitted outside a Git repo.                    |
-| `topLevelPath`     | Absolute path to the repo root. Omitted outside a Git repo.           |
-| `currentBranch`    | Current branch name, when available                                   |
-| `upstreamBranch`   | Configured upstream branch, when available                            |
-| `remote`           | Parsed `origin` remote info. Omitted when `origin` is not configured. |
-
-#### `repository.remote`
-
-| Field        | Meaning                        | Values                    |
-| ------------ | ------------------------------ | ------------------------- |
-| `name`       | Remote name                    | currently `origin`        |
-| `url`        | Raw remote URL                 | string                    |
-| `protocol`   | Parsed remote protocol         | `ssh`, `https`, `unknown` |
-| `host`       | Parsed remote host             | string when parseable     |
-| `owner`      | Parsed repository owner or org | string when parseable     |
-| `repository` | Parsed repository name         | string when parseable     |
-
-#### `sshAuth`
-
-| Field        | Meaning                                                 |
-| ------------ | ------------------------------------------------------- |
-| `ok`         | Whether the SSH probe succeeded                         |
-| `host`       | SSH host alias or hostname that was probed              |
+| Field | Meaning |
+| ----- | ------- |
+| `ok` | Whether the SSH probe succeeded |
+| `host` | SSH host alias or hostname that was probed |
 | `githubUser` | GitHub user resolved from the SSH probe, when available |
-| `message`    | Probe detail when no GitHub user could be resolved      |
+| `message` | Probe detail when no GitHub user could be resolved |
 
-#### `repoPolicy`
+<h4 id="doctor-json-repo-policy"><code>repoPolicy</code></h4>
 
-| Field           | Meaning                                 | Values                             |
-| --------------- | --------------------------------------- | ---------------------------------- |
-| `version`       | Policy schema version                   | currently `1`                      |
-| `defaultRole`   | Preferred role for this repo            | role name                          |
-| `allowedRoles`  | Roles allowed by `.gitrole`             | array of role names                |
-| `effectiveRole` | Active matched role used for evaluation | role name, or omitted              |
-| `status`        | Policy evaluation result                | `default`, `allowed`, `notAllowed` |
+| Field | Meaning | Values |
+| ----- | ------- | ------ |
+| `version` | Policy schema version | currently `1` |
+| `defaultRole` | Preferred role for this repo | role name |
+| `allowedRoles` | Roles allowed by `.gitrole` | array of role names |
+| `effectiveRole` | Active matched role used for evaluation | role name, or omitted |
+| `status` | Policy evaluation result | `default`, `allowed`, `notAllowed` |
 
-### The `checks` array
+`status` `default` and `allowed` are `policy=ok` on [`status --short`](#status-short). `notAllowed` is `policy=warn`.
 
-Each entry looks like:
+<h4 id="doctor-json-checks"><code>checks</code></h4>
 
 ```json
 {
@@ -261,37 +292,84 @@ Each entry looks like:
 }
 ```
 
-| Field     | Meaning                    | Values                                           |
-| --------- | -------------------------- | ------------------------------------------------ |
-| `status`  | Per-check result           | `ok`, `warn`, `info`                             |
-| `label`   | Diagnostic category string | short string such as `role`, `remote`, or `auth` |
-| `message` | Human-readable explanation | string; do not parse this                        |
+| Field | Meaning | Values |
+| ----- | ------- | ------ |
+| `status` | Per-check result | `ok`, `warn`, `info` |
+| `label` | Diagnostic category string | short string such as `role`, `remote`, or `auth` |
+| `message` | Human-readable explanation | string; do not parse this |
 
-### Exit codes
+On an HTTPS origin the auth entry is `info`, not `warn`:
 
-| Code | Meaning                                       |
-| ---- | --------------------------------------------- |
-| `0`  | Diagnosis complete, no warnings               |
-| `2`  | Diagnosis complete, at least one `warn` check |
-| `1`  | Failure - error written to stderr, no JSON    |
+```json
+{
+  "status": "info",
+  "label": "auth",
+  "message": "origin uses HTTPS; SSH auth verification does not apply"
+}
+```
 
-An invalid `.gitrole` `defaultRole` or `allowedRoles` name is this exit `1` failure: stderr gets the error and stdout stays empty, so no JSON is emitted. See [Role name format](#role-name-format).
+`info` does not set `overall` to `warning` and does not cause exit `2`. Exit `0` with `overall` `aligned` is reachable on HTTPS when identity and policy are fine.
 
-### What's stable
+<h3 id="doctor-json-exit-codes">Exit codes</h3>
 
-The top-level field names are the contract. The meaning of `overall`, `scope`, the presence of `checks`, and the `checks[].status` vocabulary are stable. Key order is not. `checks[].message` is descriptive text, not an automation surface. Adding new fields is not a breaking change; removing or renaming documented top-level fields is.
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Diagnosis complete, no `warn` check. JSON on stdout. |
+| `2` | Diagnosis complete, at least one `warn` check. JSON on stdout. |
+| `1` | Failure. Error on stderr. No JSON. |
 
----
+An HTTPS auth check is `info`, so it does not by itself select exit `2`.
 
-## `gitrole resolve --json`
+<h3 id="doctor-json-failures">When it fails</h3>
 
-Returns the `.gitrole` repo-local identity policy as JSON. Useful when you need to know the expected role for a repo without running a full diagnosis.
+Exit `1` writes the error to stderr and does not print JSON.
+
+| Condition | Result |
+| --------- | ------ |
+| Saved role data contains a name outside the [role name format](#role-name-format) | exit `1`, stderr, no JSON |
+| `.gitrole` is invalid JSON or fails schema validation | exit `1`, stderr, no JSON |
+| Invalid `.gitrole` `defaultRole` or `allowedRoles` name | exit `1`, stderr, no JSON. See [Role name format](#role-name-format). |
+| Another operational failure before JSON is written | exit `1`, stderr, no JSON |
+
+A missing `.gitrole` file still returns JSON. `repoPolicy` is omitted.
+
+<h3 id="doctor-json-stable">What's stable</h3>
+
+The top-level field names are the contract. The meaning of `overall`, `scope`, the presence of `checks`, and the `checks[].status` vocabulary (`ok`, `warn`, `info`) are stable. Key order is not. `checks[].message` is descriptive text, not an automation surface. Adding new fields is not a breaking change. Removing or renaming documented top-level fields is.
+
+| Surface | Safe to automate against |
+| ------- | ------------------------ |
+| `overall` | yes |
+| `commitIdentity` | yes |
+| `configuredIdentity` | yes |
+| `scope` | yes |
+| `repository` | yes, but prefer presence/absence and documented fields over incidental details |
+| `sshAuth` | yes |
+| `repoPolicy` | yes |
+| `checks` | yes, as an ordered list of results |
+
+| Surface | Guidance |
+| ------- | -------- |
+| `checks[].message` | human-readable text; do not parse this |
+| `checks[].label` | diagnostic category string; useful for display and debugging, but not a closed vocabulary |
+| `repository.currentBranch` | useful context, but not the primary contract surface |
+| `repository.topLevelPath` | useful context, but not the primary contract surface |
+
+Nested fields above are documented for meaning and current shape. Additive changes may happen over time.
+
+<h2 id="resolve-json"><code>gitrole resolve --json</code></h2>
+
+<p>The <code>.gitrole</code> policy as JSON, without a full diagnosis.</p>
+
+<p><a href="#resolve-json-signature">Signature</a> · <a href="#resolve-json-example">Example</a> · <a href="#resolve-json-fields">Fields</a> · <a href="#resolve-json-exit-codes">Exit codes</a> · <a href="#resolve-json-failures">When it fails</a> · <a href="#resolve-json-stable">What's stable</a></p>
+
+<h3 id="resolve-json-signature">Signature</h3>
 
 ```bash
 gitrole resolve --json
 ```
 
-### Output
+<h3 id="resolve-json-example">Example</h3>
 
 ```json
 {
@@ -301,60 +379,64 @@ gitrole resolve --json
 }
 ```
 
-| Field          | What it tells you                                                |
-| -------------- | ---------------------------------------------------------------- |
-| `version`      | Policy schema version. Currently always `1`.                     |
-| `defaultRole`  | The preferred role for this repo                                 |
-| `allowedRoles` | All roles that are valid here. `defaultRole` is always included. |
+<h3 id="resolve-json-fields">Fields</h3>
 
-### When it fails
+| Field | What it tells you |
+| ----- | ----------------- |
+| `version` | Policy schema version. Currently always `1`. |
+| `defaultRole` | The preferred role for this repo |
+| `allowedRoles` | Roles that are valid here. `defaultRole` is always included. |
 
-`resolve --json` does not emit empty success output when `.gitrole` is missing. It fails clearly, exits nonzero, and writes the error to stderr with no JSON.
+<h3 id="resolve-json-exit-codes">Exit codes</h3>
 
-`resolve --json` exits with code `1` and writes to stderr with no JSON when:
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Policy resolved. JSON on stdout. |
+| `1` | Failure. Error on stderr. No JSON. |
 
-| Condition                                             | Result                            |
-| ----------------------------------------------------- | --------------------------------- |
-| Not inside a Git repo                                 | exit `1`, stderr message, no JSON |
-| No `.gitrole` file exists                             | exit `1`, stderr message, no JSON |
+<h3 id="resolve-json-failures">When it fails</h3>
+
+`resolve --json` does not emit empty success output when `.gitrole` is missing. It exits `1`, writes the error to stderr, and prints no JSON.
+
+| Condition | Result |
+| --------- | ------ |
+| Not inside a Git repo | exit `1`, stderr message, no JSON |
+| No `.gitrole` file exists | exit `1`, stderr message, no JSON |
 | `.gitrole` is invalid JSON or fails schema validation | exit `1`, stderr message, no JSON |
 | invalid `defaultRole` or `allowedRoles` name          | exit `1`, stderr message, no JSON |
 
-### Exit codes
+<h3 id="resolve-json-stable">What's stable</h3>
 
-| Code | Meaning                                    |
-| ---- | ------------------------------------------ |
-| `0`  | Policy resolved, JSON emitted              |
-| `1`  | Failure - error written to stderr, no JSON |
-
----
+The field names `version`, `defaultRole`, and `allowedRoles` are the contract. `version` is `1`. Key order is not. `status` and `doctor` still run when the file is absent; this command does not.
 
 <h2 id="role-name-format">Role name format</h2>
 
-Role names are constrained so machine-readable output stays unambiguous.
+Saved role names use this format so machine-readable values such as `role=` stay unambiguous.
 
-| Rule       | Allowed                                           |
-| ---------- | ------------------------------------------------- |
-| letters    | lowercase `a-z` only                              |
-| digits     | `0-9`                                             |
-| separators | `-`, `_`                                          |
+| Rule | Allowed |
+| ---- | ------- |
+| letters | lowercase `a-z` only |
+| digits | `0-9` |
+| separators | `-`, `_` |
 | disallowed | spaces, slashes, uppercase, and other punctuation |
 
-| Example       | Valid |
-| ------------- | ----- |
-| `work`        | yes   |
-| `personal`    | yes   |
-| `client-acme` | yes   |
-| `agent_bot`   | yes   |
-| `client acme` | no    |
-| `Work`        | no    |
-| `my@role`     | no    |
+| Example | Valid |
+| ------- | ----- |
+| `work` | yes |
+| `personal` | yes |
+| `client-acme` | yes |
+| `agent_bot` | yes |
+| `client acme` | no |
+| `Work` | no |
+| `my@role` | no |
 
-If you try to create a role with an invalid name, you will get:
+Creating a role with an invalid name prints:
 
 ```text
 error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
 ```
+
+If saved role data already contains a name outside this format, commands that load saved roles fail closed: exit `1`, error on stderr, nothing on stdout. That includes [`gitrole status --short`](#status-short-failures) and [`gitrole doctor --json`](#doctor-json-failures).
 
 The same rules apply to `.gitrole` `defaultRole` and every `allowedRoles` entry. An invalid policy name is fail-closed. These commands exit `1`, write the error to stderr, and write nothing to stdout:
 
