@@ -12,6 +12,10 @@
 ## [0.7.6](https://github.com/synthesiseng/gitrole/compare/v0.7.5...v0.7.6) (2026-09-26)
 
 
+### Breaking Changes
+
+* **status:** `gitrole status --short` grew from 7 fields to 8. `policy` is inserted before `overall`. Field order is `role scope override commit remote auth policy overall`. Parsers that treated the 7th field as `overall` must read fields by name, or use the 8th field ([#57](https://github.com/synthesiseng/gitrole/issues/57)) ([4b841e4](https://github.com/synthesiseng/gitrole/commit/4b841e4a4ca69cd208c31f459bd0871a392b8c1f))
+
 ### Bug Fixes
 
 * **status:** let HTTPS setups align and expose policy on --short ([#57](https://github.com/synthesiseng/gitrole/issues/57)) ([4b841e4](https://github.com/synthesiseng/gitrole/commit/4b841e4a4ca69cd208c31f459bd0871a392b8c1f))
