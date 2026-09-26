@@ -9,16 +9,24 @@ import type {
   SshAuthProbeResult
 } from './contracts.js';
 
+export interface CommitEnvOverrides {
+  authorName?: string;
+  authorEmail?: string;
+  committerName?: string;
+  committerEmail?: string;
+}
+
 export interface ObservedState {
   commitIdentity: DoctorResult['commitIdentity'];
   configuredIdentity: DoctorResult['configuredIdentity'];
+  commitEnv: CommitEnvOverrides;
   scope: IdentityScopeResult;
   repository: DoctorResult['repository'];
   sshAuth?: SshAuthProbeResult;
 }
 
 export async function collectObservedState(
-  dependencies: Pick<DoctorDependencies, 'gitConfig' | 'repository' | 'sshAuthProbe'>
+  dependencies: Pick<DoctorDependencies, 'gitConfig' | 'repository' | 'sshAuthProbe' | 'env'>
 ): Promise<ObservedState> {
   const [
     globalName,
@@ -48,10 +56,12 @@ export async function collectObservedState(
     remote?.protocol === 'ssh' && remote.host
       ? await dependencies.sshAuthProbe.probeGithubUser(remote.host)
       : undefined;
-  const commitIdentity = {
+  const configuredCommitIdentity = {
     fullName: diagnoseValue(localName, globalName),
     email: diagnoseValue(localEmail, globalEmail)
   };
+  const commitEnv = readCommitEnvOverrides(dependencies.env ?? process.env);
+  const commitIdentity = applyAuthorEnv(configuredCommitIdentity, commitEnv);
 
   return {
     commitIdentity,
@@ -65,7 +75,8 @@ export async function collectObservedState(
         email: globalEmail
       }
     },
-    scope: detectIdentityScope(commitIdentity),
+    commitEnv,
+    scope: detectIdentityScope(configuredCommitIdentity),
     repository: {
       isInsideWorkTree,
       hasCommits: isInsideWorkTree ? hasCommits : undefined,
@@ -76,6 +87,41 @@ export async function collectObservedState(
     },
     sshAuth
   };
+}
+
+export function readCommitEnvOverrides(env: NodeJS.ProcessEnv): CommitEnvOverrides {
+  return {
+    authorName: readEnvValue(env, 'GIT_AUTHOR_NAME'),
+    authorEmail: readEnvValue(env, 'GIT_AUTHOR_EMAIL'),
+    committerName: readEnvValue(env, 'GIT_COMMITTER_NAME'),
+    committerEmail: readEnvValue(env, 'GIT_COMMITTER_EMAIL')
+  };
+}
+
+function applyAuthorEnv(
+  configured: DoctorResult['commitIdentity'],
+  commitEnv: CommitEnvOverrides
+): DoctorResult['commitIdentity'] {
+  return {
+    fullName: commitEnv.authorName
+      ? { value: commitEnv.authorName, source: 'env' }
+      : configured.fullName,
+    email: commitEnv.authorEmail
+      ? { value: commitEnv.authorEmail, source: 'env' }
+      : configured.email
+  };
+}
+
+function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const value = env[key];
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed ? trimmed : undefined;
 }
 
 function diagnoseValue(localValue?: string, globalValue?: string): DiagnosedValue {

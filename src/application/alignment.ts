@@ -163,7 +163,36 @@ function getCommitStatus(input: {
     return 'warn';
   }
 
+  if (commitEnvDisagrees(observedState)) {
+    return 'warn';
+  }
+
+  if (
+    observedState.repository.isInsideWorkTree &&
+    observedState.repository.hasCommits === false &&
+    observedState.scope.effective !== 'local'
+  ) {
+    return 'warn';
+  }
+
   return 'ok';
+}
+
+function commitEnvDisagrees(observedState: ObservedState): boolean {
+  const authorName = observedState.commitIdentity.fullName.value;
+  const authorEmail = observedState.commitIdentity.email.value;
+  const committerName = observedState.commitEnv?.committerName;
+  const committerEmail = observedState.commitEnv?.committerEmail;
+
+  if (committerEmail && committerEmail !== authorEmail) {
+    return true;
+  }
+
+  if (committerName && committerName !== authorName) {
+    return true;
+  }
+
+  return false;
 }
 
 function getRemoteStatus(input: {

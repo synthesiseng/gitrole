@@ -7,7 +7,8 @@
     "gitrole": "dist/cli/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "hooks"
   ],
   "engines": {
     "node": ">=20"

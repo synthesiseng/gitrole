@@ -132,6 +132,8 @@ function buildDoctorChecks(input: {
     });
   }
 
+  checks.push(...buildCommitEnvChecks(observedState, input.role));
+
   if (observedState.scope.effective === 'mixed') {
     checks.push({
       status: 'warn',
@@ -156,6 +158,14 @@ function buildDoctorChecks(input: {
       label: 'history',
       message: 'repository has no commits yet; the first push will fail until HEAD exists'
     });
+
+    if (observedState.scope.effective !== 'local') {
+      checks.push({
+        status: 'warn',
+        label: 'commit',
+        message: 'no local role before the first commit; the next commit will use the global identity'
+      });
+    }
   }
 
   if (!observedState.repository.remote) {
@@ -338,6 +348,57 @@ function buildRoleAlignmentChecks(input: {
   }
 
   return dedupeChecks(checks);
+}
+
+function buildCommitEnvChecks(observedState: ObservedState, role?: Role): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  const configuredEmail =
+    observedState.configuredIdentity.local.email ?? observedState.configuredIdentity.global.email;
+  const configuredName =
+    observedState.configuredIdentity.local.fullName ?? observedState.configuredIdentity.global.fullName;
+  const authorEmail = observedState.commitIdentity.email.value;
+  const authorName = observedState.commitIdentity.fullName.value;
+  const effectiveRoleMatches = Boolean(
+    role && role.fullName === authorName && role.email === authorEmail
+  );
+
+  if (observedState.commitEnv.authorEmail) {
+    const overridesConfigured = observedState.commitEnv.authorEmail !== configuredEmail;
+
+    checks.push({
+      status: overridesConfigured && !effectiveRoleMatches ? 'warn' : 'info',
+      label: 'commit',
+      message: overridesConfigured
+        ? `GIT_AUTHOR_EMAIL ${observedState.commitEnv.authorEmail} overrides the configured commit email`
+        : `GIT_AUTHOR_EMAIL ${observedState.commitEnv.authorEmail} sets the commit email`
+    });
+  }
+
+  if (observedState.commitEnv.authorName && observedState.commitEnv.authorName !== configuredName) {
+    checks.push({
+      status: effectiveRoleMatches ? 'info' : 'warn',
+      label: 'commit',
+      message: `GIT_AUTHOR_NAME ${observedState.commitEnv.authorName} overrides the configured commit name`
+    });
+  }
+
+  if (observedState.commitEnv.committerEmail && observedState.commitEnv.committerEmail !== authorEmail) {
+    checks.push({
+      status: 'warn',
+      label: 'commit',
+      message: `GIT_COMMITTER_EMAIL ${observedState.commitEnv.committerEmail} overrides the committer email`
+    });
+  }
+
+  if (observedState.commitEnv.committerName && observedState.commitEnv.committerName !== authorName) {
+    checks.push({
+      status: 'warn',
+      label: 'commit',
+      message: `GIT_COMMITTER_NAME ${observedState.commitEnv.committerName} overrides the committer name`
+    });
+  }
+
+  return checks;
 }
 
 function buildHttpsAuthCheck(input: {

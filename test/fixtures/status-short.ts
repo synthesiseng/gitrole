@@ -28,6 +28,12 @@ export const httpsNoIdentityPin = {
   doctorAuth: 'origin uses HTTPS and no identity pin is configured'
 } as const;
 
+export const freshRepoNoLocalRole = {
+  id: 'fresh-repo-no-local-role',
+  line: 'role=work scope=global override=false commit=warn remote=warn auth=ok policy=na overall=warning',
+  doctorCommit: 'no local role before the first commit; the next commit will use the global identity'
+} as const;
+
 export const httpsPinMismatch = {
   id: 'https-pin-mismatch',
   line: 'role=personal scope=local override=true commit=ok remote=ok auth=warn policy=warn overall=warning',

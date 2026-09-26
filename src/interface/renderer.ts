@@ -156,6 +156,10 @@ export function renderStatus(result: StatusResult): string {
 
   lines.push(formatDetail('commit', result.commitIdentity ?? chalk.dim('unset')));
 
+  if (result.envNote) {
+    lines.push(formatDetail('env', result.envNote));
+  }
+
   if (result.pushAuth) {
     lines.push(formatDetail('push', result.pushAuth));
   }
@@ -298,7 +302,7 @@ function formatPath(input: string): string {
 
 function formatDiagnosedValue(input: {
   value?: string;
-  source: 'local' | 'global' | 'unset';
+  source: 'local' | 'global' | 'env' | 'unset';
 }): string {
   if (!input.value) {
     return chalk.dim(`not set (${input.source})`);

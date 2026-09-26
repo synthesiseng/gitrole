@@ -1731,6 +1731,7 @@ test('status summary evaluation derives warnings from observed state, not diagno
         local: { fullName: role.fullName, email: role.email },
         global: {}
       },
+      commitEnv: {},
       scope: {
         effective: 'local',
         hasLocalOverride: true
@@ -1778,6 +1779,7 @@ test('status summary evaluation warns outside a git repository without relying o
         local: {},
         global: { fullName: role.fullName, email: role.email }
       },
+      commitEnv: {},
       scope: {
         effective: 'global',
         hasLocalOverride: false
@@ -2059,6 +2061,100 @@ test('HTTPS pin mismatch warns when the active github user is not the pin', asyn
     authCheck?.message,
     'origin uses HTTPS; github user thisyearearth does not match pin alex-dev'
   );
+});
+
+test('GIT_AUTHOR_EMAIL overrides the configured identity and warns when it matches no role', async () => {
+  const role: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const dependencies = createDoctorDependencies(role, {
+    remoteUrl: 'git@github.com:acme-corp/service.git'
+  });
+  dependencies.env = {
+    GIT_AUTHOR_EMAIL: 'other@example.com'
+  };
+
+  const status = await getStatus(dependencies);
+  const result = await doctor(dependencies);
+
+  assert.equal(status.roleName, 'no-role');
+  assert.equal(status.commit, 'warn');
+  assert.equal(status.overall, 'warning');
+  assert.match(status.commitIdentity ?? '', /other@example.com/);
+  assert.match(status.envNote ?? '', /GIT_AUTHOR_EMAIL other@example.com/);
+  assert.equal(result.commitIdentity.email.source, 'env');
+  assert.equal(result.commitIdentity.email.value, 'other@example.com');
+  assert.equal(
+    result.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.message === 'GIT_AUTHOR_EMAIL other@example.com overrides the configured commit email'
+    ),
+    true
+  );
+});
+
+test('GIT_COMMITTER_EMAIL warns while the configured author still matches the role', async () => {
+  const role: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const dependencies = createDoctorDependencies(role, {
+    remoteUrl: 'git@github.com:acme-corp/service.git'
+  });
+  dependencies.env = {
+    GIT_COMMITTER_EMAIL: 'other@example.com'
+  };
+
+  const status = await getStatus(dependencies);
+  const result = await doctor(dependencies);
+
+  assert.equal(status.roleName, 'work');
+  assert.equal(status.commit, 'warn');
+  assert.equal(status.overall, 'warning');
+  assert.match(status.envNote ?? '', /GIT_COMMITTER_EMAIL other@example.com/);
+  assert.equal(
+    result.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.message === 'GIT_COMMITTER_EMAIL other@example.com overrides the committer email'
+    ),
+    true
+  );
+});
+
+test('GIT_AUTHOR_EMAIL that matches the saved role stays aligned and is visible', async () => {
+  const role: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const dependencies = createDoctorDependencies(role, {
+    remoteUrl: 'git@github.com:acme-corp/service.git'
+  });
+  dependencies.env = {
+    GIT_AUTHOR_EMAIL: role.email
+  };
+
+  const status = await getStatus(dependencies);
+  const result = await doctor(dependencies);
+
+  assert.equal(status.roleName, 'work');
+  assert.equal(status.commit, 'ok');
+  assert.equal(status.overall, 'aligned');
+  assert.equal(result.commitIdentity.email.source, 'env');
+  assert.equal(
+    result.checks.some(
+      (check) =>
+        check.status === 'info' &&
+        check.message === `GIT_AUTHOR_EMAIL ${role.email} sets the commit email`
+    ),
+    true
+  );
+  assert.equal(result.checks.some((check) => check.status === 'warn'), false);
 });
 
 test('SSH auth stays ok on a match and warn on a githubUser mismatch', async () => {

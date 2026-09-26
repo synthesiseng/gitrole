@@ -41,6 +41,7 @@ export async function getStatus(
     localOverride: observedState.scope.hasLocalOverride,
     lastNonMergeCommit,
     historyNote: formatHistoryNote(observedState.commitIdentity, lastNonMergeCommit),
+    envNote: formatEnvNote(observedState),
     overall: summary.overall,
     commit: summary.commit,
     remote: summary.remote,
@@ -135,4 +136,26 @@ function formatHistoryNote(
   }
 
   return `last non-merge commit used ${lastNonMergeCommit.authorName} <${lastNonMergeCommit.authorEmail}>`;
+}
+
+function formatEnvNote(observedState: ObservedState): string | undefined {
+  const notes: string[] = [];
+
+  if (observedState.commitEnv.authorEmail) {
+    notes.push(`GIT_AUTHOR_EMAIL ${observedState.commitEnv.authorEmail}`);
+  }
+
+  if (observedState.commitEnv.authorName) {
+    notes.push(`GIT_AUTHOR_NAME ${observedState.commitEnv.authorName}`);
+  }
+
+  if (observedState.commitEnv.committerEmail) {
+    notes.push(`GIT_COMMITTER_EMAIL ${observedState.commitEnv.committerEmail}`);
+  }
+
+  if (observedState.commitEnv.committerName) {
+    notes.push(`GIT_COMMITTER_NAME ${observedState.commitEnv.committerName}`);
+  }
+
+  return notes.length > 0 ? notes.join(', ') : undefined;
 }

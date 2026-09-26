@@ -109,7 +109,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 
 - No GitHub browser or session switching
 - No `gh auth`, HTTPS credentials, or token management
-- No hooks, auto-switching, or workflow enforcement
+- No auto-installed hooks, auto-switching, or workflow enforcement; optional check-only hook runs `gitrole status --short`
 - No interactive prompts
 
 ## License
