@@ -329,7 +329,7 @@ gitrole resolve --json
 
 ---
 
-## Role name format
+<h2 id="role-name-format">Role name format</h2>
 
 Role names are constrained so machine-readable output stays unambiguous.
 
