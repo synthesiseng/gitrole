@@ -41,6 +41,31 @@ async function initRealRepo(prefix: string): Promise<string> {
   return repoDir;
 }
 
+async function writeRepoPolicy(repoDir: string, policy: unknown): Promise<void> {
+  await writeFile(
+    path.join(repoDir, '.gitrole'),
+    `${JSON.stringify(policy, null, 2)}\n`,
+    'utf8'
+  );
+}
+
+function assertPolicyRoleNameFailure(
+  result: { status: number | null; stdout: string; stderr: string },
+  field: 'defaultRole' | 'allowedRoles',
+  roleName: string
+) {
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(
+    result.stderr,
+    new RegExp(`error: repo policy file \\.gitrole is invalid: ${field} `)
+  );
+  assert.match(
+    result.stderr,
+    new RegExp(`invalid role name "${roleName}"; use lowercase letters, numbers, "-" or "_"`)
+  );
+}
+
 test('cli help text includes the primary commands', () => {
   const result = spawnSync(process.execPath, [cliPath, '--help'], {
     encoding: 'utf8'
@@ -271,6 +296,22 @@ test('cli import current rejects invalid role names with the same clear error', 
     result.stderr,
     /error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"/
   );
+});
+
+test('cli pin rejects fixture invalid-role-name-spaces before writing .gitrole', async () => {
+  const repoDir = await initRealRepo('gitrole-cli-pin-invalid-role-name-spaces-');
+  const result = spawnSync(process.execPath, [cliPath, 'pin', 'client acme'], {
+    cwd: repoDir,
+    encoding: 'utf8'
+  });
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(
+    result.stderr,
+    /error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"/
+  );
+  await assert.rejects(() => readFile(path.join(repoDir, '.gitrole'), 'utf8'));
 });
 
 test('cli import current fails clearly when git is unavailable', () => {
@@ -858,6 +899,178 @@ test('cli resolve fails when .gitrole has an invalid schema', async () => {
   assert.match(result.stderr, /error: repo policy file \.gitrole is invalid: defaultRole must appear in allowedRoles/);
 });
 
+test('cli resolve, status, and doctor succeed for fixture valid-role-names', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-valid-role-names-'));
+  const configHome = path.join(tempDir, 'config');
+  const repoDir = await initRealRepo('gitrole-cli-valid-role-names-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: configHome
+  };
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'client-acme',
+    allowedRoles: ['client-acme', 'agent_bot']
+  });
+
+  const resolveResult = spawnSync(process.execPath, [cliPath, 'resolve'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    env
+  });
+  assert.equal(resolveResult.status, 0);
+  assert.equal(resolveResult.stdout.trim(), 'client-acme');
+  assert.equal(resolveResult.stderr, '');
+
+  const resolveJsonResult = spawnSync(process.execPath, [cliPath, 'resolve', '--json'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    env
+  });
+  assert.equal(resolveJsonResult.status, 0);
+  assert.equal(resolveJsonResult.stderr, '');
+  assert.deepEqual(JSON.parse(resolveJsonResult.stdout), {
+    version: 1,
+    defaultRole: 'client-acme',
+    allowedRoles: ['client-acme', 'agent_bot']
+  });
+
+  for (const args of [['status'], ['doctor'], ['doctor', '--json']] as const) {
+    const result = spawnSync(process.execPath, [cliPath, ...args], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      env
+    });
+
+    assert.ok(result.status === 0 || result.status === 2, result.stderr);
+    assert.equal(result.stderr, '');
+  }
+});
+
+test('cli resolve rejects fixture invalid-default-role-spaces', async () => {
+  const repoDir = await initRealRepo('gitrole-cli-invalid-default-role-spaces-');
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'client acme',
+    allowedRoles: ['client acme']
+  });
+
+  const result = spawnSync(process.execPath, [cliPath, 'resolve'], {
+    cwd: repoDir,
+    encoding: 'utf8'
+  });
+
+  assertPolicyRoleNameFailure(result, 'defaultRole', 'client acme');
+});
+
+test('cli resolve rejects fixture invalid-default-role-uppercase', async () => {
+  const repoDir = await initRealRepo('gitrole-cli-invalid-default-role-uppercase-');
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'Work',
+    allowedRoles: ['Work']
+  });
+
+  const result = spawnSync(process.execPath, [cliPath, 'resolve'], {
+    cwd: repoDir,
+    encoding: 'utf8'
+  });
+
+  assertPolicyRoleNameFailure(result, 'defaultRole', 'Work');
+});
+
+test('cli resolve --json rejects fixture invalid-allowed-role-uppercase', async () => {
+  const repoDir = await initRealRepo('gitrole-cli-invalid-allowed-role-uppercase-');
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work', 'Client']
+  });
+
+  const result = spawnSync(process.execPath, [cliPath, 'resolve', '--json'], {
+    cwd: repoDir,
+    encoding: 'utf8'
+  });
+
+  assertPolicyRoleNameFailure(result, 'allowedRoles', 'Client');
+});
+
+test('cli resolve --json rejects fixture invalid-allowed-role-spaces', async () => {
+  const repoDir = await initRealRepo('gitrole-cli-invalid-allowed-role-spaces-');
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work', 'client acme']
+  });
+
+  const result = spawnSync(process.execPath, [cliPath, 'resolve', '--json'], {
+    cwd: repoDir,
+    encoding: 'utf8'
+  });
+
+  assertPolicyRoleNameFailure(result, 'allowedRoles', 'client acme');
+});
+
+test('cli status and doctor reject fixture invalid-default-role-spaces', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-invalid-default-role-spaces-'));
+  const configHome = path.join(tempDir, 'config');
+  const repoDir = await initRealRepo('gitrole-cli-status-invalid-default-role-spaces-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: configHome
+  };
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'client acme',
+    allowedRoles: ['client acme']
+  });
+
+  for (const args of [['status'], ['status', '--short'], ['doctor'], ['doctor', '--json']] as const) {
+    const result = spawnSync(process.execPath, [cliPath, ...args], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      env
+    });
+
+    assertPolicyRoleNameFailure(result, 'defaultRole', 'client acme');
+  }
+});
+
+test('cli status and doctor reject fixture invalid-allowed-role-uppercase', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-invalid-allowed-role-uppercase-'));
+  const configHome = path.join(tempDir, 'config');
+  const repoDir = await initRealRepo('gitrole-cli-status-invalid-allowed-role-uppercase-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: configHome
+  };
+
+  await writeRepoPolicy(repoDir, {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work', 'Client']
+  });
+
+  for (const args of [['status'], ['status', '--short'], ['doctor'], ['doctor', '--json']] as const) {
+    const result = spawnSync(process.execPath, [cliPath, ...args], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      env
+    });
+
+    assertPolicyRoleNameFailure(result, 'allowedRoles', 'Client');
+  }
+});
+
 test('cli pin creates .gitrole with the expected strict policy and prints a clear summary', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-pin-ok-'));
   const configHome = path.join(tempDir, 'config');
@@ -891,6 +1104,30 @@ test('cli pin creates .gitrole with the expected strict policy and prints a clea
     await readFile(path.join(repoDir, '.gitrole'), 'utf8'),
     '{\n  "version": 1,\n  "defaultRole": "work",\n  "allowedRoles": [\n    "work"\n  ]\n}\n'
   );
+
+  const resolveResult = spawnSync(process.execPath, [cliPath, 'resolve', '--json'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    env
+  });
+  assert.equal(resolveResult.status, 0, resolveResult.stderr);
+  assert.equal(resolveResult.stderr, '');
+  assert.deepEqual(JSON.parse(resolveResult.stdout), {
+    version: 1,
+    defaultRole: 'work',
+    allowedRoles: ['work']
+  });
+
+  for (const args of [['status'], ['doctor']] as const) {
+    const check = spawnSync(process.execPath, [cliPath, ...args], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      env
+    });
+
+    assert.ok(check.status === 0 || check.status === 2, check.stderr);
+    assert.equal(check.stderr, '');
+  }
 });
 
 test('cli pin fails outside a git repository', async () => {
