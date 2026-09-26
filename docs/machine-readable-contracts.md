@@ -38,6 +38,8 @@ No `.gitrole` file. `policy=na`.
 role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned
 ```
 
+A pin is the repo's `.gitrole` file (what `gitrole pin` writes). It names `defaultRole` and `allowedRoles` for that repo. See [Pin a repo to one role]({{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}#pin-a-repo-to-one-role).
+
 HTTPS origin whose pin allows the effective role. `auth=na` and `overall=aligned` together. Exit `0`.
 
 ```text
@@ -77,19 +79,27 @@ Exactly one line. Eight `key=value` fields, in this order, separated by single s
 | `policy`   | `.gitrole` against the effective role | `ok`, `warn`, `na` |
 | `overall`  | Summary | `aligned`, `warning` |
 
-`na` means that check does not apply.
-
 | Field | `na` when |
 | ----- | --------- |
 | `remote` | Not inside a Git repo |
 | `auth` | Not inside a Git repo, no `origin`, or `origin` is HTTPS |
 | `policy` | No `.gitrole` file |
 
-`auth` on SSH is `ok` or `warn` from the `githubUser` probe. `auth=na` on HTTPS is not a warning. It does not by itself set `overall=warning` or exit `2`.
+<h4 id="status-short-na">How <code>na</code> rolls into <code>overall</code></h4>
+
+`na` means that check does not apply. It does not by itself set `overall=warning` or exit `2`.
+
+| What is true | `overall` | Exit |
+| ------------ | --------- | ---- |
+| `commit`, `remote`, `auth`, or `policy` is `warn` | `warning` | `2` |
+| Working directory is outside a Git repo | `warning` | `2` |
+| Those checks are only `ok` or `na`, inside a Git repo | `aligned` | `0` |
+
+Only `warn` on those checks, or being outside a Git repo, drives `overall=warning`. `auth=na` on an HTTPS origin and `policy=na` when there is no `.gitrole` file can sit next to `overall=aligned` when nothing is `warn`.
+
+`auth` on SSH is `ok` or `warn` from the `githubUser` probe.
 
 `policy=ok` when `.gitrole` allows the effective role: that role is `defaultRole`, or it is listed in `allowedRoles`. `policy=warn` when the evaluation is `notAllowed`.
-
-`overall=warning` when the working directory is outside a Git repo, or when `commit`, `remote`, `auth`, or `policy` is `warn`. Otherwise `overall=aligned`.
 
 <h3 id="status-short-exit-codes">Exit codes</h3>
 
