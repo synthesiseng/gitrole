@@ -1,0 +1,4 @@
+#!/bin/sh
+# Optional check-only pre-commit hook. It does not switch roles.
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+exec gitrole status --short

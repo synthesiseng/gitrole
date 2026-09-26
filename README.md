@@ -99,7 +99,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 `gitrole` warns on violated expectations, not assumptions.
 
 - `githubUser` checks the resolved SSH auth user on SSH remotes
-- HTTPS origins report `auth=na` because SSH verification does not apply; that alone is not a warning
+- HTTPS origins report `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn`
 - `githubHost` checks the remote host alias
 - remote owner and repository are context by default
 - `overall=warning` only happens when at least one actionable check is `warn`
@@ -109,7 +109,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 
 - No GitHub browser or session switching
 - No `gh auth`, HTTPS credentials, or token management
-- No hooks, auto-switching, or workflow enforcement
+- No auto-installed hooks, auto-switching, or workflow enforcement; optional check-only hook runs `gitrole status --short`
 - No interactive prompts
 
 ## License

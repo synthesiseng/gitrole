@@ -3,9 +3,15 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import {
+  freshRepoNoLocalRole,
+  httpsNoIdentityPin,
   httpsPinAligned,
+  httpsPinMismatch,
   sshAuthMatch,
   sshAuthMismatch,
   statusShortBaseline,
@@ -155,6 +161,107 @@ test('e2e https-pin-aligned: status and doctor reach aligned on an HTTPS origin'
     true
   );
   assertNoWarnChecks(doctor);
+});
+
+test('e2e https-no-identity-pin: HTTPS without an identity pin warns', async () => {
+  const workspace = await createHermeticWorkspace();
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  mustSucceed(runCli(workspace, ['use', 'work', '--local']), 'gitrole use work --local failed');
+  commitEmpty(workspace, {
+    message: 'feat: https no identity pin'
+  });
+  setOrigin(workspace, 'https://github.com/acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.stdout.trim(), httpsNoIdentityPin.line, httpsNoIdentityPin.id);
+
+  const humanStatus = runCli(workspace, ['status']);
+  assert.equal(humanStatus.status, 2, humanStatus.stderr);
+  assert.match(humanStatus.stdout, /warning/);
+  assert.match(humanStatus.stdout, /HTTPS \(no identity pin\)/);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  assert.equal(doctorResult.status, 2, doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+  const authCheck = doctor.checks.find((check) => check.label === 'auth');
+
+  assert.equal(doctor.overall, 'warning');
+  assert.equal(authCheck?.status, 'warn');
+  assert.equal(authCheck?.message, httpsNoIdentityPin.doctorAuth);
+
+  const doctorText = runCli(workspace, ['doctor']);
+  assert.equal(doctorText.status, 2, doctorText.stderr);
+  assert.match(doctorText.stdout, /warn auth\s+origin uses HTTPS and no identity pin is configured/);
+});
+
+test('e2e https-pin-mismatch: HTTPS pin with the wrong github user warns', async () => {
+  const workspace = await createHermeticWorkspace();
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev'
+  });
+  await saveRole(workspace, {
+    name: 'personal',
+    fullName: 'Pat Person',
+    email: 'pat@personal.example',
+    githubUser: 'thisyearearth'
+  });
+  mustSucceed(runCli(workspace, ['use', 'personal', '--local']), 'gitrole use personal --local failed');
+  commitEmpty(workspace, {
+    message: 'feat: https pin mismatch'
+  });
+  setOrigin(workspace, 'https://github.com/acme-corp/service.git');
+  mustSucceed(runCli(workspace, ['pin', 'work']), 'gitrole pin work failed');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.stdout.trim(), httpsPinMismatch.line, httpsPinMismatch.id);
+
+  const humanStatus = runCli(workspace, ['status']);
+  assert.equal(humanStatus.status, 2, humanStatus.stderr);
+  assert.match(humanStatus.stdout, /warning/);
+  assert.match(humanStatus.stdout, /HTTPS \(github user does not match pin\)/);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  assert.equal(doctorResult.status, 2, doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+  const authCheck = doctor.checks.find((check) => check.label === 'auth');
+
+  assert.equal(doctor.overall, 'warning');
+  assert.equal(authCheck?.status, 'warn');
+  assert.equal(authCheck?.message, httpsPinMismatch.doctorAuth);
+
+  const doctorText = runCli(workspace, ['doctor']);
+  assert.equal(doctorText.status, 2, doctorText.stderr);
+  assert.match(
+    doctorText.stdout,
+    /warn auth\s+origin uses HTTPS; github user thisyearearth does not match pin alex-dev/
+  );
 });
 
 test('e2e ssh-auth-match: SSH githubUser match stays auth=ok', async () => {
@@ -370,10 +477,245 @@ test('e2e status --short warns on a new repo with no commits yet', async () => {
   const statusResult = runCli(workspace, ['status', '--short']);
 
   assert.equal(statusResult.status, 2);
+  assert.equal(statusResult.stdout.trim(), freshRepoNoLocalRole.line, freshRepoNoLocalRole.id);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  assert.equal(doctorResult.status, 2, doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+  assert.equal(
+    doctor.checks.some(
+      (check) =>
+        check.label === 'commit' &&
+        check.status === 'warn' &&
+        check.message === freshRepoNoLocalRole.doctorCommit
+    ),
+    true
+  );
+});
+
+test('e2e fresh repo with a local role keeps commit=ok', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'alex-dev'
+    }
+  });
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  mustSucceed(runCli(workspace, ['use', 'work', '--local']), 'gitrole use work --local failed');
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
   assert.equal(
     statusResult.stdout.trim(),
-    'role=work scope=global override=false commit=ok remote=warn auth=ok policy=na overall=warning'
+    'role=work scope=local override=true commit=ok remote=warn auth=ok policy=na overall=warning'
   );
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    checks: Array<{ message: string }>;
+  };
+  assert.equal(
+    doctor.checks.some((check) => check.message.includes('no local role before the first commit')),
+    false
+  );
+});
+
+test('e2e GIT_AUTHOR_EMAIL overrides config and status does not stay green', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'alex-dev'
+    }
+  });
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  commitEmpty(workspace, {
+    message: 'feat: env override'
+  });
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short'], {
+    env: {
+      GIT_AUTHOR_EMAIL: 'other@example.com'
+    }
+  });
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(
+    statusResult.stdout.trim(),
+    'role=no-role scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning'
+  );
+
+  const humanStatus = runCli(workspace, ['status'], {
+    env: {
+      GIT_AUTHOR_EMAIL: 'other@example.com'
+    }
+  });
+  assert.match(humanStatus.stdout, /other@example.com/);
+  assert.match(humanStatus.stdout, /GIT_AUTHOR_EMAIL other@example.com/);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json'], {
+    env: {
+      GIT_AUTHOR_EMAIL: 'other@example.com'
+    }
+  });
+  assert.equal(doctorResult.status, 2, doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    commitIdentity: { email: { value?: string; source: string } };
+    checks: Array<{ status: string; message: string }>;
+  };
+  assert.equal(doctor.commitIdentity.email.value, 'other@example.com');
+  assert.equal(doctor.commitIdentity.email.source, 'env');
+  assert.equal(
+    doctor.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.message === 'GIT_AUTHOR_EMAIL other@example.com overrides the configured commit email'
+    ),
+    true
+  );
+});
+
+test('e2e GIT_COMMITTER_EMAIL warns when the committer is not the author', async () => {
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'alex-dev'
+    }
+  });
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  commitEmpty(workspace, {
+    message: 'feat: committer override'
+  });
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short'], {
+    env: {
+      GIT_COMMITTER_EMAIL: 'other@example.com'
+    }
+  });
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(
+    statusResult.stdout.trim(),
+    'role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning'
+  );
+
+  const doctorResult = runCli(workspace, ['doctor', '--json'], {
+    env: {
+      GIT_COMMITTER_EMAIL: 'other@example.com'
+    }
+  });
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ status: string; message: string }>;
+  };
+  assert.equal(doctor.overall, 'warning');
+  assert.equal(
+    doctor.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.message === 'GIT_COMMITTER_EMAIL other@example.com overrides the committer email'
+    ),
+    true
+  );
+});
+
+test('e2e optional pre-commit hook only runs status --short and exits non-zero on warn', async () => {
+  const hookSource = await readFile(path.resolve('hooks/pre-commit'), 'utf8');
+  assert.match(hookSource, /^exec gitrole status --short$/m);
+  assert.doesNotMatch(hookSource, /gitrole use/);
+
+  const workspace = await createHermeticWorkspace({
+    sshUsersByHost: {
+      'github.com-acme-dev': 'alex-dev'
+    }
+  });
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  });
+  setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
+
+  const binDir = path.join(workspace.rootDir, 'bin');
+  const hookPath = path.join(workspace.rootDir, 'pre-commit');
+  await mkdir(binDir);
+  await writeFile(
+    path.join(binDir, 'gitrole'),
+    `#!/bin/sh\nexec "${process.execPath}" "${path.resolve('dist/cli/index.js')}" "$@"\n`
+  );
+  await chmod(path.join(binDir, 'gitrole'), 0o755);
+  await writeFile(hookPath, hookSource);
+  await chmod(hookPath, 0o755);
+
+  const warned = spawnSync(hookPath, {
+    cwd: workspace.repoDir,
+    encoding: 'utf8',
+    env: {
+      ...workspace.env,
+      PATH: `${binDir}:${process.env.PATH ?? ''}`
+    }
+  });
+  assert.notEqual(warned.status, 0);
+  assert.match(warned.stdout, /commit=warn/);
+  assert.match(warned.stdout, /overall=warning/);
+
+  commitEmpty(workspace, {
+    message: 'feat: local role committed'
+  });
+  mustSucceed(runCli(workspace, ['use', 'work', '--local']), 'gitrole use work --local failed');
+  const aligned = spawnSync(hookPath, {
+    cwd: workspace.repoDir,
+    encoding: 'utf8',
+    env: {
+      ...workspace.env,
+      PATH: `${binDir}:${process.env.PATH ?? ''}`
+    }
+  });
+  assert.equal(aligned.status, 0, aligned.stderr);
+  assert.match(aligned.stdout, /commit=ok/);
+  assert.match(aligned.stdout, /overall=aligned/);
 });
 
 test('e2e remote set preserves owner and repository while rewriting the host alias', async () => {

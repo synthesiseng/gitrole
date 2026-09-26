@@ -31,7 +31,7 @@ export interface ImportCurrentRoleResult {
 
 export interface DiagnosedValue {
   value?: string;
-  source: 'local' | 'global' | 'unset';
+  source: 'local' | 'global' | 'env' | 'unset';
 }
 
 export type UseScope = 'global' | 'local';
@@ -130,6 +130,7 @@ export interface StatusResult {
   localOverride: boolean;
   lastNonMergeCommit?: NonMergeCommit;
   historyNote?: string;
+  envNote?: string;
   overall: 'aligned' | 'warning';
   commit: 'ok' | 'warn' | 'na';
   remote: 'ok' | 'warn' | 'na';
@@ -208,6 +209,7 @@ export interface DoctorDependencies {
   gitConfig: GitConfig;
   repository: GitRepository;
   sshAuthProbe: SshAuthProbe;
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface ResolveRepoPolicyDependencies {

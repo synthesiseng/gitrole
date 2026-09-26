@@ -2,7 +2,7 @@
  * Implements repository diagnosis and post-switch alignment checks.
  */
 import type { Role } from '../../domain/role.js';
-import { findMatchingRole } from '../alignment.js';
+import { describeHttpsAuth, findMatchingRole, findPinnedRole } from '../alignment.js';
 import {
   getDoctorOverall,
   DoctorCheck,
@@ -37,7 +37,8 @@ export async function doctor(
     role,
     roles,
     observedState,
-    repoPolicy: evaluatedRepoPolicy
+    repoPolicy: evaluatedRepoPolicy,
+    pinnedRole: findPinnedRole(roles, evaluatedRepoPolicy)
   });
 
   return {
@@ -92,6 +93,7 @@ function buildDoctorChecks(input: {
   roles: Role[];
   observedState: ObservedState;
   repoPolicy?: DoctorResult['repoPolicy'];
+  pinnedRole?: Role;
 }): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const { observedState } = input;
@@ -130,6 +132,8 @@ function buildDoctorChecks(input: {
     });
   }
 
+  checks.push(...buildCommitEnvChecks(observedState, input.role));
+
   if (observedState.scope.effective === 'mixed') {
     checks.push({
       status: 'warn',
@@ -154,6 +158,14 @@ function buildDoctorChecks(input: {
       label: 'history',
       message: 'repository has no commits yet; the first push will fail until HEAD exists'
     });
+
+    if (observedState.scope.effective !== 'local') {
+      checks.push({
+        status: 'warn',
+        label: 'commit',
+        message: 'no local role before the first commit; the next commit will use the global identity'
+      });
+    }
   }
 
   if (!observedState.repository.remote) {
@@ -189,6 +201,10 @@ function buildDoctorChecks(input: {
   }
 
   if (!input.role) {
+    if (observedState.repository.remote.protocol === 'https') {
+      checks.push(buildHttpsAuthCheck(input));
+    }
+
     if (input.repoPolicy) {
       checks.push(buildRepoPolicyCheck(input.repoPolicy));
     }
@@ -199,7 +215,10 @@ function buildDoctorChecks(input: {
   checks.push(
     ...buildRoleAlignmentChecks({
       role: input.role,
-      observedState
+      observedState,
+      repoPolicy: input.repoPolicy,
+      pinnedRole: input.pinnedRole,
+      enforceHttpsPin: true
     })
   );
 
@@ -213,6 +232,9 @@ function buildDoctorChecks(input: {
 function buildRoleAlignmentChecks(input: {
   role: Role;
   observedState: ObservedState;
+  repoPolicy?: DoctorResult['repoPolicy'];
+  pinnedRole?: Role;
+  enforceHttpsPin?: boolean;
 }): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const { role, observedState } = input;
@@ -278,11 +300,15 @@ function buildRoleAlignmentChecks(input: {
   }
 
   if (observedState.repository.remote.protocol === 'https') {
-    checks.push({
-      status: 'info',
-      label: 'auth',
-      message: 'origin uses HTTPS; SSH auth verification does not apply'
-    });
+    checks.push(
+      input.enforceHttpsPin
+        ? buildHttpsAuthCheck(input)
+        : {
+            status: 'info',
+            label: 'auth',
+            message: 'origin uses HTTPS; SSH auth verification does not apply'
+          }
+    );
     return dedupeChecks(checks);
   }
 
@@ -322,6 +348,75 @@ function buildRoleAlignmentChecks(input: {
   }
 
   return dedupeChecks(checks);
+}
+
+function buildCommitEnvChecks(observedState: ObservedState, role?: Role): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  const configuredEmail =
+    observedState.configuredIdentity.local.email ?? observedState.configuredIdentity.global.email;
+  const configuredName =
+    observedState.configuredIdentity.local.fullName ?? observedState.configuredIdentity.global.fullName;
+  const authorEmail = observedState.commitIdentity.email.value;
+  const authorName = observedState.commitIdentity.fullName.value;
+  const effectiveRoleMatches = Boolean(
+    role && role.fullName === authorName && role.email === authorEmail
+  );
+
+  if (observedState.commitEnv.authorEmail) {
+    const overridesConfigured = observedState.commitEnv.authorEmail !== configuredEmail;
+
+    checks.push({
+      status: overridesConfigured && !effectiveRoleMatches ? 'warn' : 'info',
+      label: 'commit',
+      message: overridesConfigured
+        ? `GIT_AUTHOR_EMAIL ${observedState.commitEnv.authorEmail} overrides the configured commit email`
+        : `GIT_AUTHOR_EMAIL ${observedState.commitEnv.authorEmail} sets the commit email`
+    });
+  }
+
+  if (observedState.commitEnv.authorName && observedState.commitEnv.authorName !== configuredName) {
+    checks.push({
+      status: effectiveRoleMatches ? 'info' : 'warn',
+      label: 'commit',
+      message: `GIT_AUTHOR_NAME ${observedState.commitEnv.authorName} overrides the configured commit name`
+    });
+  }
+
+  if (observedState.commitEnv.committerEmail && observedState.commitEnv.committerEmail !== authorEmail) {
+    checks.push({
+      status: 'warn',
+      label: 'commit',
+      message: `GIT_COMMITTER_EMAIL ${observedState.commitEnv.committerEmail} overrides the committer email`
+    });
+  }
+
+  if (observedState.commitEnv.committerName && observedState.commitEnv.committerName !== authorName) {
+    checks.push({
+      status: 'warn',
+      label: 'commit',
+      message: `GIT_COMMITTER_NAME ${observedState.commitEnv.committerName} overrides the committer name`
+    });
+  }
+
+  return checks;
+}
+
+function buildHttpsAuthCheck(input: {
+  role?: Role;
+  repoPolicy?: DoctorResult['repoPolicy'];
+  pinnedRole?: Role;
+}): DoctorCheck {
+  const httpsAuth = describeHttpsAuth({
+    role: input.role,
+    repoPolicy: input.repoPolicy,
+    pinnedRole: input.pinnedRole
+  });
+
+  return {
+    status: httpsAuth.auth === 'na' ? 'info' : 'warn',
+    label: 'auth',
+    message: httpsAuth.message
+  };
 }
 
 function dedupeChecks(checks: DoctorCheck[]): DoctorCheck[] {

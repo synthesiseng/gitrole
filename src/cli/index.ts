@@ -347,7 +347,9 @@ Policy:
   status warns only on actionable mismatches.
   Observed context alone does not degrade the overall result.
   policy is ok, warn, or na. na means no .gitrole file is present.
-  HTTPS origins report auth=na. SSH githubUser checks apply only to SSH remotes.
+  HTTPS origins report auth=na only when a repo pin allows the active role and that role has a githubUser.
+  No pin or a github user mismatch is auth=warn.
+  SSH githubUser checks apply only to SSH remotes.
 
 Examples:
   $ gitrole status
@@ -378,7 +380,8 @@ Policy:
   gitrole warns on violated expectations, not assumptions.
   githubUser checks SSH auth. githubHost checks the remote host.
   Remote owner/repository is context, not a warning by default.
-  HTTPS origins record auth as info because SSH verification does not apply.
+  HTTPS origins record auth as info only when a repo pin allows the active role and that role has a githubUser.
+  No pin or a github user mismatch warns.
 
 Example:
   $ gitrole doctor

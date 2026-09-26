@@ -368,13 +368,21 @@ test('cli doctor and status help describe the warning policy', () => {
   assert.equal(doctorHelp.status, 0);
   assert.match(doctorHelp.stdout, /warns on violated expectations, not assumptions/i);
   assert.match(doctorHelp.stdout, /Remote owner\/repository is context, not a warning by default/i);
-  assert.match(doctorHelp.stdout, /HTTPS origins record auth as info because SSH verification does not apply/i);
+  assert.match(
+    doctorHelp.stdout,
+    /HTTPS origins record auth as info only when a repo pin allows the active role and that role has a githubUser/i
+  );
+  assert.match(doctorHelp.stdout, /No pin or a github user mismatch warns/i);
 
   assert.equal(statusHelp.status, 0);
   assert.match(statusHelp.stdout, /status warns only on actionable mismatches/i);
   assert.match(statusHelp.stdout, /Observed context alone does not degrade the overall result/i);
   assert.match(statusHelp.stdout, /role scope override commit remote auth policy overall/);
-  assert.match(statusHelp.stdout, /HTTPS origins report auth=na/i);
+  assert.match(
+    statusHelp.stdout,
+    /HTTPS origins report auth=na only when a repo pin allows the active role and that role has a githubUser/i
+  );
+  assert.match(statusHelp.stdout, /No pin or a github user mismatch is auth=warn/i);
 });
 
 test('cli resolve help describes repo-local policy', () => {
