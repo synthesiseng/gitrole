@@ -33,6 +33,7 @@ export async function getStatus(
     commit: summary.commit,
     remote: summary.remote,
     auth: summary.auth,
+    policy: summary.policy,
     repoPolicy
   };
 }
@@ -82,7 +83,7 @@ function formatPushAuth(
   }
 
   if (observedState.repository.remote?.protocol === 'https') {
-    return 'unverified (origin uses HTTPS)';
+    return 'HTTPS (SSH auth not applicable)';
   }
 
   if (role?.githubUser && role?.githubHost) {

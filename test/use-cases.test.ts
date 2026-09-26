@@ -1290,6 +1290,7 @@ test('doctor aligns commit identity, remote metadata, and SSH auth', async () =>
   assert.equal(status.commit, 'ok');
   assert.equal(status.remote, 'ok');
   assert.equal(status.auth, 'ok');
+  assert.equal(status.policy, 'na');
 
 });
 
@@ -1596,6 +1597,7 @@ test('status stays aligned when the effective role matches repo defaultRole', as
   );
   assert.equal(result.overall, 'aligned');
   assert.equal(status.repoPolicy?.status, 'default');
+  assert.equal(status.policy, 'ok');
   assert.equal(status.overall, 'aligned');
 });
 
@@ -1648,6 +1650,7 @@ test('status stays aligned when the effective role is allowed but not default', 
   );
   assert.equal(result.overall, 'aligned');
   assert.equal(status.repoPolicy?.status, 'allowed');
+  assert.equal(status.policy, 'ok');
   assert.equal(status.overall, 'aligned');
 });
 
@@ -1700,6 +1703,8 @@ test('status warns when the effective role is not allowed by repo policy', async
   );
   assert.equal(result.overall, 'warning');
   assert.equal(status.repoPolicy?.status, 'notAllowed');
+  assert.equal(status.policy, 'warn');
+  assert.equal(status.auth, 'ok');
   assert.equal(status.overall, 'warning');
 });
 
@@ -1747,7 +1752,8 @@ test('status summary evaluation derives warnings from observed state, not diagno
     overall: 'warning',
     commit: 'warn',
     remote: 'warn',
-    auth: 'warn'
+    auth: 'warn',
+    policy: 'na'
   });
 });
 
@@ -1783,11 +1789,12 @@ test('status summary evaluation warns outside a git repository without relying o
     overall: 'warning',
     commit: 'ok',
     remote: 'na',
-    auth: 'na'
+    auth: 'na',
+    policy: 'na'
   });
 });
 
-test('doctor warns when HTTPS remotes prevent SSH auth verification', async () => {
+test('doctor records HTTPS auth as info and still warns when history is missing', async () => {
   const role: Role = {
     name: 'work',
     fullName: 'Sara Loera',
@@ -1872,6 +1879,7 @@ test('doctor warns when HTTPS remotes prevent SSH auth verification', async () =
   };
 
   const result = await doctor(dependencies);
+  const status = await getStatus(dependencies);
 
   assert.equal(result.repository.remote?.protocol, 'https');
   assert.equal(result.overall, 'warning');
@@ -1879,10 +1887,14 @@ test('doctor warns when HTTPS remotes prevent SSH auth verification', async () =
     result.checks.some(
       (check) =>
         check.label === 'auth' &&
-        check.message.includes('cannot verify GitHub SSH auth identity')
+        check.status === 'info' &&
+        check.message.includes('SSH auth verification does not apply')
     ),
     true
   );
+  assert.equal(result.checks.some((check) => check.label === 'auth' && check.status === 'warn'), false);
+  assert.equal(status.auth, 'na');
+  assert.equal(status.policy, 'na');
   assert.equal(
     result.checks.some(
       (check) =>
@@ -1891,6 +1903,117 @@ test('doctor warns when HTTPS remotes prevent SSH auth verification', async () =
     ),
     true
   );
+});
+
+test('doctor and status stay aligned on HTTPS when identity and repo policy match', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-https-aligned-'));
+  const role: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com'
+  };
+
+  await writeFile(
+    path.join(tempDir, '.gitrole'),
+    JSON.stringify(
+      {
+        version: 1,
+        defaultRole: 'work',
+        allowedRoles: ['work']
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  const dependencies = createDoctorDependencies(role, {
+    topLevelPath: tempDir,
+    remoteUrl: 'https://github.com/acme-corp/service.git',
+    localIdentity: {
+      fullName: role.fullName,
+      email: role.email
+    }
+  });
+  dependencies.sshAuthProbe = {
+    async probeGithubUser() {
+      throw new Error('SSH auth must not be probed for HTTPS origins');
+    }
+  };
+
+  const result = await doctor(dependencies);
+  const status = await getStatus(dependencies);
+
+  assert.equal(result.overall, 'aligned');
+  assert.equal(result.checks.some((check) => check.status === 'warn'), false);
+  assert.equal(
+    result.checks.some((check) => check.label === 'auth' && check.status === 'info'),
+    true
+  );
+  assert.equal(status.overall, 'aligned');
+  assert.equal(status.auth, 'na');
+  assert.equal(status.policy, 'ok');
+  assert.equal(status.commit, 'ok');
+  assert.equal(status.remote, 'ok');
+});
+
+test('SSH auth stays ok on a match and warn on a githubUser mismatch', async () => {
+  const role: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev',
+    githubHost: 'github.com-acme-dev'
+  };
+  const remoteUrl = 'git@github.com-acme-dev:acme-corp/service.git';
+  const matched = await getStatus(
+    createDoctorDependencies(role, {
+      remoteUrl,
+      sshAuth: {
+        ok: true,
+        host: 'github.com-acme-dev',
+        githubUser: 'alex-dev'
+      }
+    })
+  );
+  const mismatched = await doctor(
+    createDoctorDependencies(role, {
+      remoteUrl,
+      sshAuth: {
+        ok: true,
+        host: 'github.com-acme-dev',
+        githubUser: 'someone-else'
+      }
+    })
+  );
+  const mismatchedStatus = await getStatus(
+    createDoctorDependencies(role, {
+      remoteUrl,
+      sshAuth: {
+        ok: true,
+        host: 'github.com-acme-dev',
+        githubUser: 'someone-else'
+      }
+    })
+  );
+
+  assert.equal(matched.auth, 'ok');
+  assert.equal(matched.overall, 'aligned');
+  assert.equal(matched.policy, 'na');
+  assert.equal(mismatched.overall, 'warning');
+  assert.equal(
+    mismatched.checks.some(
+      (check) =>
+        check.label === 'auth' &&
+        check.status === 'warn' &&
+        check.message.includes('expected alex-dev')
+    ),
+    true
+  );
+  assert.equal(mismatchedStatus.auth, 'warn');
+  assert.equal(mismatchedStatus.overall, 'warning');
 });
 
 test('useRemoteForRole rewrites origin to the role host alias', async () => {
