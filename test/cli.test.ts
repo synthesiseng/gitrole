@@ -66,6 +66,29 @@ function assertPolicyRoleNameFailure(
   );
 }
 
+async function assertPolicyCommandsRejectRoleName(
+  repoDir: string,
+  env: NodeJS.ProcessEnv,
+  field: 'defaultRole' | 'allowedRoles',
+  roleName: string
+) {
+  for (const args of [
+    ['resolve'],
+    ['resolve', '--json'],
+    ['status'],
+    ['doctor'],
+    ['doctor', '--json']
+  ] as const) {
+    const result = spawnSync(process.execPath, [cliPath, ...args], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      env
+    });
+
+    assertPolicyRoleNameFailure(result, field, roleName);
+  }
+}
+
 test('cli help text includes the primary commands', () => {
   const result = spawnSync(process.execPath, [cliPath, '--help'], {
     encoding: 'utf8'
@@ -949,8 +972,14 @@ test('cli resolve, status, and doctor succeed for fixture valid-role-names', asy
   }
 });
 
-test('cli resolve rejects fixture invalid-default-role-spaces', async () => {
-  const repoDir = await initRealRepo('gitrole-cli-invalid-default-role-spaces-');
+test('cli resolve, resolve --json, status, and doctor reject fixture invalid-default-role-spaces', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-invalid-default-role-spaces-'));
+  const repoDir = await initRealRepo('gitrole-cli-invalid-default-role-spaces-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: path.join(tempDir, 'config')
+  };
 
   await writeRepoPolicy(repoDir, {
     version: 1,
@@ -958,16 +987,17 @@ test('cli resolve rejects fixture invalid-default-role-spaces', async () => {
     allowedRoles: ['client acme']
   });
 
-  const result = spawnSync(process.execPath, [cliPath, 'resolve'], {
-    cwd: repoDir,
-    encoding: 'utf8'
-  });
-
-  assertPolicyRoleNameFailure(result, 'defaultRole', 'client acme');
+  await assertPolicyCommandsRejectRoleName(repoDir, env, 'defaultRole', 'client acme');
 });
 
-test('cli resolve rejects fixture invalid-default-role-uppercase', async () => {
-  const repoDir = await initRealRepo('gitrole-cli-invalid-default-role-uppercase-');
+test('cli resolve, resolve --json, status, and doctor reject fixture invalid-default-role-uppercase', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-invalid-default-role-uppercase-'));
+  const repoDir = await initRealRepo('gitrole-cli-invalid-default-role-uppercase-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: path.join(tempDir, 'config')
+  };
 
   await writeRepoPolicy(repoDir, {
     version: 1,
@@ -975,16 +1005,17 @@ test('cli resolve rejects fixture invalid-default-role-uppercase', async () => {
     allowedRoles: ['Work']
   });
 
-  const result = spawnSync(process.execPath, [cliPath, 'resolve'], {
-    cwd: repoDir,
-    encoding: 'utf8'
-  });
-
-  assertPolicyRoleNameFailure(result, 'defaultRole', 'Work');
+  await assertPolicyCommandsRejectRoleName(repoDir, env, 'defaultRole', 'Work');
 });
 
-test('cli resolve --json rejects fixture invalid-allowed-role-uppercase', async () => {
-  const repoDir = await initRealRepo('gitrole-cli-invalid-allowed-role-uppercase-');
+test('cli resolve, resolve --json, status, and doctor reject fixture invalid-allowed-role-uppercase', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-invalid-allowed-role-uppercase-'));
+  const repoDir = await initRealRepo('gitrole-cli-invalid-allowed-role-uppercase-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: path.join(tempDir, 'config')
+  };
 
   await writeRepoPolicy(repoDir, {
     version: 1,
@@ -992,16 +1023,17 @@ test('cli resolve --json rejects fixture invalid-allowed-role-uppercase', async 
     allowedRoles: ['work', 'Client']
   });
 
-  const result = spawnSync(process.execPath, [cliPath, 'resolve', '--json'], {
-    cwd: repoDir,
-    encoding: 'utf8'
-  });
-
-  assertPolicyRoleNameFailure(result, 'allowedRoles', 'Client');
+  await assertPolicyCommandsRejectRoleName(repoDir, env, 'allowedRoles', 'Client');
 });
 
-test('cli resolve --json rejects fixture invalid-allowed-role-spaces', async () => {
-  const repoDir = await initRealRepo('gitrole-cli-invalid-allowed-role-spaces-');
+test('cli resolve, resolve --json, status, and doctor reject fixture invalid-allowed-role-spaces', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-invalid-allowed-role-spaces-'));
+  const repoDir = await initRealRepo('gitrole-cli-invalid-allowed-role-spaces-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: path.join(tempDir, 'config')
+  };
 
   await writeRepoPolicy(repoDir, {
     version: 1,
@@ -1009,66 +1041,7 @@ test('cli resolve --json rejects fixture invalid-allowed-role-spaces', async () 
     allowedRoles: ['work', 'client acme']
   });
 
-  const result = spawnSync(process.execPath, [cliPath, 'resolve', '--json'], {
-    cwd: repoDir,
-    encoding: 'utf8'
-  });
-
-  assertPolicyRoleNameFailure(result, 'allowedRoles', 'client acme');
-});
-
-test('cli status and doctor reject fixture invalid-default-role-spaces', async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-invalid-default-role-spaces-'));
-  const configHome = path.join(tempDir, 'config');
-  const repoDir = await initRealRepo('gitrole-cli-status-invalid-default-role-spaces-repo-');
-  const env = {
-    ...process.env,
-    HOME: tempDir,
-    XDG_CONFIG_HOME: configHome
-  };
-
-  await writeRepoPolicy(repoDir, {
-    version: 1,
-    defaultRole: 'client acme',
-    allowedRoles: ['client acme']
-  });
-
-  for (const args of [['status'], ['status', '--short'], ['doctor'], ['doctor', '--json']] as const) {
-    const result = spawnSync(process.execPath, [cliPath, ...args], {
-      cwd: repoDir,
-      encoding: 'utf8',
-      env
-    });
-
-    assertPolicyRoleNameFailure(result, 'defaultRole', 'client acme');
-  }
-});
-
-test('cli status and doctor reject fixture invalid-allowed-role-uppercase', async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-invalid-allowed-role-uppercase-'));
-  const configHome = path.join(tempDir, 'config');
-  const repoDir = await initRealRepo('gitrole-cli-status-invalid-allowed-role-uppercase-repo-');
-  const env = {
-    ...process.env,
-    HOME: tempDir,
-    XDG_CONFIG_HOME: configHome
-  };
-
-  await writeRepoPolicy(repoDir, {
-    version: 1,
-    defaultRole: 'work',
-    allowedRoles: ['work', 'Client']
-  });
-
-  for (const args of [['status'], ['status', '--short'], ['doctor'], ['doctor', '--json']] as const) {
-    const result = spawnSync(process.execPath, [cliPath, ...args], {
-      cwd: repoDir,
-      encoding: 'utf8',
-      env
-    });
-
-    assertPolicyRoleNameFailure(result, 'allowedRoles', 'Client');
-  }
+  await assertPolicyCommandsRejectRoleName(repoDir, env, 'allowedRoles', 'client acme');
 });
 
 test('cli pin creates .gitrole with the expected strict policy and prints a clear summary', async () => {
@@ -1946,7 +1919,7 @@ process.exit(1);
   assert.equal(result.stderr, '');
 });
 
-test('cli status --short prints machine-friendly status output', async () => {
+test('cli status --short fixture status-short-baseline keeps field order and keys', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-short-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
@@ -2047,14 +2020,18 @@ process.exit(1);
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /role=work/);
-  assert.match(result.stdout, /scope=global/);
-  assert.match(result.stdout, /override=false/);
-  assert.match(result.stdout, /commit=ok/);
-  assert.match(result.stdout, /remote=ok/);
-  assert.match(result.stdout, /auth=ok/);
-  assert.match(result.stdout, /overall=aligned/);
   assert.equal(result.stderr, '');
+  assert.equal(
+    result.stdout.trim(),
+    'role=work scope=global override=false commit=ok remote=ok auth=ok overall=aligned'
+  );
+  assert.deepEqual(
+    result.stdout
+      .trim()
+      .split(' ')
+      .map((field) => field.split('=')[0]),
+    ['role', 'scope', 'override', 'commit', 'remote', 'auth', 'overall']
+  );
 });
 
 test('cli status --short preserves contract-safe role names like agent_bot', async () => {
