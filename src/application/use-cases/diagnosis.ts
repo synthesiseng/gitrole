@@ -2,7 +2,7 @@
  * Implements repository diagnosis and post-switch alignment checks.
  */
 import type { Role } from '../../domain/role.js';
-import { findMatchingRole } from '../alignment.js';
+import { describeHttpsAuth, findMatchingRole, findPinnedRole } from '../alignment.js';
 import {
   getDoctorOverall,
   DoctorCheck,
@@ -37,7 +37,8 @@ export async function doctor(
     role,
     roles,
     observedState,
-    repoPolicy: evaluatedRepoPolicy
+    repoPolicy: evaluatedRepoPolicy,
+    pinnedRole: findPinnedRole(roles, evaluatedRepoPolicy)
   });
 
   return {
@@ -92,6 +93,7 @@ function buildDoctorChecks(input: {
   roles: Role[];
   observedState: ObservedState;
   repoPolicy?: DoctorResult['repoPolicy'];
+  pinnedRole?: Role;
 }): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const { observedState } = input;
@@ -189,6 +191,10 @@ function buildDoctorChecks(input: {
   }
 
   if (!input.role) {
+    if (observedState.repository.remote.protocol === 'https') {
+      checks.push(buildHttpsAuthCheck(input));
+    }
+
     if (input.repoPolicy) {
       checks.push(buildRepoPolicyCheck(input.repoPolicy));
     }
@@ -199,7 +205,10 @@ function buildDoctorChecks(input: {
   checks.push(
     ...buildRoleAlignmentChecks({
       role: input.role,
-      observedState
+      observedState,
+      repoPolicy: input.repoPolicy,
+      pinnedRole: input.pinnedRole,
+      enforceHttpsPin: true
     })
   );
 
@@ -213,6 +222,9 @@ function buildDoctorChecks(input: {
 function buildRoleAlignmentChecks(input: {
   role: Role;
   observedState: ObservedState;
+  repoPolicy?: DoctorResult['repoPolicy'];
+  pinnedRole?: Role;
+  enforceHttpsPin?: boolean;
 }): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const { role, observedState } = input;
@@ -278,11 +290,15 @@ function buildRoleAlignmentChecks(input: {
   }
 
   if (observedState.repository.remote.protocol === 'https') {
-    checks.push({
-      status: 'info',
-      label: 'auth',
-      message: 'origin uses HTTPS; SSH auth verification does not apply'
-    });
+    checks.push(
+      input.enforceHttpsPin
+        ? buildHttpsAuthCheck(input)
+        : {
+            status: 'info',
+            label: 'auth',
+            message: 'origin uses HTTPS; SSH auth verification does not apply'
+          }
+    );
     return dedupeChecks(checks);
   }
 
@@ -322,6 +338,24 @@ function buildRoleAlignmentChecks(input: {
   }
 
   return dedupeChecks(checks);
+}
+
+function buildHttpsAuthCheck(input: {
+  role?: Role;
+  repoPolicy?: DoctorResult['repoPolicy'];
+  pinnedRole?: Role;
+}): DoctorCheck {
+  const httpsAuth = describeHttpsAuth({
+    role: input.role,
+    repoPolicy: input.repoPolicy,
+    pinnedRole: input.pinnedRole
+  });
+
+  return {
+    status: httpsAuth.auth === 'na' ? 'info' : 'warn',
+    label: 'auth',
+    message: httpsAuth.message
+  };
 }
 
 function dedupeChecks(checks: DoctorCheck[]): DoctorCheck[] {

@@ -96,14 +96,17 @@ function createDoctorDependencies(role: Role, options: {
     subject: string;
   };
   sshAuth?: { ok: boolean; host: string; githubUser?: string; message?: string };
+  roles?: Role[];
 } = {}): DoctorDependencies {
+  const roles = options.roles ?? [role];
+
   return {
     roleStore: {
       async list() {
-        return [role];
+        return roles;
       },
-      async get() {
-        return role;
+      async get(name: string) {
+        return roles.find((candidate) => candidate.name === name);
       },
       async save() {
         return undefined;
@@ -1794,7 +1797,7 @@ test('status summary evaluation warns outside a git repository without relying o
   });
 });
 
-test('doctor records HTTPS auth as info and still warns when history is missing', async () => {
+test('doctor warns on HTTPS with no repo pin and still warns when history is missing', async () => {
   const role: Role = {
     name: 'work',
     fullName: 'Sara Loera',
@@ -1887,14 +1890,15 @@ test('doctor records HTTPS auth as info and still warns when history is missing'
     result.checks.some(
       (check) =>
         check.label === 'auth' &&
-        check.status === 'info' &&
-        check.message.includes('SSH auth verification does not apply')
+        check.status === 'warn' &&
+        check.message === 'origin uses HTTPS and no repo pin is configured'
     ),
     true
   );
-  assert.equal(result.checks.some((check) => check.label === 'auth' && check.status === 'warn'), false);
-  assert.equal(status.auth, 'na');
+  assert.equal(result.checks.some((check) => check.label === 'auth' && check.status === 'info'), false);
+  assert.equal(status.auth, 'warn');
   assert.equal(status.policy, 'na');
+  assert.equal(status.pushAuth, 'HTTPS (no repo pin)');
   assert.equal(
     result.checks.some(
       (check) =>
@@ -1957,6 +1961,104 @@ test('doctor and status stay aligned on HTTPS when identity and repo policy matc
   assert.equal(status.policy, 'ok');
   assert.equal(status.commit, 'ok');
   assert.equal(status.remote, 'ok');
+  assert.equal(status.pushAuth, 'HTTPS (SSH auth not applicable)');
+});
+
+test('HTTPS with no identity pin warns instead of auth=na', async () => {
+  const role: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const dependencies = createDoctorDependencies(role, {
+    remoteUrl: 'https://github.com/acme-corp/service.git',
+    localIdentity: {
+      fullName: role.fullName,
+      email: role.email
+    }
+  });
+  dependencies.sshAuthProbe = {
+    async probeGithubUser() {
+      throw new Error('SSH auth must not be probed for HTTPS origins');
+    }
+  };
+
+  const result = await doctor(dependencies);
+  const status = await getStatus(dependencies);
+  const authCheck = result.checks.find((check) => check.label === 'auth');
+
+  assert.equal(status.auth, 'warn');
+  assert.equal(status.policy, 'na');
+  assert.equal(status.commit, 'ok');
+  assert.equal(status.remote, 'ok');
+  assert.equal(status.overall, 'warning');
+  assert.equal(status.pushAuth, 'HTTPS (no identity pin)');
+  assert.equal(result.overall, 'warning');
+  assert.equal(authCheck?.status, 'warn');
+  assert.equal(authCheck?.message, 'origin uses HTTPS and no identity pin is configured');
+});
+
+test('HTTPS pin mismatch warns when the active github user is not the pin', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-https-mismatch-'));
+  const work: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev'
+  };
+  const personal: Role = {
+    name: 'personal',
+    fullName: 'Pat Person',
+    email: 'pat@personal.example',
+    githubUser: 'thisyearearth'
+  };
+
+  await writeFile(
+    path.join(tempDir, '.gitrole'),
+    JSON.stringify(
+      {
+        version: 1,
+        defaultRole: 'work',
+        allowedRoles: ['work']
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+
+  const dependencies = createDoctorDependencies(personal, {
+    topLevelPath: tempDir,
+    remoteUrl: 'https://github.com/acme-corp/service.git',
+    roles: [work, personal],
+    globalIdentity: {
+      fullName: personal.fullName,
+      email: personal.email
+    }
+  });
+  dependencies.sshAuthProbe = {
+    async probeGithubUser() {
+      throw new Error('SSH auth must not be probed for HTTPS origins');
+    }
+  };
+
+  const result = await doctor(dependencies);
+  const status = await getStatus(dependencies);
+  const authCheck = result.checks.find((check) => check.label === 'auth');
+
+  assert.equal(status.roleName, 'personal');
+  assert.equal(status.auth, 'warn');
+  assert.equal(status.policy, 'warn');
+  assert.equal(status.commit, 'ok');
+  assert.equal(status.remote, 'ok');
+  assert.equal(status.overall, 'warning');
+  assert.equal(status.pushAuth, 'HTTPS (github user does not match pin)');
+  assert.equal(result.overall, 'warning');
+  assert.equal(authCheck?.status, 'warn');
+  assert.equal(
+    authCheck?.message,
+    'origin uses HTTPS; github user thisyearearth does not match pin alex-dev'
+  );
 });
 
 test('SSH auth stays ok on a match and warn on a githubUser mismatch', async () => {

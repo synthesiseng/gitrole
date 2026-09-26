@@ -5,7 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  httpsNoIdentityPin,
   httpsPinAligned,
+  httpsPinMismatch,
   sshAuthMatch,
   sshAuthMismatch,
   statusShortBaseline,
@@ -155,6 +157,107 @@ test('e2e https-pin-aligned: status and doctor reach aligned on an HTTPS origin'
     true
   );
   assertNoWarnChecks(doctor);
+});
+
+test('e2e https-no-identity-pin: HTTPS without an identity pin warns', async () => {
+  const workspace = await createHermeticWorkspace();
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  mustSucceed(runCli(workspace, ['use', 'work', '--local']), 'gitrole use work --local failed');
+  commitEmpty(workspace, {
+    message: 'feat: https no identity pin'
+  });
+  setOrigin(workspace, 'https://github.com/acme-corp/service.git');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.stdout.trim(), httpsNoIdentityPin.line, httpsNoIdentityPin.id);
+
+  const humanStatus = runCli(workspace, ['status']);
+  assert.equal(humanStatus.status, 2, humanStatus.stderr);
+  assert.match(humanStatus.stdout, /warning/);
+  assert.match(humanStatus.stdout, /HTTPS \(no identity pin\)/);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  assert.equal(doctorResult.status, 2, doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+  const authCheck = doctor.checks.find((check) => check.label === 'auth');
+
+  assert.equal(doctor.overall, 'warning');
+  assert.equal(authCheck?.status, 'warn');
+  assert.equal(authCheck?.message, httpsNoIdentityPin.doctorAuth);
+
+  const doctorText = runCli(workspace, ['doctor']);
+  assert.equal(doctorText.status, 2, doctorText.stderr);
+  assert.match(doctorText.stdout, /warn auth\s+origin uses HTTPS and no identity pin is configured/);
+});
+
+test('e2e https-pin-mismatch: HTTPS pin with the wrong github user warns', async () => {
+  const workspace = await createHermeticWorkspace();
+
+  await initRepo(workspace);
+  setGlobalIdentity(workspace, {
+    name: 'Pat Person',
+    email: 'pat@personal.example'
+  });
+  await saveRole(workspace, {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example',
+    githubUser: 'alex-dev'
+  });
+  await saveRole(workspace, {
+    name: 'personal',
+    fullName: 'Pat Person',
+    email: 'pat@personal.example',
+    githubUser: 'thisyearearth'
+  });
+  mustSucceed(runCli(workspace, ['use', 'personal', '--local']), 'gitrole use personal --local failed');
+  commitEmpty(workspace, {
+    message: 'feat: https pin mismatch'
+  });
+  setOrigin(workspace, 'https://github.com/acme-corp/service.git');
+  mustSucceed(runCli(workspace, ['pin', 'work']), 'gitrole pin work failed');
+
+  const statusResult = runCli(workspace, ['status', '--short']);
+  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.stdout.trim(), httpsPinMismatch.line, httpsPinMismatch.id);
+
+  const humanStatus = runCli(workspace, ['status']);
+  assert.equal(humanStatus.status, 2, humanStatus.stderr);
+  assert.match(humanStatus.stdout, /warning/);
+  assert.match(humanStatus.stdout, /HTTPS \(github user does not match pin\)/);
+
+  const doctorResult = runCli(workspace, ['doctor', '--json']);
+  assert.equal(doctorResult.status, 2, doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    checks: Array<{ label: string; status: string; message: string }>;
+  };
+  const authCheck = doctor.checks.find((check) => check.label === 'auth');
+
+  assert.equal(doctor.overall, 'warning');
+  assert.equal(authCheck?.status, 'warn');
+  assert.equal(authCheck?.message, httpsPinMismatch.doctorAuth);
+
+  const doctorText = runCli(workspace, ['doctor']);
+  assert.equal(doctorText.status, 2, doctorText.stderr);
+  assert.match(
+    doctorText.stdout,
+    /warn auth\s+origin uses HTTPS; github user thisyearearth does not match pin alex-dev/
+  );
 });
 
 test('e2e ssh-auth-match: SSH githubUser match stays auth=ok', async () => {
