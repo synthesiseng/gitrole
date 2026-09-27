@@ -9,6 +9,8 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
 
 <p>For the public machine-readable output contracts, see <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.</p>
 
+<p>Optional shell tab completion for these commands and for saved role names is documented in <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">Enable shell tab completion</a>. Completion is not installed automatically.</p>
+
 <dl class="command-list">
   <dt><code>gitrole add &lt;name&gt; --name "..." --email "..." [--ssh ...] [--github-user ...] [--github-host ...]</code></dt>
   <dd>Create or update a saved role profile.</dd>

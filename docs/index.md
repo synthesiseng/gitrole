@@ -140,6 +140,13 @@ Use the main guide when you want the normal setup. Use a focused page when you n
     </div>
     <span aria-hidden="true">&rarr;</span>
   </a>
+  <a class="reference-card" href="{{ '/guides/enable-shell-tab-completion/' | url }}">
+    <div>
+      <strong>Guide: Enable shell tab completion</strong>
+      <span>Complete commands and saved role names in zsh, bash, and fish.</span>
+    </div>
+    <span aria-hidden="true">&rarr;</span>
+  </a>
   <a class="reference-card" href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/' | url }}">
     <div>
       <strong>Use case: Fix pushes using the wrong GitHub account</strong>
