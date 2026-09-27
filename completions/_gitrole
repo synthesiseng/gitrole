@@ -1,0 +1,162 @@
+#compdef gitrole
+
+# Zsh completion for gitrole. Loaded from fpath by compinit. Do not source this file.
+# Saved role names come from `gitrole list` lines shaped "* name ..." or "  name ...".
+
+if [[ -z ${words+x} ]]; then
+  print -u2 -- 'gitrole completion loads from fpath. Add the completions directory to fpath and run compinit. Do not source this file.'
+  return 1
+fi
+
+emulate -L zsh
+setopt extendedglob
+
+_gitrole_saved_roles() {
+  local output
+  output="$(NO_COLOR=1 FORCE_COLOR=0 command gitrole list 2>/dev/null | sed -n 's/^[* ] \([a-z0-9_-][a-z0-9_-]*\) .*/\1/p' || true)"
+  [[ -n $output ]] || return 0
+  local -a roles
+  roles=("${(@f)output}")
+  compadd -- "${roles[@]}"
+}
+
+local curcontext="${curcontext:-}" state line ret=1
+local -a commands
+typeset -A opt_args
+
+commands=(
+  'add:save or update a named role'
+  'import:import a role from the current Git identity'
+  'use:apply a saved role globally or to the current repo'
+  'pin:create a strict repo-local .gitrole policy for one role'
+  'resolve:print the repo-local default role from .gitrole'
+  'current:show which saved role matches the active commit identity'
+  'list:list saved roles and mark the active one'
+  'status:check whether the current repo is aligned for commit and push'
+  'doctor:diagnose identity, remote, and SSH auth alignment'
+  'remote:manage repository remotes for a selected role'
+  'remove:remove a saved role'
+  'help:print help for a command'
+)
+
+_arguments -C \
+  '(- :)'{-h,--help}'[print help]' \
+  '(- :)'{-V,--version}'[print version]' \
+  '1:command:->command' \
+  '*::arg:->args' \
+  && ret=0
+
+case $state in
+  command)
+    _describe -t commands 'command' commands && ret=0
+    ;;
+  args)
+    case ${words[1]} in
+      add)
+        _arguments \
+          '--name=[git user.name for this role]:full name' \
+          '--email=[git user.email for this role]:email' \
+          '--ssh=[SSH private key to load with ssh-add]:path:_files' \
+          '--github-user=[expected GitHub user for SSH pushes]:github user' \
+          '--github-host=[expected GitHub SSH host or host alias]:host' \
+          '(- :)'{-h,--help}'[print help]' \
+          '1:saved role:_gitrole_saved_roles' \
+          && ret=0
+        ;;
+      import)
+        _arguments -C \
+          '1:subcommand:->import_cmd' \
+          '*::arg:->import_args' \
+          '(- :)'{-h,--help}'[print help]' \
+          && ret=0
+        case $state in
+          import_cmd)
+            local -a import_commands
+            import_commands=(
+              'current:save the effective current commit identity as a named role'
+            )
+            _describe -t commands 'import command' import_commands && ret=0
+            ;;
+          import_args)
+            case ${words[1]} in
+              current)
+                _arguments \
+                  '--name=[saved role name]:role:_gitrole_saved_roles' \
+                  '(- :)'{-h,--help}'[print help]' \
+                  && ret=0
+                ;;
+            esac
+            ;;
+        esac
+        ;;
+      use)
+        _arguments \
+          '(--local)--global[apply the role to global Git config]' \
+          '(--global)--local[apply the role to repository-local Git config]' \
+          '(- :)'{-h,--help}'[print help]' \
+          '1:saved role:_gitrole_saved_roles' \
+          && ret=0
+        ;;
+      pin|remove)
+        _arguments \
+          '(- :)'{-h,--help}'[print help]' \
+          '1:saved role:_gitrole_saved_roles' \
+          && ret=0
+        ;;
+      remote)
+        _arguments -C \
+          '1:subcommand:->remote_cmd' \
+          '*::arg:->remote_args' \
+          '(- :)'{-h,--help}'[print help]' \
+          && ret=0
+        case $state in
+          remote_cmd)
+            local -a remote_commands
+            remote_commands=(
+              'set:rewrite origin to the role GitHub host alias'
+            )
+            _describe -t commands 'remote command' remote_commands && ret=0
+            ;;
+          remote_args)
+            case ${words[1]} in
+              set)
+                _arguments \
+                  '(- :)'{-h,--help}'[print help]' \
+                  '1:saved role:_gitrole_saved_roles' \
+                  && ret=0
+                ;;
+            esac
+            ;;
+        esac
+        ;;
+      resolve)
+        _arguments \
+          '--json[write the repo policy as JSON]' \
+          '(- :)'{-h,--help}'[print help]' \
+          && ret=0
+        ;;
+      status)
+        _arguments \
+          '--short[show machine-friendly one-line status output]' \
+          '(- :)'{-h,--help}'[print help]' \
+          && ret=0
+        ;;
+      doctor)
+        _arguments \
+          '--json[write the diagnostic result as JSON]' \
+          '(- :)'{-h,--help}'[print help]' \
+          && ret=0
+        ;;
+      current|list)
+        _arguments \
+          '(- :)'{-h,--help}'[print help]' \
+          && ret=0
+        ;;
+      help)
+        _describe -t commands 'command' commands && ret=0
+        ;;
+    esac
+    ;;
+esac
+
+return ret

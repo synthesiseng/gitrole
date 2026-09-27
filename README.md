@@ -32,6 +32,12 @@ New features should reinforce that boundary rather than expanding into general a
 npm install -g gitrole
 ```
 
+## Shell completion
+
+The npm package includes completion scripts for bash, zsh, and fish. They complete commands, flags, and saved role names. Installing gitrole does not enable them. You add the script to your shell.
+
+See [Enable shell tab completion](https://docs.gitrole.dev/guides/enable-shell-tab-completion/).
+
 ## Quickstart
 
 ```bash
@@ -73,6 +79,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 - [Docs homepage](https://docs.gitrole.dev)
 - [Guide: Use the right Git identity for this repo](https://docs.gitrole.dev/guides/use-the-right-git-identity-for-this-repo/)
 - [Guide: Use repo-local identity policy with .gitrole](https://docs.gitrole.dev/guides/use-repo-local-identity-policy-with-gitrole/)
+- [Guide: Enable shell tab completion](https://docs.gitrole.dev/guides/enable-shell-tab-completion/)
 - [Use case: Fix pushes using the wrong GitHub account](https://docs.gitrole.dev/use-cases/fix-pushes-using-the-wrong-github-account/)
 - [Guide: Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/)
 
@@ -125,6 +132,7 @@ The skill verifies. It does not install hooks or block git. The optional check-o
 - No GitHub browser or session switching
 - No `gh auth`, HTTPS credentials, or token management
 - No auto-installed hooks, auto-switching, or workflow enforcement; optional check-only hook runs `gitrole status --short`
+- No automatic shell completion install
 - No interactive prompts
 
 ## License

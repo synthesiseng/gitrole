@@ -11,7 +11,8 @@
     "dist",
     "hooks",
     "shell",
-    "skills"
+    "skills",
+    "completions"
   ],
   "engines": {
     "node": ">=20"

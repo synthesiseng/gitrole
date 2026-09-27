@@ -82,7 +82,11 @@ test('package smoke: npm pack includes the published CLI entrypoint and metadata
     'dist/cli/index.js should be included in the tarball metadata'
   );
   assert.match(tarListResult.stdout, /package\/dist\/cli\/index\.js/);
+  assert.match(tarListResult.stdout, /package\/hooks\/pre-commit/);
   assert.match(tarListResult.stdout, /package\/shell\/gitrole-prompt/);
+  assert.match(tarListResult.stdout, /package\/completions\/gitrole\.bash/);
+  assert.match(tarListResult.stdout, /package\/completions\/_gitrole/);
+  assert.match(tarListResult.stdout, /package\/completions\/gitrole\.fish/);
   assert.match(tarListResult.stdout, /package\/package\.json/);
   assert.match(tarListResult.stdout, /package\/skills\/gitrole\/SKILL\.md/);
   assert.ok(
