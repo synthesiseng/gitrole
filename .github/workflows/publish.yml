@@ -24,12 +24,15 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
 
+      # Do not set setup-node registry-url. With it set and no real token,
+      # setup-node writes _authToken=${NODE_AUTH_TOKEN} and exports the
+      # placeholder NODE_AUTH_TOKEN, which skips npm's OIDC trusted-publisher
+      # exchange. npm already defaults to https://registry.npmjs.org.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: npm ci
@@ -84,6 +87,36 @@ jobs:
           PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
           echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published on npm; skipping publish"
 
+      # Node 22's bundled npm is often older than 11.5.1, which is the
+      # first release that exchanges a GitHub Actions OIDC token with npm.
+      - name: Install npm CLI for trusted publishing
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: |
+          npm install -g npm@latest
+          version="$(npm --version)"
+          echo "npm version: ${version}"
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            const supported =
+              major > 11 ||
+              (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!supported) {
+              console.error(
+                `npm ${process.argv[1]} is below 11.5.1; OIDC trusted publishing requires npm >= 11.5.1`,
+              );
+              process.exit(1);
+            }
+          ' "${version}"
+
       - name: Publish to npm
         if: steps.npm-version.outputs.already_published != 'true'
-        run: npm publish --provenance --access public
+        run: |
+          # Drop any leftover auth so npm uses the GitHub Actions OIDC
+          # trusted publisher instead of a classic token.
+          unset NODE_AUTH_TOKEN
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          if [ -f "$npmrc" ]; then
+            grep -v '_authToken' "$npmrc" > "${npmrc}.tmp" || true
+            mv "${npmrc}.tmp" "$npmrc"
+          fi
+          npm publish --provenance --access public
