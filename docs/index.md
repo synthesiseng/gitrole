@@ -133,6 +133,13 @@ Use the main guide when you want the normal setup. Use a focused page when you n
     </div>
     <span aria-hidden="true">&rarr;</span>
   </a>
+  <a class="reference-card" href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">
+    <div>
+      <strong>Guide: Show gitrole in your shell prompt</strong>
+      <span>Print <code>gitrole:work ✓</code> or <code>gitrole:work ⚠</code> from <code>gitrole status --short --offline</code>.</span>
+    </div>
+    <span aria-hidden="true">&rarr;</span>
+  </a>
   <a class="reference-card" href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/' | url }}">
     <div>
       <strong>Use case: Fix pushes using the wrong GitHub account</strong>

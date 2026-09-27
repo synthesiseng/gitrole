@@ -82,6 +82,7 @@ test('package smoke: npm pack includes the published CLI entrypoint and metadata
     'dist/cli/index.js should be included in the tarball metadata'
   );
   assert.match(tarListResult.stdout, /package\/dist\/cli\/index\.js/);
+  assert.match(tarListResult.stdout, /package\/shell\/gitrole-prompt/);
   assert.match(tarListResult.stdout, /package\/package\.json/);
   assert.match(tarListResult.stdout, /package\/skills\/gitrole\/SKILL\.md/);
   assert.ok(
@@ -98,7 +99,8 @@ test('package smoke: npm pack includes the published CLI entrypoint and metadata
   assert.equal(packedManifest.name, packageJson.name);
   assert.equal(packedManifest.version, packageJson.version);
   assert.deepEqual(packedManifest.bin, {
-    gitrole: 'dist/cli/index.js'
+    gitrole: 'dist/cli/index.js',
+    'gitrole-prompt': 'shell/gitrole-prompt'
   });
 
   const observedStateAfter = await stat(liveObservedStatePath);

@@ -13,13 +13,23 @@ import type { DoctorDependencies, DoctorResult, NonMergeCommit, StatusResult } f
 import { collectObservedState, type ObservedState } from '../observed-state.js';
 import { evaluateRepoPolicy, loadOptionalRepoPolicy } from '../repo-policy.js';
 
+export interface StatusOptions {
+  /**
+   * Skip the live SSH githubUser probe.
+   * SSH `auth` is `na`. HTTPS pin checks still use the saved role and `.gitrole`.
+   */
+  offline?: boolean;
+}
+
 /**
  * Returns a compact alignment summary for the current environment.
  */
 export async function getStatus(
-  dependencies: DoctorDependencies
+  dependencies: DoctorDependencies,
+  options: StatusOptions = {}
 ): Promise<StatusResult> {
-  const verification = await collectStatusContext(dependencies);
+  const offline = options.offline === true;
+  const verification = await collectStatusContext(dependencies, offline);
   const { observedState, role, repoPolicy, pinnedRole, lastNonMergeCommit } = verification;
   const commitIdentity = formatCommitIdentity(observedState.commitIdentity);
   const httpsAuth =
@@ -30,7 +40,8 @@ export async function getStatus(
     role,
     observedState,
     repoPolicy,
-    pinnedRole
+    pinnedRole,
+    offline
   });
 
   return {
@@ -52,7 +63,8 @@ export async function getStatus(
 }
 
 async function collectStatusContext(
-  dependencies: DoctorDependencies
+  dependencies: DoctorDependencies,
+  offline: boolean
 ): Promise<{
   observedState: ObservedState;
   role?: DoctorResult['role'];
@@ -62,7 +74,7 @@ async function collectStatusContext(
 }> {
   const [roles, observedState, repoPolicySource, lastNonMergeCommit] = await Promise.all([
     dependencies.roleStore.list(),
-    collectObservedState(dependencies),
+    collectObservedState(dependencies, { probeSsh: !offline }),
     loadOptionalRepoPolicy(dependencies.repository),
     dependencies.repository.getLatestNonMergeCommit()
   ]);

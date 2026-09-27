@@ -1,0 +1,309 @@
+#!/bin/sh
+# Print a prompt segment from `gitrole status --short --offline`.
+#
+#   gitrole:<role> ✓   overall=aligned
+#   gitrole:<role> ⚠   any other overall, when role is a saved-role token
+#   gitrole:? ⚠        status failed, or role/overall could not be read
+#
+# Every gitrole invocation is `status --short --offline`. That skips the live
+# SSH githubUser probe. The helper does not switch roles.
+#
+# A memo of that offline line is reused only while local inputs are unchanged
+# (git config, HEAD, .gitrole, the roles file, and author/committer env).
+# There is no timer and no background refresh. A changed input runs offline
+# status before the segment is printed.
+#
+# Prints nothing outside a git work tree.
+#
+#   gitrole-prompt --format    parse one short line from stdin
+#
+# Contract: examples/prompt/README.md
+# Docs: docs/guides/show-gitrole-in-your-shell-prompt.md
+
+set -u
+set -f
+
+usage() {
+  printf '%s\n' 'usage: gitrole-prompt [--format]'
+}
+
+format_segment() {
+  _line=$1
+  _role=
+  _overall=
+
+  case $_line in
+    *'
+'*)
+      printf '%s\n' 'gitrole:? ⚠'
+      return
+      ;;
+  esac
+
+  if [ -z "$_line" ]; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  for _field in $_line; do
+    _key=${_field%%=*}
+    _value=${_field#*=}
+    case $_key in
+      role) _role=$_value ;;
+      overall) _overall=$_value ;;
+    esac
+  done
+
+  case $_role in
+    ''|*[!a-z0-9_-]*)
+      printf '%s\n' 'gitrole:? ⚠'
+      return
+      ;;
+  esac
+
+  if [ -z "$_overall" ]; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  if [ "$_overall" = aligned ]; then
+    printf 'gitrole:%s ✓\n' "$_role"
+    return
+  fi
+
+  printf 'gitrole:%s ⚠\n' "$_role"
+}
+
+detect_stat() {
+  if stat -c '%Y %s' / >/dev/null 2>&1; then
+    stat_style=gnu
+  else
+    stat_style=bsd
+  fi
+}
+
+file_stamp() {
+  _path=$1
+  if [ -z "$_path" ] || [ ! -e "$_path" ]; then
+    printf 'missing'
+    return
+  fi
+
+  if [ "$stat_style" = gnu ]; then
+    stat -c '%Y %s' "$_path"
+  else
+    stat -f '%m %z' "$_path"
+  fi
+}
+
+discover_git() {
+  _dir=$PWD
+  git_root=
+
+  while :; do
+    if [ -e "$_dir/.git" ]; then
+      git_root=$_dir
+      break
+    fi
+
+    if [ "$_dir" = / ]; then
+      return 1
+    fi
+
+    _dir=$(dirname "$_dir")
+  done
+
+  if [ -d "$git_root/.git" ]; then
+    git_dir=$git_root/.git
+    return 0
+  fi
+
+  if [ -f "$git_root/.git" ]; then
+    _line=$(sed -n '1p' "$git_root/.git")
+    case $_line in
+      gitdir:*)
+        _path=${_line#gitdir:}
+        _path=${_path# }
+        _path=${_path#	}
+        ;;
+      *)
+        git_dir=$git_root/.git
+        return 0
+        ;;
+    esac
+
+    case $_path in
+      /*) git_dir=$_path ;;
+      *) git_dir=$git_root/$_path ;;
+    esac
+    return 0
+  fi
+
+  git_dir=$git_root/.git
+}
+
+head_ref_stamp() {
+  if [ ! -f "$git_dir/HEAD" ]; then
+    printf 'missing'
+    return
+  fi
+
+  _head=$(sed -n '1p' "$git_dir/HEAD")
+  case $_head in
+    ref:*)
+      _ref=${_head#ref:}
+      _ref=${_ref# }
+      _ref=${_ref#	}
+      file_stamp "$git_dir/$_ref"
+      ;;
+    *)
+      printf 'detached'
+      ;;
+  esac
+}
+
+resolve_inputs() {
+  if [ -n "${XDG_CONFIG_HOME-}" ]; then
+    roles_file=$XDG_CONFIG_HOME/gitrole/roles.json
+    xdg_git_config=$XDG_CONFIG_HOME/git/config
+  elif [ -n "${HOME-}" ]; then
+    roles_file=$HOME/.config/gitrole/roles.json
+    xdg_git_config=$HOME/.config/git/config
+  else
+    roles_file=
+    xdg_git_config=
+  fi
+}
+
+build_fingerprint() {
+  printf 'root=%s\n' "$git_root"
+  printf 'author_name=%s\n' "${GIT_AUTHOR_NAME-}"
+  printf 'author_email=%s\n' "${GIT_AUTHOR_EMAIL-}"
+  printf 'committer_name=%s\n' "${GIT_COMMITTER_NAME-}"
+  printf 'committer_email=%s\n' "${GIT_COMMITTER_EMAIL-}"
+  printf 'home=%s\n' "${HOME-}"
+  printf 'xdg_config=%s\n' "${XDG_CONFIG_HOME-}"
+  printf 'git_config_global=%s\n' "${GIT_CONFIG_GLOBAL-}"
+  printf 'roles_path=%s\n' "$roles_file"
+  printf 'roles=%s\n' "$(file_stamp "$roles_file")"
+  printf 'policy=%s\n' "$(file_stamp "$git_root/.gitrole")"
+  printf 'git_config=%s\n' "$(file_stamp "$git_dir/config")"
+  printf 'head=%s\n' "$(file_stamp "$git_dir/HEAD")"
+  printf 'head_log=%s\n' "$(file_stamp "$git_dir/logs/HEAD")"
+  printf 'head_ref=%s\n' "$(head_ref_stamp)"
+
+  if [ -n "${HOME-}" ]; then
+    printf 'global_gitconfig=%s\n' "$(file_stamp "$HOME/.gitconfig")"
+  else
+    printf 'global_gitconfig=missing\n'
+  fi
+
+  printf 'xdg_gitconfig=%s\n' "$(file_stamp "$xdg_git_config")"
+
+  if [ -n "${GIT_CONFIG_GLOBAL-}" ]; then
+    printf 'git_config_global_file=%s\n' "$(file_stamp "$GIT_CONFIG_GLOBAL")"
+  else
+    printf 'git_config_global_file=unset\n'
+  fi
+}
+
+run_offline_status() {
+  cacheable=0
+
+  if ! command -v gitrole >/dev/null 2>&1; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  _line=$(gitrole status --short --offline 2>/dev/null)
+  _status=$?
+
+  if [ "$_status" -ne 0 ] && [ "$_status" -ne 2 ]; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  cacheable=1
+  format_segment "$_line"
+}
+
+case ${1:-} in
+  '') ;;
+  --format)
+    IFS= read -r line || line=
+    format_segment "$line"
+    exit 0
+    ;;
+  --help | -h)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if ! discover_git; then
+  exit 0
+fi
+
+detect_stat
+resolve_inputs
+fingerprint=$(build_fingerprint)
+
+if [ -n "${GITROLE_PROMPT_CACHE-}" ]; then
+  cache_root=$GITROLE_PROMPT_CACHE
+elif [ -n "${XDG_CACHE_HOME-}" ]; then
+  cache_root=$XDG_CACHE_HOME/gitrole/prompt
+elif [ -n "${HOME-}" ]; then
+  cache_root=$HOME/.cache/gitrole/prompt
+else
+  cache_root=
+fi
+
+cache_id=$(
+  printf '%s\n' \
+    "$git_root" \
+    "${GIT_AUTHOR_NAME-}" \
+    "${GIT_AUTHOR_EMAIL-}" \
+    "${GIT_COMMITTER_NAME-}" \
+    "${GIT_COMMITTER_EMAIL-}" \
+    "${HOME-}" \
+    "${XDG_CONFIG_HOME-}" \
+    "${GIT_CONFIG_GLOBAL-}" | cksum | awk '{print $1}'
+)
+cache_dir=$cache_root/$cache_id
+
+if [ -n "$cache_root" ] && [ -f "$cache_dir/fingerprint" ] && [ -f "$cache_dir/segment" ]; then
+  stored=$(cat "$cache_dir/fingerprint")
+  if [ "$stored" = "$fingerprint" ]; then
+    segment=$(cat "$cache_dir/segment")
+    printf '%s\n' "$segment"
+    exit 0
+  fi
+fi
+
+# Redirect, don't use command substitution: that would drop cacheable.
+status_out=${TMPDIR:-/tmp}/gitrole-prompt.$$
+cacheable=0
+run_offline_status > "$status_out"
+segment=$(cat "$status_out")
+rm -f "$status_out"
+
+if [ "$cacheable" -eq 1 ] && [ -n "$cache_root" ]; then
+  mkdir -p "$cache_dir" 2>/dev/null || true
+  if [ -d "$cache_dir" ]; then
+    chmod 700 "$cache_root" 2>/dev/null || true
+    tmp=$cache_dir/.tmp.$$
+    if mkdir -p "$tmp" 2>/dev/null; then
+      printf '%s\n' "$fingerprint" > "$tmp/fingerprint"
+      printf '%s\n' "$segment" > "$tmp/segment"
+      mv "$tmp/fingerprint" "$cache_dir/fingerprint"
+      mv "$tmp/segment" "$cache_dir/segment"
+      rmdir "$tmp" 2>/dev/null || true
+    fi
+  fi
+fi
+
+printf '%s\n' "$segment"

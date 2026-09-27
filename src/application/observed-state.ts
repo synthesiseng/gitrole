@@ -25,8 +25,17 @@ export interface ObservedState {
   sshAuth?: SshAuthProbeResult;
 }
 
+export interface CollectObservedStateOptions {
+  /**
+   * When false, skip the live SSH githubUser probe.
+   * Defaults to probing SSH remotes.
+   */
+  probeSsh?: boolean;
+}
+
 export async function collectObservedState(
-  dependencies: Pick<DoctorDependencies, 'gitConfig' | 'repository' | 'sshAuthProbe' | 'env'>
+  dependencies: Pick<DoctorDependencies, 'gitConfig' | 'repository' | 'sshAuthProbe' | 'env'>,
+  options: CollectObservedStateOptions = {}
 ): Promise<ObservedState> {
   const [
     globalName,
@@ -52,8 +61,9 @@ export async function collectObservedState(
     dependencies.repository.getOriginRemote()
   ]);
 
+  const probeSsh = options.probeSsh !== false;
   const sshAuth =
-    remote?.protocol === 'ssh' && remote.host
+    probeSsh && remote?.protocol === 'ssh' && remote.host
       ? await dependencies.sshAuthProbe.probeGithubUser(remote.host)
       : undefined;
   const configuredCommitIdentity = {

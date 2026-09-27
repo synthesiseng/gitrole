@@ -4,11 +4,13 @@
   "description": "Switch your full git identity in one command.",
   "type": "module",
   "bin": {
-    "gitrole": "dist/cli/index.js"
+    "gitrole": "dist/cli/index.js",
+    "gitrole-prompt": "shell/gitrole-prompt"
   },
   "files": [
     "dist",
     "hooks",
+    "shell",
     "skills"
   ],
   "engines": {

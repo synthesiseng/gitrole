@@ -121,6 +121,10 @@ export function summarizeAlignment(input: {
   observedState: ObservedState;
   repoPolicy?: RepoPolicyEvaluation;
   pinnedRole?: Role;
+  /**
+   * Skip live SSH auth. HTTPS pin checks still run from local role and policy data.
+   */
+  offline?: boolean;
 }): AlignmentSummary {
   const commit = getCommitStatus(input);
   const remote = getRemoteStatus(input);
@@ -147,6 +151,7 @@ export function summarizeAlignment(input: {
 function getCommitStatus(input: {
   role?: Role;
   observedState: ObservedState;
+  offline?: boolean;
 }): StatusResult['commit'] {
   const { observedState, role } = input;
 
@@ -159,7 +164,7 @@ function getCommitStatus(input: {
     return 'warn';
   }
 
-  if (hasIdentityDivergence(role, observedState)) {
+  if (!input.offline && hasIdentityDivergence(role, observedState)) {
     return 'warn';
   }
 
@@ -225,6 +230,7 @@ function getAuthStatus(input: {
   observedState: ObservedState;
   repoPolicy?: RepoPolicyEvaluation;
   pinnedRole?: Role;
+  offline?: boolean;
 }): StatusResult['auth'] {
   const { observedState, role } = input;
 
@@ -239,6 +245,11 @@ function getAuthStatus(input: {
       repoPolicy: input.repoPolicy,
       pinnedRole: input.pinnedRole
     }).auth;
+  }
+
+  // Offline skips the SSH round-trip. na does not by itself set overall=warning.
+  if (input.offline) {
+    return 'na';
   }
 
   if (!observedState.sshAuth || !observedState.sshAuth.ok) {

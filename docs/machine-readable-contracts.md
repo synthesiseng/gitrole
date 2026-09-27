@@ -28,6 +28,7 @@ Three commands are meant for scripts and agents. Each command below uses the sam
 
 ```bash
 gitrole status --short
+gitrole status --short --offline
 ```
 
 <h3 id="status-short-example">Example</h3>
@@ -76,6 +77,24 @@ if [ "$overall" != "aligned" ]; then
 fi
 ```
 
+<p><code>gitrole-prompt</code> reads <code>role</code> and <code>overall</code> from <code>gitrole status --short --offline</code> and prints <code>gitrole:work ✓</code> or <code>gitrole:work ⚠</code>. It does not call the networked <code>status --short</code>. The segment lines and copy-paste snippets are in <code>examples/prompt/</code>. Setup for Starship, oh-my-zsh, zsh, bash, and fish is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
+
+<h3 id="status-short-offline"><code>--offline</code></h3>
+
+<p><code>--offline</code> skips the live SSH <code>githubUser</code> probe. Field names and order stay the same. <code>auth=na</code> on SSH means the probe was skipped. That <code>na</code> does not by itself set <code>overall=warning</code>.</p>
+
+<p>Local checks still run: commit identity, <code>GIT_AUTHOR_*</code> and <code>GIT_COMMITTER_*</code> overrides, a fresh repo with no local role, remote host compared with the saved <code>githubHost</code>, and <code>.gitrole</code> policy.</p>
+
+<p>HTTPS auth is the same with or without <code>--offline</code>. It uses the repo pin and the saved role's <code>githubUser</code>. No pin, or a pin that does not allow the active role, is <code>auth=warn</code>. A pin that allows the role, when that role has a <code>githubUser</code>, is <code>auth=na</code>.</p>
+
+SSH remote, probe skipped. <code>auth=na</code> and <code>overall=aligned</code> when the local checks are clean. Exit <code>0</code>.
+
+```text
+role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned
+```
+
+<p>A live <code>gitrole status --short</code> on that same SSH remote would probe GitHub and might report <code>auth=ok</code> or <code>auth=warn</code> instead. The prompt helper does not do that.</p>
+
 <h3 id="status-short-fields">Fields</h3>
 
 Exactly one line. Eight `key=value` fields, in this order, separated by single spaces.
@@ -94,7 +113,7 @@ Exactly one line. Eight `key=value` fields, in this order, separated by single s
 | Field | `na` when |
 | ----- | --------- |
 | `remote` | Not inside a Git repo |
-| `auth` | Not inside a Git repo, no `origin`, or HTTPS whose pin allows the active role and that role has a `githubUser` |
+| `auth` | Not inside a Git repo, no `origin`, HTTPS whose pin allows the active role and that role has a `githubUser`, or `--offline` when the live SSH probe is skipped |
 | `policy` | No `.gitrole` file |
 
 <h4 id="status-short-na">How <code>na</code> rolls into <code>overall</code></h4>
@@ -109,7 +128,7 @@ Exactly one line. Eight `key=value` fields, in this order, separated by single s
 
 Only `warn` on those checks, or being outside a Git repo, drives `overall=warning`. `policy=na` when there is no `.gitrole` file can sit next to `overall=aligned` when nothing is `warn`.
 
-`auth` on SSH is `ok` or `warn` from the `githubUser` probe. On HTTPS, `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. That `na` does not by itself set `overall=warning` or exit `2`. No pin, or a pin that does not allow the active role, is `auth=warn` and exit `2`.
+`auth` on SSH is `ok` or `warn` from the `githubUser` probe. `--offline` does not run that probe, so SSH `auth` is `na`. On HTTPS, `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. That `na` does not by itself set `overall=warning` or exit `2`. No pin, or a pin that does not allow the active role, is `auth=warn` and exit `2`. HTTPS auth is the same with `--offline`.
 
 `policy=ok` when `.gitrole` allows the effective role: that role is `defaultRole`, or it is listed in `allowedRoles`. `policy=warn` when the evaluation is `notAllowed`.
 

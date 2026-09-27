@@ -1,0 +1,8 @@
+# gitrole-prompt runs `gitrole status --short --offline`.
+# Segment contract: examples/prompt/README.md
+
+[custom.gitrole]
+command = "gitrole-prompt"
+when = "git rev-parse --is-inside-work-tree"
+format = "[$output]($style) "
+style = "bold"
