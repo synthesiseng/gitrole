@@ -77,7 +77,7 @@ if [ "$overall" != "aligned" ]; then
 fi
 ```
 
-<p>Prompt snippets call <code>gitrole status --short --offline</code> only. <code>gitrole:work ✓</code> means commit and policy are ok and auth was not checked. It does not mean network auth was verified. <code>auth=na</code> is a skipped probe, not a green auth check. <code>auth=ok</code> does not print <code>✓</code>. The segment lines and copy-paste snippets are in <code>examples/prompt/</code>. Setup for Starship, oh-my-zsh, zsh, bash, and fish is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
+<p>Prompt snippets call <code>gitrole status --short --offline</code> only. <code>gitrole:work ✓</code> means commit and policy are ok and auth was not checked. It does not mean network auth was verified. Live auth verification is for push-time <code>gitrole doctor</code> and the optional check-only hook, not the prompt. <code>auth=na</code> is a skipped probe, not a green auth check. <code>auth=ok</code> does not print <code>✓</code>. The segment lines and copy-paste snippets are in <code>examples/prompt/</code>. Setup for Starship, oh-my-zsh, zsh, bash, and fish is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
 
 <h3 id="status-short-offline"><code>--offline</code></h3>
 

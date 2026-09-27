@@ -18,11 +18,13 @@ Snippets run `gitrole status --short --offline` and pass that line to `gitrole-p
 
 `role` has to match a saved role token: lowercase letters, digits, `-`, and `_`. `no-role` is that shape, so a repo with no matching role shows `gitrole:no-role ⚠` when commit or policy is warn. Fields are read by name.
 
-`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `gitrole status --short --offline` does not emit `auth=ok`. If a short line still contains `auth=ok`, the formatter treats that as unexpected and prints `gitrole:<role> ⚠`, not `✓`.
+`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. Live auth verification is for push-time `gitrole doctor` and the optional check-only hook, not the prompt. On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `gitrole status --short --offline` does not emit `auth=ok`. If a short line still contains `auth=ok`, the formatter treats that as unexpected and prints `gitrole:<role> ⚠`, not `✓`.
 
 Outside a git work tree the prompt prints nothing. The terminal needs UTF-8 for `✓` and `⚠`. The helper exits `0` when it prints a segment, including a warning, so the prompt itself does not fail. It does not switch roles, and it does not install hooks. There is no auth cache.
 
 <h2 id="install">Install</h2>
+
+The snippets need gitrole 0.9.0 or newer.
 
 A global install puts the helper on `PATH` next to `gitrole`:
 

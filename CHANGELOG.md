@@ -4,7 +4,7 @@
 
 ### Documentation
 
-* **prompt:** shell segment needs gitrole 0.9.0 or newer; document `gitrole:? ⚠`, a missing `gitrole-prompt` on `PATH`, and that `--offline` does not emit `auth=ok`
+* **prompt:** shell segment needs gitrole 0.9.0 or newer; document `gitrole:? ⚠`, a missing `gitrole-prompt` on `PATH`, that `--offline` does not emit `auth=ok`, and that live auth is `gitrole doctor` and the optional check-only hook, not the prompt
 
 ### Breaking Changes
 

@@ -104,7 +104,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 
 ## Shell prompt
 
-Snippets need gitrole 0.9.0 or newer. They run `gitrole status --short --offline` on every prompt and format the line with `gitrole-prompt --format`. There is no auth cache. `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified. `auth=na` is a skipped SSH probe, not a green auth check. A local warn shows `gitrole:work ⚠`. A failed or unreadable status shows `gitrole:? ⚠`. It is opt-in and check-only. It does not switch roles or install hooks.
+Snippets need gitrole 0.9.0 or newer. They run `gitrole status --short --offline` on every prompt and format the line with `gitrole-prompt --format`. There is no auth cache. `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified. Live auth is `gitrole doctor` and the optional check-only hook, not the prompt. `auth=na` is a skipped SSH probe, not a green auth check. A local warn shows `gitrole:work ⚠`. A failed or unreadable status shows `gitrole:? ⚠`. It is opt-in and check-only. It does not switch roles or install hooks.
 
 Snippets for Starship, oh-my-zsh, zsh, bash, and fish are in [`examples/prompt/`](examples/prompt/README.md). The stdout contract is in that directory. The same setup is written up in [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/).
 
