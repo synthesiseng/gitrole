@@ -1,0 +1,414 @@
+#!/bin/sh
+# Print a prompt segment from `gitrole status --short`.
+#
+#   gitrole:<role> ✓   overall=aligned
+#   gitrole:<role> ⚠   any other overall, when role is a saved-role token
+#   gitrole:? ⚠        status failed, or role/overall could not be read
+#
+# Prints nothing outside a git work tree. Does not switch roles.
+#
+# Cache directory: $GITROLE_PROMPT_CACHE, or ${XDG_CACHE_HOME:-$HOME/.cache}/gitrole/prompt
+# TTL: $GITROLE_PROMPT_TTL seconds (default 60). 0 runs status on every prompt.
+#
+# Local identity inputs invalidate the cache before the segment is printed:
+# git config, HEAD and its ref, .gitrole, the roles file, global gitconfig,
+# GIT_CONFIG_GLOBAL, and the author/committer env vars status already reads.
+# SSH auth is not part of that fingerprint. After the TTL, the previous segment
+# is printed immediately and refreshed in the background.
+#
+#   gitrole-prompt --format    parse one short line from stdin
+#   gitrole-prompt --refresh   ignore the TTL and run status in the foreground
+#
+# Docs: docs/guides/show-gitrole-in-your-shell-prompt.md
+
+set -u
+set -f
+
+default_ttl=60
+
+if [ "${GITROLE_PROMPT_SYNC:-}" = 1 ]; then
+  trap '' HUP
+fi
+
+usage() {
+  printf '%s\n' 'usage: gitrole-prompt [--format | --refresh]'
+}
+
+format_segment() {
+  _line=$1
+  _role=
+  _overall=
+
+  case $_line in
+    *'
+'*)
+      printf '%s\n' 'gitrole:? ⚠'
+      return
+      ;;
+  esac
+
+  if [ -z "$_line" ]; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  for _field in $_line; do
+    _key=${_field%%=*}
+    _value=${_field#*=}
+    case $_key in
+      role) _role=$_value ;;
+      overall) _overall=$_value ;;
+    esac
+  done
+
+  case $_role in
+    ''|*[!a-z0-9_-]*)
+      printf '%s\n' 'gitrole:? ⚠'
+      return
+      ;;
+  esac
+
+  if [ -z "$_overall" ]; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  if [ "$_overall" = aligned ]; then
+    printf 'gitrole:%s ✓\n' "$_role"
+    return
+  fi
+
+  printf 'gitrole:%s ⚠\n' "$_role"
+}
+
+detect_stat() {
+  if stat -c '%Y %s' / >/dev/null 2>&1; then
+    stat_style=gnu
+  else
+    stat_style=bsd
+  fi
+}
+
+file_stamp() {
+  _path=$1
+  if [ -z "$_path" ] || [ ! -e "$_path" ]; then
+    printf 'missing'
+    return
+  fi
+
+  if [ "$stat_style" = gnu ]; then
+    stat -c '%Y %s' "$_path"
+  else
+    stat -f '%m %z' "$_path"
+  fi
+}
+
+file_mtime() {
+  _path=$1
+  if [ -z "$_path" ] || [ ! -e "$_path" ]; then
+    printf ''
+    return
+  fi
+
+  if [ "$stat_style" = gnu ]; then
+    stat -c '%Y' "$_path"
+  else
+    stat -f '%m' "$_path"
+  fi
+}
+
+discover_git() {
+  _dir=$PWD
+  git_root=
+
+  while :; do
+    if [ -e "$_dir/.git" ]; then
+      git_root=$_dir
+      break
+    fi
+
+    if [ "$_dir" = / ]; then
+      return 1
+    fi
+
+    _dir=$(dirname "$_dir")
+  done
+
+  if [ -d "$git_root/.git" ]; then
+    git_dir=$git_root/.git
+    return 0
+  fi
+
+  if [ -f "$git_root/.git" ]; then
+    _line=$(sed -n '1p' "$git_root/.git")
+    case $_line in
+      gitdir:*)
+        _path=${_line#gitdir:}
+        _path=${_path# }
+        _path=${_path#	}
+        ;;
+      *)
+        git_dir=$git_root/.git
+        return 0
+        ;;
+    esac
+
+    case $_path in
+      /*) git_dir=$_path ;;
+      *) git_dir=$git_root/$_path ;;
+    esac
+    return 0
+  fi
+
+  git_dir=$git_root/.git
+}
+
+head_ref_stamp() {
+  if [ ! -f "$git_dir/HEAD" ]; then
+    printf 'missing'
+    return
+  fi
+
+  _head=$(sed -n '1p' "$git_dir/HEAD")
+  case $_head in
+    ref:*)
+      _ref=${_head#ref:}
+      _ref=${_ref# }
+      _ref=${_ref#	}
+      file_stamp "$git_dir/$_ref"
+      ;;
+    *)
+      printf 'detached'
+      ;;
+  esac
+}
+
+resolve_inputs() {
+  if [ -n "${XDG_CONFIG_HOME-}" ]; then
+    roles_file=$XDG_CONFIG_HOME/gitrole/roles.json
+    xdg_git_config=$XDG_CONFIG_HOME/git/config
+  elif [ -n "${HOME-}" ]; then
+    roles_file=$HOME/.config/gitrole/roles.json
+    xdg_git_config=$HOME/.config/git/config
+  else
+    roles_file=
+    xdg_git_config=
+  fi
+}
+
+build_fingerprint() {
+  printf 'root=%s\n' "$git_root"
+  printf 'author_name=%s\n' "${GIT_AUTHOR_NAME-}"
+  printf 'author_email=%s\n' "${GIT_AUTHOR_EMAIL-}"
+  printf 'committer_name=%s\n' "${GIT_COMMITTER_NAME-}"
+  printf 'committer_email=%s\n' "${GIT_COMMITTER_EMAIL-}"
+  printf 'home=%s\n' "${HOME-}"
+  printf 'xdg_config=%s\n' "${XDG_CONFIG_HOME-}"
+  printf 'git_config_global=%s\n' "${GIT_CONFIG_GLOBAL-}"
+  printf 'roles_path=%s\n' "$roles_file"
+  printf 'roles=%s\n' "$(file_stamp "$roles_file")"
+  printf 'policy=%s\n' "$(file_stamp "$git_root/.gitrole")"
+  printf 'git_config=%s\n' "$(file_stamp "$git_dir/config")"
+  printf 'head=%s\n' "$(file_stamp "$git_dir/HEAD")"
+  printf 'head_log=%s\n' "$(file_stamp "$git_dir/logs/HEAD")"
+  printf 'head_ref=%s\n' "$(head_ref_stamp)"
+
+  if [ -n "${HOME-}" ]; then
+    printf 'global_gitconfig=%s\n' "$(file_stamp "$HOME/.gitconfig")"
+  else
+    printf 'global_gitconfig=missing\n'
+  fi
+
+  printf 'xdg_gitconfig=%s\n' "$(file_stamp "$xdg_git_config")"
+
+  if [ -n "${GIT_CONFIG_GLOBAL-}" ]; then
+    printf 'git_config_global_file=%s\n' "$(file_stamp "$GIT_CONFIG_GLOBAL")"
+  else
+    printf 'git_config_global_file=unset\n'
+  fi
+}
+
+resolve_ttl() {
+  ttl=${GITROLE_PROMPT_TTL:-$default_ttl}
+  case $ttl in
+    ''|*[!0-9]*) ttl=$default_ttl ;;
+  esac
+}
+
+resolve_cache_dir() {
+  if [ -n "${GITROLE_PROMPT_CACHE-}" ]; then
+    cache_root=$GITROLE_PROMPT_CACHE
+  elif [ -n "${XDG_CACHE_HOME-}" ]; then
+    cache_root=$XDG_CACHE_HOME/gitrole/prompt
+  elif [ -n "${HOME-}" ]; then
+    cache_root=$HOME/.cache/gitrole/prompt
+  else
+    cache_root=
+  fi
+
+  cache_id=$(
+    printf '%s\n' \
+      "$git_root" \
+      "${GIT_AUTHOR_NAME-}" \
+      "${GIT_AUTHOR_EMAIL-}" \
+      "${GIT_COMMITTER_NAME-}" \
+      "${GIT_COMMITTER_EMAIL-}" \
+      "${HOME-}" \
+      "${XDG_CONFIG_HOME-}" \
+      "${GIT_CONFIG_GLOBAL-}" | cksum | awk '{print $1}'
+  )
+  cache_dir=$cache_root/$cache_id
+}
+
+run_status() {
+  if ! command -v gitrole >/dev/null 2>&1; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  _line=$(gitrole status --short 2>/dev/null)
+  _status=$?
+
+  if [ "$_status" -ne 0 ] && [ "$_status" -ne 2 ]; then
+    printf '%s\n' 'gitrole:? ⚠'
+    return
+  fi
+
+  format_segment "$_line"
+}
+
+write_cache() {
+  _segment=$1
+
+  if [ -z "$cache_root" ]; then
+    return 1
+  fi
+
+  mkdir -p "$cache_dir" || return 1
+  chmod 700 "$cache_root" 2>/dev/null || true
+  _tmp=$cache_dir/.tmp.$$
+  mkdir -p "$_tmp" || return 1
+  printf '%s\n' "$fingerprint" > "$_tmp/fingerprint" || return 1
+  printf '%s\n' "$now" > "$_tmp/cached_at" || return 1
+  printf '%s\n' "$_segment" > "$_tmp/segment" || return 1
+  mv "$_tmp/fingerprint" "$cache_dir/fingerprint" || return 1
+  mv "$_tmp/cached_at" "$cache_dir/cached_at" || return 1
+  mv "$_tmp/segment" "$cache_dir/segment" || return 1
+  rmdir "$_tmp" 2>/dev/null || true
+}
+
+release_lock() {
+  if [ -n "${cache_dir-}" ]; then
+    rmdir "$cache_dir/lock" 2>/dev/null || true
+  fi
+}
+
+claim_lock() {
+  if [ -z "$cache_root" ]; then
+    return 1
+  fi
+
+  mkdir -p "$cache_dir" || return 1
+
+  if mkdir "$cache_dir/lock" 2>/dev/null; then
+    return 0
+  fi
+
+  _lock_mtime=$(file_mtime "$cache_dir/lock")
+  case $_lock_mtime in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+
+  if [ $((now - _lock_mtime)) -le 60 ]; then
+    return 1
+  fi
+
+  rmdir "$cache_dir/lock" 2>/dev/null || return 1
+  mkdir "$cache_dir/lock" 2>/dev/null
+}
+
+launch_refresh() {
+  if ! claim_lock; then
+    return 0
+  fi
+
+  # Redirect every fd. Bash and dash both wait for a background child that
+  # still holds the prompt's stdout pipe.
+  GITROLE_PROMPT_SYNC=1 "$0" >/dev/null 2>&1 </dev/null &
+}
+
+cache_matches() {
+  if [ ! -f "$cache_dir/fingerprint" ] || [ ! -f "$cache_dir/segment" ] || [ ! -f "$cache_dir/cached_at" ]; then
+    return 1
+  fi
+
+  _stored=$(cat "$cache_dir/fingerprint")
+  [ "$_stored" = "$fingerprint" ]
+}
+
+cache_is_fresh() {
+  _cached_at=$(cat "$cache_dir/cached_at" 2>/dev/null || printf '')
+  case $_cached_at in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+
+  [ $((_cached_at + ttl)) -gt "$now" ]
+}
+
+print_cached_segment() {
+  _segment=$(cat "$cache_dir/segment")
+  printf '%s\n' "$_segment"
+}
+
+refresh_flag=0
+
+case ${1:-} in
+  '') ;;
+  --format)
+    IFS= read -r line || line=
+    format_segment "$line"
+    exit 0
+    ;;
+  --refresh) refresh_flag=1 ;;
+  --help | -h)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+detect_stat
+
+if ! discover_git; then
+  exit 0
+fi
+
+resolve_inputs
+resolve_ttl
+resolve_cache_dir
+now=$(date +%s)
+fingerprint=$(build_fingerprint)
+
+sync=0
+if [ "${GITROLE_PROMPT_SYNC:-}" = 1 ] || [ "$refresh_flag" -eq 1 ] || [ "$ttl" -eq 0 ]; then
+  sync=1
+fi
+
+if [ "$sync" -eq 0 ] && cache_matches; then
+  if cache_is_fresh; then
+    print_cached_segment
+    exit 0
+  fi
+
+  print_cached_segment
+  launch_refresh
+  exit 0
+fi
+
+segment=$(run_status)
+write_cache "$segment" || true
+release_lock
+printf '%s\n' "$segment"

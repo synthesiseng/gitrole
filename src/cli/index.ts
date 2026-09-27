@@ -354,6 +354,10 @@ Policy:
 Examples:
   $ gitrole status
   $ gitrole status --short
+
+Shell prompt:
+  gitrole-prompt prints gitrole:<role> ✓ when overall=aligned, and gitrole:<role> ⚠ otherwise.
+  It is an opt-in helper. It does not switch roles.
 `
     )
     .action(async (options: { short?: boolean }) => {

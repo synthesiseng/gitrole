@@ -76,6 +76,8 @@ if [ "$overall" != "aligned" ]; then
 fi
 ```
 
+<p><code>gitrole-prompt</code> reads <code>role</code> and <code>overall</code> from this line and prints <code>gitrole:work ✓</code> or <code>gitrole:work ⚠</code>. Setup for Starship, oh-my-zsh, zsh, bash, and fish is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>. The helper is opt-in and check-only.</p>
+
 <h3 id="status-short-fields">Fields</h3>
 
 Exactly one line. Eight `key=value` fields, in this order, separated by single spaces.

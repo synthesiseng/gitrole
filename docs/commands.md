@@ -38,7 +38,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Check whether the current repository is aligned for commit and push.</dd>
 
   <dt><code>gitrole status --short</code></dt>
-  <dd>Show the one-line machine-friendly alignment check.</dd>
+  <dd>Show the one-line machine-friendly alignment check. <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}"><code>gitrole-prompt</code></a> turns that line into a shell prompt segment.</dd>
 
   <dt><code>gitrole doctor</code></dt>
   <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail.</dd>

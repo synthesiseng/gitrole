@@ -74,6 +74,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 - [Guide: Use the right Git identity for this repo](https://docs.gitrole.dev/guides/use-the-right-git-identity-for-this-repo/)
 - [Guide: Use repo-local identity policy with .gitrole](https://docs.gitrole.dev/guides/use-repo-local-identity-policy-with-gitrole/)
 - [Use case: Fix pushes using the wrong GitHub account](https://docs.gitrole.dev/use-cases/fix-pushes-using-the-wrong-github-account/)
+- [Guide: Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/)
 
 ## Commands
 
@@ -93,6 +94,12 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 | `gitrole doctor --json`                                                                             | Emit the full diagnosis as structured JSON                                          |
 | `gitrole remote set <name>`                                                                         | Rewrite origin to the role's GitHub SSH host alias                                  |
 | `gitrole remove <name>`                                                                             | Remove a saved role profile                                                         |
+
+## Shell prompt
+
+`gitrole-prompt` prints one segment from `gitrole status --short`. `overall=aligned` shows `gitrole:work ✓`. Any other overall shows `gitrole:work ⚠`. A failed or unreadable status shows `gitrole:? ⚠`. It is opt-in and check-only. It does not switch roles or install hooks.
+
+Snippets for Starship, oh-my-zsh, zsh, bash, and fish are in [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/).
 
 ## Diagnosis policy
 
