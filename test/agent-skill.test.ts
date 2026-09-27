@@ -33,4 +33,12 @@ test('agent skill is packaged and tells agents to stop on warning', async () => 
   assert.match(skill, /overall=warning/);
   assert.match(skill, /Do not commit or push/);
   assert.match(skill, /Leave it uninstalled unless the user asks/);
+  assert.match(skill, /GIT_AUTHOR_EMAIL/);
+  assert.match(skill, /GIT_COMMITTER_EMAIL/);
+  assert.match(skill, /commitIdentity/);
+  assert.match(skill, /configuredIdentity/);
+  assert.match(skill, /role=no-role scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning/);
+  assert.match(skill, /auth=warn policy=na overall=warning/);
+  assert.match(skill, /no commits yet/);
+  assert.match(skill, /commit=ok remote=warn auth=ok policy=na overall=warning/);
 });

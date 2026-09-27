@@ -35,6 +35,8 @@ In practice, that means checking:
 - whether the remote host matches the expected GitHub host alias
 - whether SSH auth resolves to the expected GitHub user
 
+Trust the effective identity from <code>gitrole status --short</code> or <code>gitrole doctor --json</code>. <code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config, so a present <code>user.name</code> or <code>user.email</code> is not enough. On <code>doctor --json</code>, read <code>commitIdentity</code> (<code>source</code> may be <code>env</code>), not <code>configuredIdentity</code>. Stop on a warning. HTTPS with no <code>.gitrole</code> pin, an env override that changes the effective identity, and a repository with no commits yet are <code>overall=warning</code> and exit <code>2</code>.
+
 <h2 id="run-a-fast-preflight-check">Run a fast preflight check</h2>
 
 Use the one-line status view when you want a compact automation-friendly signal:

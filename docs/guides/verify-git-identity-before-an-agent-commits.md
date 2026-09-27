@@ -79,7 +79,43 @@ The line is <code>role scope override commit remote auth policy overall</code>. 
 
 <code>na</code> means that check does not apply. It does not by itself mean stop.
 
-Full diagnosis:
+<h2 id="trust-the-effective-identity">Trust the effective identity</h2>
+
+<code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config. Agents often set those variables. A present <code>user.name</code> or <code>user.email</code> does not mean the commit is aligned.
+
+Read the <code>gitrole</code> result and stop on a warning. On <code>gitrole doctor --json</code>, <code>commitIdentity</code> is the effective name and email. Each <code>source</code> is <code>local</code>, <code>global</code>, <code>env</code>, or <code>unset</code>. <code>configuredIdentity</code> is only the raw config.
+
+An env value that changes the effective author away from the saved role:
+
+```text
+role=no-role scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
+```
+
+<code>GIT_COMMITTER_EMAIL</code> or <code>GIT_COMMITTER_NAME</code> that disagrees with the effective author is <code>commit=warn</code> and exit <code>2</code>. An env value that matches the saved role can be <code>info</code> with <code>overall=aligned</code>. That <code>info</code> is not a warning.
+
+<h2 id="warnings-that-still-stop">Warnings that still stop</h2>
+
+These are <code>overall=warning</code> and exit <code>2</code> on current <code>gitrole</code>. Stop. Do not commit.
+
+HTTPS origin with no <code>.gitrole</code> pin. <code>auth=warn</code>. <code>auth=na</code> on HTTPS is only when a pin allows the active role and that role has a <code>githubUser</code>.
+
+```text
+role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
+```
+
+A repository with no commits yet. <code>remote=warn</code> because <code>HEAD</code> does not exist. Stop even when <code>commit=ok</code>. With no local role, <code>commit=warn</code> as well:
+
+```text
+role=work scope=global override=false commit=warn remote=warn auth=ok policy=na overall=warning
+```
+
+Local role, still no commits:
+
+```text
+role=work scope=local override=true commit=ok remote=warn auth=ok policy=na overall=warning
+```
+
+<h2 id="full-diagnosis">Full diagnosis</h2>
 
 ```bash
 gitrole doctor --json

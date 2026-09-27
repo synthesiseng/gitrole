@@ -110,6 +110,8 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 
 The published package includes an agent skill at `skills/gitrole/SKILL.md`. Point Claude Code, Codex, or Cursor at that directory. The skill tells the agent to run `gitrole status --short` before a commit, or `gitrole doctor --json` for the full diagnosis, and to stop when `overall=warning` (exit `2`) or any check is `warn`. Exit `0` is aligned. Exit `1` is a failure.
 
+The agent trusts the effective identity those commands report. `GIT_AUTHOR_*` and `GIT_COMMITTER_*` can override Git config, so a set `user.name` or `user.email` is not enough. HTTPS with no pin, an env override that changes the effective identity, and a repository with no commits yet are warnings. Stop.
+
 The skill verifies. It does not install hooks or block git. The optional check-only hook still runs `gitrole status --short` only when you install it yourself.
 
 ## What it does not do
