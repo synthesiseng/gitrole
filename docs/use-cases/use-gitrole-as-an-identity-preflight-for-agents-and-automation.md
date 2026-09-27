@@ -12,6 +12,8 @@ Use this page when an agent or automation should work under an existing role ins
 
 If you need the baseline one-repo setup first, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>.
 
+Coding agents can load the skill shipped at <code>skills/gitrole/SKILL.md</code>. Install steps for Claude Code, Codex, and Cursor are in <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify Git identity before an agent commits</a>. The skill tells the agent to run <code>gitrole status --short</code> or <code>gitrole doctor --json</code> and to stop on a warning. It does not install hooks.
+
 This is useful when:
 
 - the repository already has a role like <code>work</code>, <code>personal</code>, or <code>client-acme</code>
@@ -32,6 +34,8 @@ In practice, that means checking:
 - the repo's preferred role, when <code>.gitrole</code> exists
 - whether the remote host matches the expected GitHub host alias
 - whether SSH auth resolves to the expected GitHub user
+
+Trust the effective identity from <code>gitrole status --short</code> or <code>gitrole doctor --json</code>. <code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config, so a present <code>user.name</code> or <code>user.email</code> is not enough. On <code>doctor --json</code>, read <code>commitIdentity</code> (<code>source</code> may be <code>env</code>), not <code>configuredIdentity</code>. Stop on a warning. HTTPS with no <code>.gitrole</code> pin, an env override that changes the effective identity, and a repository with no commits yet are <code>overall=warning</code> and exit <code>2</code>.
 
 <h2 id="run-a-fast-preflight-check">Run a fast preflight check</h2>
 

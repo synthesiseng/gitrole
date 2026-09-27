@@ -84,6 +84,11 @@ test('package smoke: npm pack includes the published CLI entrypoint and metadata
   assert.match(tarListResult.stdout, /package\/dist\/cli\/index\.js/);
   assert.match(tarListResult.stdout, /package\/shell\/gitrole-prompt/);
   assert.match(tarListResult.stdout, /package\/package\.json/);
+  assert.match(tarListResult.stdout, /package\/skills\/gitrole\/SKILL\.md/);
+  assert.ok(
+    packInfo.files.some((file) => file.path === 'skills/gitrole/SKILL.md'),
+    'skills/gitrole/SKILL.md should be included in the tarball metadata'
+  );
 
   const packedManifest = JSON.parse(extractedPackageJson.stdout) as {
     name: string;

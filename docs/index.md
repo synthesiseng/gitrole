@@ -147,6 +147,13 @@ Use the main guide when you want the normal setup. Use a focused page when you n
     </div>
     <span aria-hidden="true">&rarr;</span>
   </a>
+  <a class="reference-card" href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">
+    <div>
+      <strong>Guide: Verify Git identity before an agent commits</strong>
+      <span>Point Claude Code, Codex, or Cursor at the packaged skill so the agent runs <code>gitrole status --short</code> and stops on a warning.</span>
+    </div>
+    <span aria-hidden="true">&rarr;</span>
+  </a>
   <a class="reference-card" href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">
     <div>
       <strong>Use case: Use gitrole as an identity preflight for agents and automation</strong>
