@@ -4,13 +4,23 @@ on:
   release:
     types:
       - published
+  # A published release runs the workflow file stored on the tag. Tags from
+  # before the OIDC publish fix still fail if you only recreate the release.
+  # Dispatch this workflow from main and pass the tag to publish that commit
+  # with the fixed workflow.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish (for example, v0.8.0)
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: publish-${{ github.event.release.tag_name }}
+  group: publish-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: true
 
 jobs:
@@ -22,7 +32,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       # Do not set setup-node registry-url. With it set and no real token,
       # setup-node writes _authToken=${NODE_AUTH_TOKEN} and exports the
@@ -39,7 +49,7 @@ jobs:
 
       - name: Verify tag matches package version
         run: |
-          TAG_NAME="${{ github.event.release.tag_name }}"
+          TAG_NAME="${{ github.event.release.tag_name || inputs.tag }}"
           PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
 
           if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
