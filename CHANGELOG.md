@@ -13,6 +13,13 @@
 
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.10.1](https://github.com/synthesiseng/gitrole/compare/v0.10.0...v0.10.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **completions:** offer --offline for status ([#73](https://github.com/synthesiseng/gitrole/issues/73)) ([46a07e3](https://github.com/synthesiseng/gitrole/commit/46a07e33b47a98160883a3195457cfb3cab3c66b))
+
 ## [0.10.0](https://github.com/synthesiseng/gitrole/compare/v0.9.1...v0.10.0) (2026-09-27)
 
 
