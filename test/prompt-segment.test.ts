@@ -1,9 +1,9 @@
 /*
- * Locks the prompt segment parsed from status --short, and the cache around it.
+ * Locks the prompt segment parsed from status --short --offline.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -19,25 +19,14 @@ const scriptPath = fileURLToPath(new URL('../../shell/gitrole-prompt', import.me
 const cliPath = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
 const readmePath = fileURLToPath(new URL('../../README.md', import.meta.url));
+const promptSourcePath = fileURLToPath(new URL('../../shell/gitrole-prompt', import.meta.url));
 
 const alignedSegment = 'gitrole:work ✓';
 const warningSegment = 'gitrole:work ⚠';
 const unknownSegment = 'gitrole:? ⚠';
 
 const fakeGitrole = `#!/bin/sh
-count_file=$GITROLE_FAKE_COUNT
-count=0
-if [ -f "$count_file" ]; then
-  count=$(cat "$count_file")
-fi
-count=$((count + 1))
-printf '%s\\n' "$count" > "$count_file"
-if [ "$count" -ge 2 ] && [ -n "\${GITROLE_FAKE_SLEEP2:-}" ]; then
-  sleep "$GITROLE_FAKE_SLEEP2"
-fi
-if [ -n "\${GITROLE_FAKE_SLEEP:-}" ]; then
-  sleep "$GITROLE_FAKE_SLEEP"
-fi
+printf '%s\\n' "$*" >> "$GITROLE_FAKE_ARGS"
 if [ "\${GITROLE_FAKE_MULTILINE:-}" = 1 ]; then
   printf '%s\\n%s\\n' "\${GITROLE_FAKE_LINE}" extra=1
   exit 0
@@ -47,67 +36,33 @@ if [ "$status" -eq 1 ]; then
   printf '%s\\n' 'error: saved role data is invalid' >&2
   exit 1
 fi
-if [ "$count" -ge 2 ] && [ -n "\${GITROLE_FAKE_LINE2:-}" ]; then
-  printf '%s\\n' "$GITROLE_FAKE_LINE2"
-else
-  printf '%s\\n' "\${GITROLE_FAKE_LINE}"
-fi
+printf '%s\\n' "\${GITROLE_FAKE_LINE}"
 exit "$status"
 `;
-
-function runGit(repo: string, args: string[], env: NodeJS.ProcessEnv) {
-  const result = spawnSync('git', args, {
-    cwd: repo,
-    encoding: 'utf8',
-    env
-  });
-
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-}
-
-async function readCount(countFile: string): Promise<number> {
-  try {
-    return Number((await readFile(countFile, 'utf8')).trim());
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-
-    if (code === 'ENOENT') {
-      return 0;
-    }
-
-    throw error;
-  }
-}
 
 async function makeWorkspace() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'gitrole-prompt-'));
   const repo = path.join(root, 'repo dir');
-  const home = path.join(root, 'home');
-  const cache = path.join(root, 'cache');
   const bin = path.join(root, 'bin');
-  const countFile = path.join(root, 'count');
+  const argsFile = path.join(root, 'args');
 
   await mkdir(repo, { recursive: true });
-  await mkdir(home, { recursive: true });
-  await mkdir(cache, { recursive: true });
   await mkdir(bin, { recursive: true });
   await writeFile(path.join(bin, 'gitrole'), fakeGitrole, 'utf8');
   await chmod(path.join(bin, 'gitrole'), 0o755);
+  spawnSync('git', ['init', '-b', 'main'], { cwd: repo, encoding: 'utf8' });
 
   const env: NodeJS.ProcessEnv = {
     PATH: `${bin}:/usr/bin:/bin`,
-    HOME: home,
+    HOME: path.join(root, 'home'),
     TMPDIR: os.tmpdir(),
     LANG: 'C.UTF-8',
     LC_ALL: 'C.UTF-8',
-    GITROLE_PROMPT_CACHE: cache,
-    GITROLE_FAKE_COUNT: countFile,
+    GITROLE_FAKE_ARGS: argsFile,
     GITROLE_FAKE_LINE: statusShortBaseline.line
   };
 
-  runGit(repo, ['init', '-b', 'main'], env);
-
-  return { root, repo, home, cache, countFile, env };
+  return { root, repo, argsFile, env };
 }
 
 function runPrompt(
@@ -124,6 +79,20 @@ function runPrompt(
   });
 }
 
+async function readArgs(argsFile: string): Promise<string> {
+  try {
+    return await readFile(argsFile, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+
+    if (code === 'ENOENT') {
+      return '';
+    }
+
+    throw error;
+  }
+}
+
 test('prompt segment follows overall and role from the short line', () => {
   const cases: Array<[string, string]> = [
     [statusShortBaseline.line, alignedSegment],
@@ -135,6 +104,7 @@ test('prompt segment follows overall and role from the short line', () => {
     ],
     ['overall=warning role=no-role', 'gitrole:no-role ⚠'],
     ['overall=aligned role=agent_bot', 'gitrole:agent_bot ✓'],
+    ['role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned', alignedSegment],
     ['role=Work overall=aligned', unknownSegment],
     ['role= overall=aligned', unknownSegment],
     ['role=work', unknownSegment],
@@ -161,99 +131,57 @@ test('prompt segment stays quiet outside a git work tree and does not run status
   assert.equal(result.status, 0);
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, '');
-  assert.equal(await readCount(workspace.countFile), 0);
+  assert.equal(await readArgs(workspace.argsFile), '');
 });
 
-test('prompt segment caches a fresh short line and refreshes when local inputs change', async () => {
+test('prompt segment calls only status --short --offline and reruns when local inputs change', async () => {
   const workspace = await makeWorkspace();
-  const subdir = path.join(workspace.repo, 'nested');
-  await mkdir(subdir);
-
-  const first = runPrompt(subdir, workspace.env);
+  const first = runPrompt(workspace.repo, workspace.env);
   const second = runPrompt(workspace.repo, workspace.env);
 
   assert.equal(first.status, 0);
   assert.equal(first.stdout, `${alignedSegment}\n`);
   assert.equal(second.stdout, `${alignedSegment}\n`);
-  assert.equal(await readCount(workspace.countFile), 1);
-
-  await writeFile(path.join(workspace.repo, '.gitrole'), '{}\n', 'utf8');
-  const afterPolicy = runPrompt(workspace.repo, {
-    ...workspace.env,
-    GITROLE_FAKE_LINE2:
-      'role=client-acme scope=local override=true commit=ok remote=ok auth=ok policy=warn overall=warning'
-  });
-
-  assert.equal(afterPolicy.stdout, 'gitrole:client-acme ⚠\n');
-  assert.equal(await readCount(workspace.countFile), 2);
+  assert.equal(await readArgs(workspace.argsFile), 'status --short --offline\n');
 
   const configPath = path.join(workspace.repo, '.git', 'config');
   await writeFile(configPath, `${await readFile(configPath, 'utf8')}\n# touched\n`, 'utf8');
   const afterConfig = runPrompt(workspace.repo, {
     ...workspace.env,
-    GITROLE_FAKE_LINE: statusShortBaseline.line,
-    GITROLE_FAKE_LINE2: 'role=personal scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning'
+    GITROLE_FAKE_LINE:
+      'role=personal scope=local override=true commit=ok remote=ok auth=na policy=na overall=warning'
   });
 
   assert.equal(afterConfig.stdout, 'gitrole:personal ⚠\n');
-  assert.equal(await readCount(workspace.countFile), 3);
-
-  const rolesDir = path.join(workspace.home, '.config', 'gitrole');
-  await mkdir(rolesDir, { recursive: true });
-  await writeFile(path.join(rolesDir, 'roles.json'), '{"roles":[]}\n', 'utf8');
-  const afterRoles = runPrompt(workspace.repo, workspace.env);
-
-  assert.equal(afterRoles.stdout, `${alignedSegment}\n`);
-  assert.equal(await readCount(workspace.countFile), 4);
+  assert.equal(
+    await readArgs(workspace.argsFile),
+    'status --short --offline\nstatus --short --offline\n'
+  );
 
   const afterAuthor = runPrompt(workspace.repo, {
     ...workspace.env,
     GIT_AUTHOR_EMAIL: 'other@example.com',
-    GITROLE_FAKE_LINE2: 'role=personal scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning'
+    GITROLE_FAKE_LINE: 'role=work scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning'
   });
 
-  assert.equal(afterAuthor.stdout, 'gitrole:personal ⚠\n');
-  assert.equal(await readCount(workspace.countFile), 5);
-
-  runGit(
-    workspace.repo,
-    [
-      '-c',
-      'user.name=Test',
-      '-c',
-      'user.email=test@example.com',
-      '-c',
-      'commit.gpgsign=false',
-      'commit',
-      '--allow-empty',
-      '-m',
-      'init'
-    ],
-    workspace.env
-  );
-  const afterCommit = runPrompt(workspace.repo, workspace.env);
-
-  assert.equal(afterCommit.stdout, `${alignedSegment}\n`);
-  assert.equal(await readCount(workspace.countFile), 6);
+  assert.equal(afterAuthor.stdout, `${warningSegment}\n`);
+  assert.equal((await readArgs(workspace.argsFile)).trim().split('\n').length, 3);
+  assert.doesNotMatch(await readArgs(workspace.argsFile), /status --short\n/);
 });
 
-test('prompt segment treats status exit 2 as a warning line and exit 1 as unknown', async () => {
+test('prompt segment treats offline exit 2 as a warning and exit 1 as unknown', async () => {
   const warned = await makeWorkspace();
   const warning = runPrompt(warned.repo, {
     ...warned.env,
     GITROLE_FAKE_EXIT: '2',
     GITROLE_FAKE_LINE:
-      'role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning'
+      'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=warning'
   });
 
   assert.equal(warning.status, 0);
   assert.equal(warning.stdout, `${warningSegment}\n`);
   assert.equal(warning.stderr, '');
-  assert.equal(await readCount(warned.countFile), 1);
-
-  const cachedWarning = runPrompt(warned.repo, warned.env);
-  assert.equal(cachedWarning.stdout, `${warningSegment}\n`);
-  assert.equal(await readCount(warned.countFile), 1);
+  assert.match(await readArgs(warned.argsFile), /^status --short --offline\n$/);
 
   const failed = await makeWorkspace();
   const failure = runPrompt(failed.repo, {
@@ -264,11 +192,6 @@ test('prompt segment treats status exit 2 as a warning line and exit 1 as unknow
   assert.equal(failure.status, 0);
   assert.equal(failure.stdout, `${unknownSegment}\n`);
   assert.equal(failure.stderr, '');
-  assert.equal(await readCount(failed.countFile), 1);
-
-  const cachedFailure = runPrompt(failed.repo, failed.env);
-  assert.equal(cachedFailure.stdout, `${unknownSegment}\n`);
-  assert.equal(await readCount(failed.countFile), 1);
 });
 
 test('prompt segment rejects a multiline status line', async () => {
@@ -282,108 +205,6 @@ test('prompt segment rejects a multiline status line', async () => {
   assert.equal(result.status, 0);
 });
 
-test('prompt segment follows a linked gitdir file', async () => {
-  const workspace = await makeWorkspace();
-  const linked = path.join(workspace.root, 'linked dir');
-  await mkdir(linked);
-  await writeFile(path.join(linked, '.git'), `gitdir: ${path.join(workspace.repo, '.git')}\n`, 'utf8');
-
-  const first = runPrompt(linked, workspace.env);
-  assert.equal(first.stdout, `${alignedSegment}\n`);
-  assert.equal(await readCount(workspace.countFile), 1);
-
-  const configPath = path.join(workspace.repo, '.git', 'config');
-  await writeFile(configPath, `${await readFile(configPath, 'utf8')}\n# linked\n`, 'utf8');
-  const second = runPrompt(linked, {
-    ...workspace.env,
-    GITROLE_FAKE_LINE2: 'role=personal scope=local override=true commit=warn remote=ok auth=ok policy=na overall=warning'
-  });
-
-  assert.equal(second.stdout, 'gitrole:personal ⚠\n');
-  assert.equal(await readCount(workspace.countFile), 2);
-});
-
-test('prompt TTL expiry prints the cached segment without waiting for status', async () => {
-  const workspace = await makeWorkspace();
-  const first = runPrompt(workspace.repo, workspace.env);
-  assert.equal(first.stdout, `${alignedSegment}\n`);
-
-  const cacheDirs = await listCacheDirs(workspace.cache);
-  assert.equal(cacheDirs.length, 1);
-  await writeFile(path.join(cacheDirs[0], 'cached_at'), '0\n', 'utf8');
-
-  const started = Date.now();
-  const stale = runPrompt(workspace.repo, {
-    ...workspace.env,
-    GITROLE_FAKE_SLEEP2: '1',
-    GITROLE_FAKE_LINE2:
-      'role=personal scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning'
-  });
-  const elapsed = Date.now() - started;
-
-  assert.equal(stale.status, 0);
-  assert.equal(stale.stdout, `${alignedSegment}\n`);
-  assert.ok(elapsed < 700, `stale prompt waited ${elapsed}ms`);
-
-  const deadline = Date.now() + 4000;
-  let refreshed = '';
-
-  while (Date.now() < deadline) {
-    refreshed = await readFile(path.join(cacheDirs[0], 'segment'), 'utf8');
-
-    if (refreshed.includes('personal')) {
-      break;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  assert.equal(refreshed.trim(), 'gitrole:personal ⚠');
-  assert.equal(await readCount(workspace.countFile), 2);
-
-  const next = runPrompt(workspace.repo, workspace.env);
-  assert.equal(next.stdout, 'gitrole:personal ⚠\n');
-  assert.equal(await readCount(workspace.countFile), 2);
-});
-
-test('prompt fingerprint mismatch waits for a live status', async () => {
-  const workspace = await makeWorkspace();
-  const first = runPrompt(workspace.repo, workspace.env);
-  assert.equal(first.stdout, `${alignedSegment}\n`);
-
-  const configPath = path.join(workspace.repo, '.git', 'config');
-  await writeFile(configPath, `${await readFile(configPath, 'utf8')}\n# sync\n`, 'utf8');
-
-  const started = Date.now();
-  const refreshed = runPrompt(workspace.repo, {
-    ...workspace.env,
-    GITROLE_FAKE_SLEEP: '0.4',
-    GITROLE_FAKE_LINE2: 'role=personal scope=local override=true commit=warn remote=ok auth=ok policy=na overall=warning'
-  });
-  const elapsed = Date.now() - started;
-
-  assert.equal(refreshed.stdout, 'gitrole:personal ⚠\n');
-  assert.ok(elapsed >= 350, `sync prompt returned in ${elapsed}ms`);
-  assert.equal(await readCount(workspace.countFile), 2);
-});
-
-test('prompt TTL 0 and --refresh both rerun status', async () => {
-  const workspace = await makeWorkspace();
-
-  runPrompt(workspace.repo, { ...workspace.env, GITROLE_PROMPT_TTL: '0' });
-  runPrompt(workspace.repo, { ...workspace.env, GITROLE_PROMPT_TTL: '0' });
-  assert.equal(await readCount(workspace.countFile), 2);
-
-  const cached = await makeWorkspace();
-  runPrompt(cached.repo, cached.env);
-  runPrompt(cached.repo, cached.env, ['--refresh']);
-  assert.equal(await readCount(cached.countFile), 2);
-
-  const unknown = runPrompt(cached.repo, cached.env, ['--nope']);
-  assert.equal(unknown.status, 2);
-  assert.match(unknown.stderr, /usage: gitrole-prompt/);
-});
-
 test('prompt segment reports an unknown role when gitrole is not on PATH', async () => {
   const workspace = await makeWorkspace();
   const result = runPrompt(workspace.repo, {
@@ -395,8 +216,18 @@ test('prompt segment reports an unknown role when gitrole is not on PATH', async
   assert.equal(result.stdout, `${unknownSegment}\n`);
 });
 
-test('readme and status help point at the prompt helper', async () => {
+test('prompt helper rejects unknown flags', async () => {
+  const workspace = await makeWorkspace();
+  const unknown = runPrompt(workspace.repo, workspace.env, ['--refresh']);
+
+  assert.equal(unknown.status, 2);
+  assert.match(unknown.stderr, /usage: gitrole-prompt/);
+  assert.equal(await readArgs(workspace.argsFile), '');
+});
+
+test('readme, status help, and the helper point at offline status', async () => {
   const readme = await readFile(readmePath, 'utf8');
+  const promptSource = await readFile(promptSourcePath, 'utf8');
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8')) as {
     bin: Record<string, string>;
     files: string[];
@@ -408,15 +239,13 @@ test('readme and status help point at the prompt helper', async () => {
 
   assert.match(readme, /gitrole-prompt/);
   assert.match(readme, /show-gitrole-in-your-shell-prompt/);
+  assert.match(readme, /--short --offline/);
+  assert.match(promptSource, /gitrole status --short --offline/);
+  assert.doesNotMatch(promptSource, /GITROLE_PROMPT_TTL/);
   assert.equal(packageJson.bin['gitrole-prompt'], 'shell/gitrole-prompt');
   assert.ok(packageJson.files.includes('shell'));
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /gitrole-prompt/);
+  assert.match(help.stdout, /--offline/);
   assert.match(help.stdout, /does not switch roles/);
+  assert.match(help.stdout, /status --short --offline/);
 });
-
-async function listCacheDirs(cacheRoot: string): Promise<string[]> {
-  const entries = await readdir(cacheRoot, { withFileTypes: true });
-
-  return entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(cacheRoot, entry.name));
-}

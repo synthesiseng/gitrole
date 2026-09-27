@@ -329,19 +329,27 @@ Examples:
     .command('status')
     .description('check whether the current repo is aligned for commit and push')
     .option('--short', 'show machine-friendly one-line status output')
+    .option('--offline', 'skip the live SSH githubUser probe and use local checks only')
     .addHelpText(
       'after',
       `
 
 Views:
   default   compact human-readable summary
-  --short   stable one-line format for scripts, prompts, and automation
+  --short    stable one-line format for scripts, prompts, and automation
+  --offline  skip the live SSH githubUser probe
 
 --short fields, in order:
   role scope override commit remote auth policy overall
 
+--offline keeps local checks: commit identity, env overrides, fresh-repo state,
+remote host, the HTTPS pin check, and .gitrole policy.
+SSH auth is na. That na does not by itself set overall=warning.
+HTTPS auth is unchanged, because it uses the saved role and .gitrole, not the network.
+
 Use this when you want to know whether the repo looks ready to commit or push.
 Use 'gitrole current' when you only want to know which saved role matches the active commit identity.
+Use 'gitrole status --short --offline' for a shell prompt. It does not open SSH.
 
 Policy:
   status warns only on actionable mismatches.
@@ -349,19 +357,20 @@ Policy:
   policy is ok, warn, or na. na means no .gitrole file is present.
   HTTPS origins report auth=na only when a repo pin allows the active role and that role has a githubUser.
   No pin or a github user mismatch is auth=warn.
-  SSH githubUser checks apply only to SSH remotes.
+  SSH githubUser checks apply only to SSH remotes, and only without --offline.
 
 Examples:
   $ gitrole status
   $ gitrole status --short
+  $ gitrole status --short --offline
 
 Shell prompt:
-  gitrole-prompt prints gitrole:<role> ✓ when overall=aligned, and gitrole:<role> ⚠ otherwise.
+  gitrole-prompt runs 'gitrole status --short --offline' and prints gitrole:<role> ✓ or gitrole:<role> ⚠.
   It is an opt-in helper. It does not switch roles.
 `
     )
-    .action(async (options: { short?: boolean }) => {
-      const result = await getStatus(dependencies);
+    .action(async (options: { short?: boolean; offline?: boolean }) => {
+      const result = await getStatus(dependencies, { offline: options.offline === true });
       io.stdout(options.short ? renderShortStatus(result) : renderStatus(result));
       commandExitCode = result.overall === 'aligned' ? 0 : 2;
     });
