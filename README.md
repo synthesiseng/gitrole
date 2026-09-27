@@ -36,6 +36,8 @@ npm install -g gitrole
 
 The npm package includes completion scripts for bash, zsh, and fish. They complete commands, flags, and saved role names. Installing gitrole does not enable them. You add the script to your shell.
 
+The package paths are `completions/gitrole.bash`, `completions/_gitrole`, and `completions/gitrole.fish`.
+
 See [Enable shell tab completion](https://docs.gitrole.dev/guides/enable-shell-tab-completion/).
 
 ## Quickstart

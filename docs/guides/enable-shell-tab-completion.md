@@ -59,10 +59,19 @@ autoload -Uz compinit
 compinit
 ```
 
-Project install or a repository checkout: set <code>completions</code> to the absolute directory that contains <code>_gitrole</code>. That directory is <code>node_modules/gitrole/completions</code> inside a project, or <code>completions</code> at the repo root.
+Project install, from that project directory:
 
 ```zsh
-completions="<!-- PATH TBD -->"
+completions="$(pwd)/node_modules/gitrole/completions"
+fpath=("$completions" $fpath)
+autoload -Uz compinit
+compinit
+```
+
+Repository checkout, from the repo root:
+
+```zsh
+completions="$(pwd)/completions"
 fpath=("$completions" $fpath)
 autoload -Uz compinit
 compinit
@@ -80,10 +89,16 @@ Global install:
 source "$(npm root -g)/gitrole/completions/gitrole.bash"
 ```
 
-Project install or a repository checkout: source the absolute path to <code>gitrole.bash</code>. That file is <code>node_modules/gitrole/completions/gitrole.bash</code> inside a project, or <code>completions/gitrole.bash</code> at the repo root.
+Project install, from that project directory:
 
 ```bash
-source "<!-- PATH TBD -->"
+source "$(pwd)/node_modules/gitrole/completions/gitrole.bash"
+```
+
+Repository checkout, from the repo root:
+
+```bash
+source "$(pwd)/completions/gitrole.bash"
 ```
 
 <h2 id="fish">fish</h2>
@@ -115,7 +130,9 @@ For every user on the machine, symlink <code>gitrole.fish</code> into a vendor d
 
 <h2 id="what-completes">What completes</h2>
 
-Tab offers the subcommands, including <code>import current</code> and <code>remote set</code>, and the flags documented for each command.
+Tab offers the subcommands, including <code>import current</code> and <code>remote set</code>, and the flags each completion script lists.
+
+For <code>gitrole status</code>, Tab offers <code>--short</code>. Type <code>--offline</code> until the scripts include it.
 
 Saved role names are offered for:
 
