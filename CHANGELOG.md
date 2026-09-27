@@ -13,6 +13,13 @@
 
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.10.0](https://github.com/synthesiseng/gitrole/compare/v0.9.1...v0.10.0) (2026-09-27)
+
+
+### Features
+
+* add shell tab completion for bash, zsh, and fish ([#70](https://github.com/synthesiseng/gitrole/issues/70)) ([e422313](https://github.com/synthesiseng/gitrole/commit/e422313f8b293f4aa441234e88cc90c10c44ab5e))
+
 ## [0.9.1](https://github.com/synthesiseng/gitrole/compare/v0.9.0...v0.9.1) (2026-09-27)
 
 
