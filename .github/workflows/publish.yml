@@ -138,3 +138,136 @@ jobs:
           else
             npm publish --provenance --access public
           fi
+
+  # Formula lives in synthesiseng/homebrew-tap (Formula/gitrole.rb), not this
+  # repo. Bump it only after a published release. workflow_dispatch backfills
+  # must not move the tap. Tap writes use HOMEBREW_TAP_TOKEN, a GitHub App
+  # installation token or fine-grained PAT with contents: write on that
+  # repository only. GITHUB_TOKEN stays read-only here, so a missing tap
+  # secret fails this job and does not publish to npm again.
+  brew-bump:
+    name: Bump Homebrew formula
+    needs: [publish]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require Homebrew tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not set." >&2
+            echo "Add a GitHub App installation token or fine-grained PAT that can push to synthesiseng/homebrew-tap only (contents: write on that repository)." >&2
+            echo "Do not use a broad organization PAT. npm publish already finished; this job does not publish again." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve package version
+        id: version
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release tag must use vX.Y.Z format; got $TAG_NAME" >&2
+            exit 1
+          fi
+
+          if [ "$TAG_NAME" != "v$PACKAGE_VERSION" ]; then
+            echo "release tag $TAG_NAME does not match package version $PACKAGE_VERSION" >&2
+            exit 1
+          fi
+
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+
+      # Publish can return before the registry serves the tarball. Retry, then
+      # hash the bytes Homebrew will install. A version that was already on
+      # npm still gets a formula bump; a missing tarball does not.
+      - name: Download npm tarball and compute sha256
+        id: tarball
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          url="https://registry.npmjs.org/gitrole/-/gitrole-${PACKAGE_VERSION}.tgz"
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL -o "$tmp" "$url"; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "npm tarball is not available at ${url}." >&2
+              echo "brew-bump runs only after publish succeeds, including when that version was already on npm. The registry did not serve the tarball." >&2
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+
+          if ! gzip -t "$tmp"; then
+            echo "Download from ${url} is not a gzip tarball." >&2
+            exit 1
+          fi
+
+          sha256="$(sha256sum "$tmp" | awk '{print $1}')"
+          if ! [[ "$sha256" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "sha256sum did not return 64 hex characters" >&2
+            exit 1
+          fi
+
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v5
+        with:
+          repository: synthesiseng/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Update Formula/gitrole.rb
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+          TARBALL_URL: ${{ steps.tarball.outputs.url }}
+          TARBALL_SHA256: ${{ steps.tarball.outputs.sha256 }}
+        run: node .github/scripts/bump-homebrew-formula.mjs homebrew-tap/Formula/gitrole.rb
+
+      # Push straight to the tap default branch, same as a brew bump bot.
+      # The token's actor must be allowed to push there.
+      - name: Commit and push formula bump
+        working-directory: homebrew-tap
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          if git diff --quiet -- Formula/gitrole.rb; then
+            echo "Formula/gitrole.rb already matches ${PACKAGE_VERSION}; nothing to push"
+            exit 0
+          fi
+
+          ruby -c Formula/gitrole.rb
+          git add Formula/gitrole.rb
+          git commit -m "chore(gitrole): bump formula to ${PACKAGE_VERSION}"
+          branch="$(git symbolic-ref --short HEAD)"
+          git push origin "HEAD:${branch}"
