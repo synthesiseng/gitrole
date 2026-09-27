@@ -18,11 +18,13 @@ Snippets run `gitrole status --short --offline` and pass that line to `gitrole-p
 
 `role` has to match a saved role token: lowercase letters, digits, `-`, and `_`. `no-role` is that shape, so a repo with no matching role shows `gitrole:no-role ⚠` when commit or policy is warn. Fields are read by name.
 
-`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `auth=ok` does not print `✓`.
+`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. Live auth verification is for push-time `gitrole doctor` and the optional check-only hook, not the prompt. On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `gitrole status --short --offline` does not emit `auth=ok`. `auth=ok` means the line did not come from `--offline`; the segment shows ⚠ because ✓ only covers the offline contract. `gitrole:? ⚠` stays reserved for an unreadable or malformed line, missing fields, a failed command, or `gitrole` not on `PATH`.
 
 Outside a git work tree the prompt prints nothing. The terminal needs UTF-8 for `✓` and `⚠`. The helper exits `0` when it prints a segment, including a warning, so the prompt itself does not fail. It does not switch roles, and it does not install hooks. There is no auth cache.
 
 <h2 id="install">Install</h2>
+
+The snippets need gitrole 0.9.0 or newer.
 
 A global install puts the helper on `PATH` next to `gitrole`:
 
@@ -56,6 +58,7 @@ The copy-paste files and the stdout contract are in `examples/prompt/` in the re
 Add this to `~/.config/starship.toml`. The command is the offline check, not a live SSH probe.
 
 ```toml
+# `when` walks up to the work tree. detect_folders = [".git"] would not.
 [custom.gitrole]
 shell = ["sh", "-c"]
 command = """
@@ -175,3 +178,13 @@ Offline status still reads local git config, author and committer env vars, whet
 It does not open SSH and it does not call GitHub. On an SSH remote, `auth=na`. `✓` means commit and policy are ok and auth was not checked. It does not mean the githubUser probe succeeded.
 
 `gitrole status` and `gitrole status --short` without `--offline` still probe SSH remotes. Use those when you want the network check. The prompt snippets do not.
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+The snippets need gitrole 0.9.0 or newer. That release added `gitrole status --short --offline` and `gitrole-prompt`.
+
+| What you see | What to check |
+| ------------ | ------------- |
+| `gitrole:? ⚠` | Status failed, `gitrole` is not on `PATH`, or the short line had no readable role. Run `gitrole status --short --offline` in that repo. Exit `1` prints the error on stderr and no line. A role token is lowercase letters, digits, `-`, and `_`, the same rule as a saved role name. |
+| no segment, and the shell says `gitrole-prompt: command not found` | `gitrole-prompt` is not on `PATH`. The snippets ignore a failed format pipe, so they print nothing. `npm install -g gitrole` installs both commands. `command -v gitrole-prompt` should print a path. |
+| nothing, outside a git work tree | Expected. The snippets do not run `gitrole` there. |

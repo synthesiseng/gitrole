@@ -77,11 +77,11 @@ if [ "$overall" != "aligned" ]; then
 fi
 ```
 
-<p>Prompt snippets call <code>gitrole status --short --offline</code> only. <code>gitrole:work ✓</code> means commit and policy are ok and auth was not checked. It does not mean network auth was verified. <code>auth=na</code> is a skipped probe, not a green auth check. <code>auth=ok</code> does not print <code>✓</code>. The segment lines and copy-paste snippets are in <code>examples/prompt/</code>. Setup for Starship, oh-my-zsh, zsh, bash, and fish is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
+<p>Prompt snippets call <code>gitrole status --short --offline</code> only. <code>gitrole:work ✓</code> means commit and policy are ok and auth was not checked. It does not mean network auth was verified. Live auth verification is for push-time <code>gitrole doctor</code> and the optional check-only hook, not the prompt. <code>auth=na</code> is a skipped probe, not a green auth check. <code>auth=ok</code> means the line did not come from <code>--offline</code>; the segment shows ⚠ because ✓ only covers the offline contract. <code>gitrole:? ⚠</code> stays reserved for an unreadable or malformed line, missing fields, a failed command, or <code>gitrole</code> not on <code>PATH</code>. The segment lines and copy-paste snippets are in <code>examples/prompt/</code>. Setup for Starship, oh-my-zsh, zsh, bash, and fish is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
 
 <h3 id="status-short-offline"><code>--offline</code></h3>
 
-<p><code>--offline</code> skips the live SSH <code>githubUser</code> probe. Field names and order stay the same. <code>auth=na</code> on SSH means the probe was skipped. That <code>na</code> does not by itself set <code>overall=warning</code>.</p>
+<p><code>--offline</code> skips the live SSH <code>githubUser</code> probe. Field names and order stay the same. <code>auth=na</code> on SSH means the probe was skipped. That <code>na</code> does not by itself set <code>overall=warning</code>. <code>--offline</code> does not emit <code>auth=ok</code>.</p>
 
 <p>Local checks still run: commit identity, <code>GIT_AUTHOR_*</code> and <code>GIT_COMMITTER_*</code> overrides, a fresh repo with no local role, remote host compared with the saved <code>githubHost</code>, and <code>.gitrole</code> policy.</p>
 

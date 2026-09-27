@@ -1,5 +1,6 @@
 # Calls `gitrole status --short --offline` only. No auth cache.
 # ✓ means commit and policy are ok and auth was not checked. ✓ ≠ auth verified.
+# `when` walks up to the work tree. detect_folders = [".git"] would not.
 # Contract: examples/prompt/README.md
 
 [custom.gitrole]

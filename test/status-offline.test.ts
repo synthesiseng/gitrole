@@ -14,6 +14,7 @@ import { summarizeAlignment } from '../src/application/alignment.js';
 import type { Role } from '../src/domain/role.js';
 
 const cliPath = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+const promptScriptPath = fileURLToPath(new URL('../../shell/gitrole-prompt', import.meta.url));
 
 const workRole: Role = {
   name: 'work',
@@ -55,6 +56,14 @@ function runStatus(repo: string, args: string[], env: NodeJS.ProcessEnv) {
     cwd: repo,
     encoding: 'utf8',
     env: { ...env, NO_COLOR: '1', FORCE_COLOR: '0' }
+  });
+}
+
+function formatSegment(line: string) {
+  return spawnSync(promptScriptPath, ['--format'], {
+    encoding: 'utf8',
+    input: `${line.trim()}\n`,
+    env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }
   });
 }
 
@@ -244,6 +253,7 @@ test('status --short --offline does not run SSH and reports auth=na', async () =
     offline.stdout.trim(),
     'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned'
   );
+  assert.doesNotMatch(offline.stdout, /auth=ok/);
   assert.equal(markerAfterOffline, '');
 
   const reversed = runStatus(workspace.repo, ['--offline', '--short'], workspace.env);
@@ -298,6 +308,7 @@ test('status --short --offline keeps HTTPS pin, env, fresh-repo, and policy chec
 
   assert.equal(noPinOffline.status, 2, noPinOffline.stderr);
   assert.equal(noPinOffline.stdout.trim(), noPinLine);
+  assert.doesNotMatch(noPinOffline.stdout, /auth=ok/);
   assert.equal(noPinLive.stdout.trim(), noPinLine);
 
   await writePolicy(workspace.repo, 'work', ['work']);
@@ -308,6 +319,7 @@ test('status --short --offline keeps HTTPS pin, env, fresh-repo, and policy chec
 
   assert.equal(pinnedOffline.status, 0, pinnedOffline.stderr);
   assert.equal(pinnedOffline.stdout.trim(), pinnedLine);
+  assert.doesNotMatch(pinnedOffline.stdout, /auth=ok/);
   assert.equal(pinnedLive.stdout.trim(), pinnedLine);
 
   runGit(workspace.repo, ['config', 'user.name', 'Pat Person'], workspace.env);
@@ -366,4 +378,134 @@ test('status --short --offline keeps HTTPS pin, env, fresh-repo, and policy chec
     'role=work scope=global override=false commit=warn remote=warn auth=na policy=na overall=warning'
   );
   await assert.rejects(readFile(path.join(freshRoot, 'ssh-called'), 'utf8'));
+});
+
+test('status --short --offline never emits auth=ok', async () => {
+  const workspace = await makeRepo('gitrole-offline-auth-');
+  await saveRoles(workspace.configHome, [
+    {
+      name: 'work',
+      fullName: 'Alex Developer',
+      email: 'alex@work.example',
+      githubUser: 'alex-dev',
+      githubHost: 'github.com-work'
+    }
+  ]);
+  runGit(workspace.repo, ['config', 'user.name', 'Alex Developer'], workspace.env);
+  runGit(workspace.repo, ['config', 'user.email', 'alex@work.example'], workspace.env);
+  runGit(
+    workspace.repo,
+    ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'init'],
+    workspace.env
+  );
+  runGit(
+    workspace.repo,
+    ['remote', 'add', 'origin', 'git@github.com-work:acme/service.git'],
+    workspace.env
+  );
+
+  const offline = runStatus(workspace.repo, ['--short', '--offline'], workspace.env);
+  const live = runStatus(workspace.repo, ['--short'], workspace.env);
+
+  assert.equal(offline.status, 0, offline.stderr);
+  assert.match(offline.stdout, / auth=na /);
+  assert.doesNotMatch(offline.stdout, /auth=ok/);
+  assert.match(live.stdout, / auth=ok /);
+  assert.equal(formatSegment(offline.stdout).stdout, 'gitrole:work ✓\n');
+  assert.equal(await readFile(workspace.sshMarker, 'utf8'), 'called\n');
+});
+
+test('status --short --offline no-role is commit=warn and the segment is not a check', async () => {
+  const workspace = await makeRepo('gitrole-offline-norole-');
+  await saveRoles(workspace.configHome, [
+    {
+      name: 'work',
+      fullName: 'Alex Developer',
+      email: 'alex@work.example',
+      githubUser: 'alex-dev',
+      githubHost: 'github.com-work'
+    }
+  ]);
+  runGit(workspace.repo, ['config', 'user.name', 'Nobody'], workspace.env);
+  runGit(workspace.repo, ['config', 'user.email', 'nobody@example.com'], workspace.env);
+  runGit(
+    workspace.repo,
+    ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'init'],
+    workspace.env
+  );
+  runGit(
+    workspace.repo,
+    ['remote', 'add', 'origin', 'git@github.com-work:acme/service.git'],
+    workspace.env
+  );
+
+  const offline = runStatus(workspace.repo, ['--short', '--offline'], workspace.env);
+  const segment = formatSegment(offline.stdout);
+
+  assert.equal(offline.status, 2, offline.stderr);
+  assert.equal(
+    offline.stdout.trim(),
+    'role=no-role scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning'
+  );
+  assert.equal(segment.stdout, 'gitrole:no-role ⚠\n');
+  assert.equal(await readFile(workspace.sshMarker, 'utf8').catch(() => ''), '');
+});
+
+test('status --short --offline warns on author and committer email overrides', async () => {
+  const workspace = await makeRepo('gitrole-offline-env-');
+  await saveRoles(workspace.configHome, [
+    {
+      name: 'work',
+      fullName: 'Alex Developer',
+      email: 'alex@work.example',
+      githubUser: 'alex-dev',
+      githubHost: 'github.com-work'
+    }
+  ]);
+  runGit(workspace.repo, ['config', 'user.name', 'Alex Developer'], workspace.env);
+  runGit(workspace.repo, ['config', 'user.email', 'alex@work.example'], workspace.env);
+  runGit(
+    workspace.repo,
+    ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'init'],
+    workspace.env
+  );
+  runGit(
+    workspace.repo,
+    ['remote', 'add', 'origin', 'git@github.com-work:acme/service.git'],
+    workspace.env
+  );
+
+  const cases: Array<[string, NodeJS.ProcessEnv, string, string]> = [
+    [
+      'author-only',
+      { GIT_AUTHOR_EMAIL: 'other@example.com' },
+      'role=no-role scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning',
+      'gitrole:no-role ⚠\n'
+    ],
+    [
+      'committer-only',
+      { GIT_COMMITTER_EMAIL: 'other@example.com' },
+      'role=work scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning',
+      'gitrole:work ⚠\n'
+    ],
+    [
+      'both',
+      { GIT_AUTHOR_EMAIL: 'other@example.com', GIT_COMMITTER_EMAIL: 'another@example.com' },
+      'role=no-role scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning',
+      'gitrole:no-role ⚠\n'
+    ]
+  ];
+
+  for (const [name, extra, line, segment] of cases) {
+    const result = runStatus(workspace.repo, ['--short', '--offline'], {
+      ...workspace.env,
+      ...extra
+    });
+
+    assert.equal(result.status, 2, `${name} ${result.stderr}`);
+    assert.equal(result.stdout.trim(), line, name);
+    assert.match(result.stdout, /commit=warn/, name);
+    assert.doesNotMatch(result.stdout, /auth=ok/, name);
+    assert.equal(formatSegment(result.stdout).stdout, segment, name);
+  }
 });
