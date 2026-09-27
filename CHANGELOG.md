@@ -13,6 +13,13 @@
 
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.9.1](https://github.com/synthesiseng/gitrole/compare/v0.9.0...v0.9.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **prompt:** skip auth on every prompt and drop the segment cache ([#68](https://github.com/synthesiseng/gitrole/issues/68)) ([af19e12](https://github.com/synthesiseng/gitrole/commit/af19e124f406926ca9d206890f239de76d827b97))
+
 ## [0.9.0](https://github.com/synthesiseng/gitrole/compare/v0.8.0...v0.9.0) (2026-09-27)
 
 
