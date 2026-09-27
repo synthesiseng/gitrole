@@ -102,6 +102,12 @@ Make this distinction early:
 Install comes after understanding, not before:
 
 ```bash
+brew install synthesiseng/tap/gitrole
+```
+
+or with npm:
+
+```bash
 npm install -g gitrole
 ```
 

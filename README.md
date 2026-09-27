@@ -29,6 +29,12 @@ New features should reinforce that boundary rather than expanding into general a
 ## Install
 
 ```bash
+brew install synthesiseng/tap/gitrole
+```
+
+or with npm:
+
+```bash
 npm install -g gitrole
 ```
 

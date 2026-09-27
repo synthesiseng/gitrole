@@ -26,10 +26,21 @@ Outside a git work tree the prompt prints nothing. The terminal needs UTF-8 for 
 
 The snippets need gitrole 0.9.0 or newer.
 
-A global install puts the helper on `PATH` next to `gitrole`:
+Install puts `gitrole` and `gitrole-prompt` on `PATH`:
+
+```bash
+brew install synthesiseng/tap/gitrole
+```
+
+or with npm:
 
 ```bash
 npm install -g gitrole
+```
+
+Confirm the helper is on `PATH`:
+
+```bash
 command -v gitrole-prompt
 ```
 
@@ -186,5 +197,5 @@ The snippets need gitrole 0.9.0 or newer. That release added `gitrole status --s
 | What you see | What to check |
 | ------------ | ------------- |
 | `gitrole:? ⚠` | Status failed, `gitrole` is not on `PATH`, or the short line had no readable role. Run `gitrole status --short --offline` in that repo. Exit `1` prints the error on stderr and no line. A role token is lowercase letters, digits, `-`, and `_`, the same rule as a saved role name. |
-| no segment, and the shell says `gitrole-prompt: command not found` | `gitrole-prompt` is not on `PATH`. The snippets ignore a failed format pipe, so they print nothing. `npm install -g gitrole` installs both commands. `command -v gitrole-prompt` should print a path. |
+| no segment, and the shell says `gitrole-prompt: command not found` | `gitrole-prompt` is not on `PATH`. The snippets ignore a failed format pipe, so they print nothing. `brew install synthesiseng/tap/gitrole` or `npm install -g gitrole` installs both commands. `command -v gitrole-prompt` should print a path. |
 | nothing, outside a git work tree | Expected. The snippets do not run `gitrole` there. |
