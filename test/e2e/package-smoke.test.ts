@@ -3,22 +3,51 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = process.cwd();
 const packageJsonPath = path.join(repoRoot, 'package.json');
+const liveObservedStatePath = path.join(repoRoot, 'dist/application/observed-state.js');
+const stagedCopyIgnores = new Set(['.git', 'dist', 'dist-test', 'node_modules']);
+
+/*
+ * prepack runs tsc, which truncates each dist file before writing it back.
+ * Packing the live repo races hermetic tests that are loading those modules.
+ */
+async function stagePackProject(destination: string): Promise<void> {
+  await cp(repoRoot, destination, {
+    recursive: true,
+    filter(source) {
+      const relativePath = path.relative(repoRoot, source);
+
+      if (!relativePath) {
+        return true;
+      }
+
+      const [topLevel] = relativePath.split(path.sep);
+
+      return !stagedCopyIgnores.has(topLevel);
+    }
+  });
+  await symlink(path.join(repoRoot, 'node_modules'), path.join(destination, 'node_modules'), 'dir');
+}
 
 test('package smoke: npm pack includes the published CLI entrypoint and metadata', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-pack-'));
+  const stageDir = path.join(tempDir, 'stage');
   const npmCacheDir = path.join(tempDir, 'npm-cache');
+  const observedStateBefore = await stat(liveObservedStatePath);
+
+  await stagePackProject(stageDir);
+
   const packResult = spawnSync(
     'npm',
     ['pack', '--json', '--pack-destination', tempDir],
     {
-      cwd: repoRoot,
+      cwd: stageDir,
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -66,20 +95,30 @@ test('package smoke: npm pack includes the published CLI entrypoint and metadata
   assert.deepEqual(packedManifest.bin, {
     gitrole: 'dist/cli/index.js'
   });
+
+  const observedStateAfter = await stat(liveObservedStatePath);
+  assert.equal(
+    observedStateAfter.mtimeMs,
+    observedStateBefore.mtimeMs,
+    'npm pack must not rebuild the dist tree other e2e tests are executing'
+  );
 });
 
 const installSmoke = process.env.GITROLE_RUN_INSTALL_SMOKE === '1' ? test : test.skip;
 
 installSmoke('package smoke: tarball installs and runs gitrole --help', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-install-smoke-'));
+  const stageDir = path.join(tempDir, 'stage');
   const npmCacheDir = path.join(tempDir, 'npm-cache');
   const consumerDir = path.join(tempDir, 'consumer');
+
+  await stagePackProject(stageDir);
 
   const packResult = spawnSync(
     'npm',
     ['pack', '--json', '--pack-destination', tempDir],
     {
-      cwd: repoRoot,
+      cwd: stageDir,
       encoding: 'utf8',
       env: {
         ...process.env,
