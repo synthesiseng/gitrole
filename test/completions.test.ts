@@ -173,7 +173,7 @@ test('completion scripts exist and read role names from gitrole list', async () 
   );
   assert.match(guide, /layout: layouts\/base\.njk/);
   assert.match(guide, /eyebrow: Guide/);
-  assert.match(guide, /^order: 4$/m);
+  assert.match(guide, /^order: 5$/m);
   for (const sectionId of [
     'when-to-use-this',
     'where-the-scripts-live',

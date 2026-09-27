@@ -3,7 +3,7 @@ layout: layouts/base.njk
 title: Enable shell tab completion
 eyebrow: Guide
 summary: Enable tab completion for gitrole subcommands and saved role names in zsh, bash, and fish.
-order: 4
+order: 5
 ---
 
 <h2 id="when-to-use-this">When to use this</h2>
