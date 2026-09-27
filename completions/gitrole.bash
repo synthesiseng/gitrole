@@ -174,7 +174,7 @@ _gitrole() {
       ;;
     status)
       if [[ "$cur" == -* ]]; then
-        _gitrole_comp_words "--short --help -h"
+        _gitrole_comp_words "--short --offline --help -h"
       fi
       ;;
     doctor)
