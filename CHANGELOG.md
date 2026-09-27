@@ -17,6 +17,13 @@
 
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.10.2](https://github.com/synthesiseng/gitrole/compare/v0.10.1...v0.10.2) (2026-09-27)
+
+
+### Bug Fixes
+
+* **publish:** let npm trusted publishing use GitHub OIDC ([#76](https://github.com/synthesiseng/gitrole/issues/76)) ([7a9849b](https://github.com/synthesiseng/gitrole/commit/7a9849be288cad322939cd2b165ef72c25bb25c3))
+
 ## [0.10.1](https://github.com/synthesiseng/gitrole/compare/v0.10.0...v0.10.1) (2026-09-27)
 
 
