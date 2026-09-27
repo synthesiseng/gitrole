@@ -45,6 +45,7 @@ complete -c gitrole -f -n '__fish_seen_subcommand_from remove' -a '(__gitrole_ro
 
 complete -c gitrole -f -n '__fish_seen_subcommand_from resolve' -l json -d 'Write the repo policy as JSON'
 complete -c gitrole -f -n '__fish_seen_subcommand_from status' -l short -d 'Show machine-friendly one-line status output'
+complete -c gitrole -f -n '__fish_seen_subcommand_from status' -l offline -d 'Skip the live SSH githubUser probe and use local checks only'
 complete -c gitrole -f -n '__fish_seen_subcommand_from doctor' -l json -d 'Write the diagnostic result as JSON'
 
 complete -c gitrole -f -n '__fish_seen_subcommand_from remote; and not __fish_seen_subcommand_from set' -a set -d 'Rewrite origin to the role GitHub host alias'

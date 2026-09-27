@@ -138,6 +138,7 @@ case $state in
       status)
         _arguments \
           '--short[show machine-friendly one-line status output]' \
+          '--offline[skip the live SSH githubUser probe and use local checks only]' \
           '(- :)'{-h,--help}'[print help]' \
           && ret=0
         ;;

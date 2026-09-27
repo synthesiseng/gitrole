@@ -255,7 +255,7 @@ test('bash completion offers commands, flags, and saved role names', async () =>
   assertSameMembers(bashCompletions(env, 'gitrole pin ').values, roles, 'pin roles');
   assertSameMembers(bashCompletions(env, 'gitrole remove ').values, roles, 'remove roles');
   assert.deepEqual(bashCompletions(env, 'gitrole resolve --').values, ['--json', '--help']);
-  assert.deepEqual(bashCompletions(env, 'gitrole status --').values, ['--short', '--help']);
+  assert.deepEqual(bashCompletions(env, 'gitrole status --').values, ['--short', '--offline', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole current ').values, []);
   assert.deepEqual(bashCompletions(env, 'gitrole list --').values, ['--help']);
@@ -450,6 +450,7 @@ os.waitpid(pid, 0)
   assert.match(completed['gitrole add --'], /--email/);
   assert.match(completed['gitrole remote '], /\bset\b/);
   assert.match(completed['gitrole status --'], /--short/);
+  assert.match(completed['gitrole status --'], /--offline/);
   assert.match(completed['gitrole doctor --'], /--json/);
   assert.match(completed['gitrole resolve --'], /--json/);
 });
@@ -502,6 +503,7 @@ fishBehavior('fish completion offers commands, flags, and saved role names', asy
   assertSameMembers(fishCompletions(env, 'gitrole remove ').values, roles, 'remove roles');
   assert.ok(fishCompletions(env, 'gitrole resolve --').values.includes('--json'));
   assert.ok(fishCompletions(env, 'gitrole status --').values.includes('--short'));
+  assert.ok(fishCompletions(env, 'gitrole status --').values.includes('--offline'));
   assert.ok(fishCompletions(env, 'gitrole doctor --').values.includes('--json'));
   assert.deepEqual(fishCompletions(env, 'gitrole current ').values, []);
   assert.equal(fishCompletions(env, 'gitrole use ').stderr, '');
