@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Documentation
+
+* **prompt:** shell segment needs gitrole 0.9.0 or newer; document `gitrole:? ⚠`, a missing `gitrole-prompt` on `PATH`, and that `--offline` does not emit `auth=ok`
+
 ### Breaking Changes
 
 * **repo-policy:** `.gitrole` `defaultRole` and `allowedRoles` now use the same role-name rules as saved roles (`[a-z0-9_-]`: lowercase letters, numbers, `_`, and `-`) ([#55](https://github.com/synthesiseng/gitrole/issues/55)) ([c0e6f25](https://github.com/synthesiseng/gitrole/commit/c0e6f2575c64e04c0ddd580a30b5a4b6e040e458))

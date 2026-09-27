@@ -9,6 +9,12 @@
 # network auth was verified. auth=na is a skipped SSH probe, not a green auth
 # check. There is no cache.
 #
+# status --short --offline does not emit auth=ok. A line that still says
+# auth=ok is unexpected. The formatter prints gitrole:<role> ⚠ for it.
+#
+# Role tokens use validateRoleName in src/domain/role.ts (^[a-z0-9_-]+$).
+# The case pattern below is that rule in POSIX sh.
+#
 #   gitrole-prompt --format    parse one short line from stdin
 #   gitrole-prompt             inside a git repo, run status --short --offline once
 #
@@ -57,6 +63,7 @@ format_segment() {
     esac
   done
 
+  # validateRoleName: src/domain/role.ts
   case $_role in
     ''|*[!a-z0-9_-]*)
       printf '%s\n' 'gitrole:? ⚠'

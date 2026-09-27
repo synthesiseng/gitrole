@@ -81,7 +81,7 @@ fi
 
 <h3 id="status-short-offline"><code>--offline</code></h3>
 
-<p><code>--offline</code> skips the live SSH <code>githubUser</code> probe. Field names and order stay the same. <code>auth=na</code> on SSH means the probe was skipped. That <code>na</code> does not by itself set <code>overall=warning</code>.</p>
+<p><code>--offline</code> skips the live SSH <code>githubUser</code> probe. Field names and order stay the same. <code>auth=na</code> on SSH means the probe was skipped. That <code>na</code> does not by itself set <code>overall=warning</code>. <code>--offline</code> does not emit <code>auth=ok</code>.</p>
 
 <p>Local checks still run: commit identity, <code>GIT_AUTHOR_*</code> and <code>GIT_COMMITTER_*</code> overrides, a fresh repo with no local role, remote host compared with the saved <code>githubHost</code>, and <code>.gitrole</code> policy.</p>
 

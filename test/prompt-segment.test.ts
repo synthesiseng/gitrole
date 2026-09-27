@@ -9,6 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { validateRoleName } from '../src/domain/role.js';
 import {
   httpsPinAligned,
   statusShortBaseline,
@@ -21,6 +22,10 @@ const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.
 const readmePath = fileURLToPath(new URL('../../README.md', import.meta.url));
 const promptSourcePath = fileURLToPath(new URL('../../shell/gitrole-prompt', import.meta.url));
 const promptExamplesDir = fileURLToPath(new URL('../../examples/prompt/', import.meta.url));
+const promptGuidePath = fileURLToPath(
+  new URL('../../docs/guides/show-gitrole-in-your-shell-prompt.md', import.meta.url)
+);
+const contractsPath = fileURLToPath(new URL('../../docs/machine-readable-contracts.md', import.meta.url));
 
 const alignedSegment = 'gitrole:work ✓';
 const warningSegment = 'gitrole:work ⚠';
@@ -108,6 +113,12 @@ test('prompt segment checks commit and policy and does not treat auth as verifie
       'role=no-role scope=global override=false commit=warn remote=ok auth=na policy=na overall=warning',
       'gitrole:no-role ⚠'
     ],
+    // Current formatter behavior. status --offline does not emit an aligned
+    // no-role line (commit is warn). A check on this line is awaiting a decision.
+    [
+      'role=no-role scope=global override=false commit=ok remote=ok auth=na policy=na overall=aligned',
+      'gitrole:no-role ✓'
+    ],
     ['overall=aligned role=agent_bot', unknownSegment],
     [
       'role=agent_bot scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned',
@@ -125,6 +136,7 @@ test('prompt segment checks commit and policy and does not treat auth as verifie
       'role=work scope=local override=true commit=ok remote=warn auth=na policy=ok overall=warning',
       warningSegment
     ],
+    // auth=ok is not produced by status --offline. The formatter still prints the role with ⚠.
     [
       'role=work scope=local override=true commit=ok remote=ok auth=ok policy=ok overall=aligned',
       warningSegment
@@ -258,8 +270,12 @@ test('readme, status help, and the helper point at offline status', async () => 
   assert.match(readme, /--short --offline/);
   assert.match(readme, /auth was not checked/);
   assert.match(readme, /does not mean network auth was verified/);
+  assert.match(readme, /0\.9\.0 or newer/);
   assert.match(promptSource, /gitrole status --short --offline/);
   assert.match(promptSource, /auth was not checked/);
+  assert.match(promptSource, /does not emit auth=ok/);
+  assert.match(promptSource, /validateRoleName/);
+  assert.match(promptSource, /src\/domain\/role\.ts/);
   assert.doesNotMatch(promptSource, /GITROLE_PROMPT_TTL|GITROLE_PROMPT_CACHE/);
   assert.equal(packageJson.bin['gitrole-prompt'], 'shell/gitrole-prompt');
   assert.ok(packageJson.files.includes('shell'));
@@ -281,7 +297,18 @@ test('prompt snippets call status --short --offline only and keep the segment co
   assert.match(contract, /gitrole:\? ⚠/);
   assert.match(contract, /does not mean network auth was verified/);
   assert.match(contract, /role scope override commit remote auth policy overall/);
+  assert.match(contract, /0\.9\.0 or newer/);
+  assert.match(contract, /does not emit `auth=ok`/);
+  assert.match(contract, /`gitrole-prompt` is not on `PATH`/);
   assert.doesNotMatch(contract, /GITROLE_PROMPT_TTL|GITROLE_PROMPT_CACHE/);
+
+  const starship = await readFile(path.join(promptExamplesDir, 'starship.toml'), 'utf8');
+  const starshipCode = starship
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n');
+  assert.match(starshipCode, /git rev-parse --is-inside-work-tree/);
+  assert.doesNotMatch(starshipCode, /detect_folders/);
 
   for (const name of snippetNames) {
     const source = await readFile(path.join(promptExamplesDir, name), 'utf8');
@@ -330,4 +357,73 @@ test('prompt snippets call status --short --offline only and keep the segment co
   assert.equal(rendered.status, 0, rendered.stderr);
   assert.equal(rendered.stdout, 'gitrole:work ✓ ');
   assert.equal(await readFile(argsFile, 'utf8'), 'status --short --offline\n');
+});
+
+test('prompt guide documents the version floor and the two failure rows', async () => {
+  const guide = await readFile(promptGuidePath, 'utf8');
+  const contracts = await readFile(contractsPath, 'utf8');
+
+  assert.match(guide, /id="troubleshooting"/);
+  assert.match(guide, /0\.9\.0 or newer/);
+  assert.match(guide, /`gitrole:\? ⚠`/);
+  assert.match(guide, /`gitrole-prompt` is not on `PATH`/);
+  assert.match(guide, /does not emit `auth=ok`/);
+  assert.match(guide, /detect_folders = \["\.git"\] would not/);
+  assert.match(contracts, /does not emit <code>auth=ok<\/code>/);
+});
+
+test('prompt segment renders every role name validateRoleName accepts', () => {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789-_';
+  const names = new Set<string>([
+    'organization',
+    'azure',
+    'zzz',
+    'agent_bot',
+    'client-acme',
+    'no-role',
+    'a'.repeat(64),
+    '-lead',
+    '_0'
+  ]);
+
+  for (const char of alphabet) {
+    names.add(char);
+  }
+
+  for (const left of alphabet) {
+    for (const right of alphabet) {
+      names.add(`${left}${right}`);
+    }
+  }
+
+  const locales = ['C', 'C.UTF-8'];
+  const listed = spawnSync('locale', ['-a'], { encoding: 'utf8' });
+
+  if (listed.stdout.split('\n').some((line) => line === 'en_US.utf8' || line === 'en_US.UTF-8')) {
+    locales.push('en_US.UTF-8');
+  }
+
+  for (const locale of locales) {
+    for (const name of names) {
+      assert.equal(validateRoleName(name), name);
+      const line = `role=${name} scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned`;
+      const result = runPrompt(
+        os.tmpdir(),
+        { PATH: '/usr/bin:/bin', LC_ALL: locale },
+        ['--format'],
+        `${line}\n`
+      );
+
+      assert.equal(result.status, 0, `${locale} ${name}`);
+      assert.equal(result.stdout, `gitrole:${name} ✓\n`, `${locale} ${name}`);
+    }
+  }
+
+  for (const name of ['Work', 'A', 'my@role', 'work/main', 'role:prod', 'ä', '']) {
+    assert.throws(() => validateRoleName(name));
+    const line = `role=${name} scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned`;
+    const result = runPrompt(os.tmpdir(), { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, ['--format'], `${line}\n`);
+
+    assert.equal(result.stdout, `${unknownSegment}\n`, name);
+  }
 });

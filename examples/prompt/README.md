@@ -1,5 +1,7 @@
 # Shell prompt snippets
 
+Needs gitrole 0.9.0 or newer.
+
 Copy-paste setup for Starship, oh-my-zsh, zsh, bash, and fish. Shell setup docs can link this directory. The command and the lines below stay stable.
 
 ## Command
@@ -38,11 +40,14 @@ Glyphs are U+2713 CHECK MARK (`✓`) and U+26A0 WARNING SIGN (`⚠`), with no va
 
 `✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. `auth=na` is a skipped check, not a green auth check. `auth=ok` never prints `✓`.
 
+`gitrole status --short --offline` does not emit `auth=ok`. SSH auth is `na`. HTTPS auth is `na` or `warn`. A short line that still contains `auth=ok` is unexpected on this path. The formatter prints `gitrole:<role> ⚠` for it.
+
 | When | Stdout |
 | ---- | ------ |
 | `commit=ok`, `policy` is `ok` or `na`, `remote` is `ok` or `na`, `auth=na`, `overall=aligned`, and `role` matches `^[a-z0-9_-]+$` | `gitrole:<role> ✓` |
 | `commit`, `policy`, `remote`, or `auth` is `warn`, `auth=ok`, or `overall=warning`, with a role token | `gitrole:<role> ⚠` |
 | missing or invalid `role`, missing `commit` / `remote` / `auth` / `policy` / `overall`, more than one line, command failure, or `gitrole` not on `PATH` | `gitrole:? ⚠` |
+| `gitrole-prompt` is not on `PATH` | empty; the shell reports `gitrole-prompt: command not found`. Snippets ignore a failed format pipe, so they do not print `gitrole:? ⚠` |
 | outside a git work tree | empty, and `gitrole` is not called |
 
 `no-role`, `agent_bot`, and `client-acme` match the role token. `policy=na` means no `.gitrole` file. That can sit next to `✓` when commit is ok and auth was not checked.
