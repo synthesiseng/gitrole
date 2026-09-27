@@ -1,7 +1,7 @@
 /*
  * Implements repository diagnosis and post-switch alignment checks.
  */
-import type { Role } from '../../domain/role.js';
+import { isReservedRoleName, type Role } from '../../domain/role.js';
 import { describeHttpsAuth, findMatchingRole, findPinnedRole } from '../alignment.js';
 import {
   getDoctorOverall,
@@ -88,6 +88,29 @@ export async function assessRoleAlignment(
   };
 }
 
+function buildReservedRoleNameChecks(roles: Role[]): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+
+  for (const role of roles) {
+    if (!isReservedRoleName(role.name)) {
+      continue;
+    }
+
+    checks.push({
+      status: 'warn',
+      label: 'role',
+      message: `saved role "${role.name}" is reserved for the status and prompt sentinel`
+    });
+    checks.push({
+      status: 'info',
+      label: 'fix',
+      message: `rename saved role "${role.name}" (${role.fullName} <${role.email}>): gitrole add <name> --name "${role.fullName}" --email "${role.email}", then gitrole remove ${role.name}`
+    });
+  }
+
+  return checks;
+}
+
 function buildDoctorChecks(input: {
   role?: Role;
   roles: Role[];
@@ -120,6 +143,8 @@ function buildDoctorChecks(input: {
           : 'add a saved role for the active commit identity before committing'
     });
   }
+
+  checks.push(...buildReservedRoleNameChecks(input.roles));
 
   if (
     !observedState.commitIdentity.fullName.value ||

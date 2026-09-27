@@ -12,6 +12,7 @@ import {
   InvalidSavedRoleDataError,
   resolveRolesFilePath
 } from '../src/adapters/role-store.js';
+import { ReservedRoleNameError } from '../src/domain/role.js';
 
 test('role store adds, lists, gets, and removes roles', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-role-store-'));
@@ -119,6 +120,50 @@ test('role store rejects invalid persisted role names', async () => {
   );
 
   await assert.rejects(() => store.list(), InvalidSavedRoleDataError);
+});
+
+test('role store loads a legacy saved role named no-role without rewriting it', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-role-store-reserved-load-'));
+  const configFilePath = path.join(tempDir, 'gitrole', 'roles.json');
+  const raw = `${JSON.stringify(
+    {
+      roles: [
+        { name: 'work', fullName: 'Alex Developer', email: 'alex@work.example' },
+        { name: 'no-role', fullName: 'Pat Person', email: 'pat@personal.example' }
+      ]
+    },
+    null,
+    2
+  )}\n`;
+
+  await mkdir(path.dirname(configFilePath), { recursive: true });
+  await writeFile(configFilePath, raw, 'utf8');
+
+  const store = new FileRoleStore({ configFilePath });
+  const roles = await store.list();
+
+  assert.deepEqual(
+    roles.map((role) => role.name),
+    ['work', 'no-role']
+  );
+  assert.equal(await readFile(configFilePath, 'utf8'), raw);
+});
+
+test('role store refuses to save a role named no-role', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-role-store-reserved-'));
+  const configFilePath = path.join(tempDir, 'gitrole', 'roles.json');
+  const store = new FileRoleStore({ configFilePath });
+
+  await assert.rejects(
+    () =>
+      store.save({
+        name: 'no-role',
+        fullName: 'Alex Developer',
+        email: 'alex@work.example'
+      }),
+    ReservedRoleNameError
+  );
+  assert.deepEqual(await store.list(), []);
 });
 
 test('role store rejects mixed valid and invalid persisted roles', async () => {

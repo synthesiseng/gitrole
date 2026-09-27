@@ -16,7 +16,7 @@ Snippets run `gitrole status --short --offline` and pass that line to `gitrole-p
 | `commit`, `policy`, `remote`, or `auth` is `warn`, `auth=ok`, or `overall=warning` | `gitrole:work ⚠` |
 | status failed, or `role` or those fields are missing or `role` is not a role token | `gitrole:? ⚠` |
 
-`role` has to match a saved role token: lowercase letters, digits, `-`, and `_`. `no-role` is that shape, so a repo with no matching role shows `gitrole:no-role ⚠` when commit or policy is warn. Fields are read by name.
+`role` has to match a saved role token: lowercase letters, digits, `-`, and `_`. `no-role` is that shape, so a repo with no matching role shows `gitrole:no-role ⚠` when commit or policy is warn. A hand-built aligned line with `role=no-role` still shows `gitrole:no-role ✓`. The glyph comes from the status fields. `no-role` cannot be saved as a role name. Fields are read by name.
 
 `✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. Live auth verification is for push-time `gitrole doctor` and the optional check-only hook, not the prompt. On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `gitrole status --short --offline` does not emit `auth=ok`. `auth=ok` means the line did not come from `--offline`; the segment shows ⚠ because ✓ only covers the offline contract. `gitrole:? ⚠` stays reserved for an unreadable or malformed line, missing fields, a failed command, or `gitrole` not on `PATH`.
 

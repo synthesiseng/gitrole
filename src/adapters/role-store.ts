@@ -5,7 +5,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { normalizeRole, type Role } from '../domain/role.js';
+import { normalizeRole, normalizeStoredRole, type Role } from '../domain/role.js';
 
 interface StoredRoles {
   roles: Role[];
@@ -152,7 +152,7 @@ function parseStoredRole(input: unknown): Role {
   };
 
   try {
-    return normalizeRole(role);
+    return normalizeStoredRole(role);
   } catch {
     throw new InvalidSavedRoleDataError();
   }

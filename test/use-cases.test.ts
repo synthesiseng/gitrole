@@ -25,7 +25,7 @@ import type { AppDependencies, DoctorDependencies } from '../src/application/con
 import { summarizeAlignment } from '../src/application/alignment.js';
 import { RepoPolicyAlreadyExistsError } from '../src/application/repo-policy.js';
 import { parseRemoteUrl } from '../src/adapters/git-repository.js';
-import { InvalidRoleNameError, type Role } from '../src/domain/role.js';
+import { InvalidRoleNameError, ReservedRoleNameError, type Role } from '../src/domain/role.js';
 
 function getOriginRemote(url?: string) {
   return url ? parseRemoteUrl('origin', url) : undefined;
@@ -247,7 +247,7 @@ test('add-role accepts contract-safe role names', async () => {
     }
   };
 
-  for (const name of ['work', 'client-acme', 'agent_bot']) {
+  for (const name of ['work', 'client-acme', 'agent_bot', 'no_role', 'norole']) {
     const role = await addRole(dependencies, {
       name,
       fullName: 'Alex Developer',
@@ -259,8 +259,39 @@ test('add-role accepts contract-safe role names', async () => {
 
   assert.deepEqual(
     saved.map((role) => role.name),
-    ['work', 'client-acme', 'agent_bot']
+    ['work', 'client-acme', 'agent_bot', 'no_role', 'norole']
   );
+});
+
+test('add-role rejects the reserved sentinel name no-role', async () => {
+  let saved = false;
+  const { dependencies } = createDependencies({
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  });
+  dependencies.roleStore.save = async () => {
+    saved = true;
+  };
+
+  await assert.rejects(
+    () =>
+      addRole(dependencies, {
+        name: 'no-role',
+        fullName: 'Alex Developer',
+        email: 'alex@work.example'
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ReservedRoleNameError);
+      assert.equal(
+        error.message,
+        'role name "no-role" is reserved for the status and prompt sentinel when no saved role matches; choose a different name'
+      );
+      assert.doesNotMatch(error.message, /use lowercase letters/);
+      return true;
+    }
+  );
+  assert.equal(saved, false);
 });
 
 test('add-role rejects invalid role names', async () => {
@@ -741,6 +772,80 @@ test('import current rejects invalid role names before saving', async () => {
   );
 });
 
+test('import current rejects the reserved sentinel name no-role before saving', async () => {
+  let saved = false;
+
+  await assert.rejects(
+    () =>
+      importCurrentRole(
+        {
+          roleStore: {
+            async list() {
+              return [];
+            },
+            async get() {
+              return undefined;
+            },
+            async save() {
+              saved = true;
+            },
+            async remove() {
+              return true;
+            }
+          },
+          gitConfig: {
+            async getGlobalUserName() {
+              return 'Alex Developer';
+            },
+            async getGlobalUserEmail() {
+              return 'alex@work.example';
+            },
+            async setGlobalUserName() {
+              return undefined;
+            },
+            async setGlobalUserEmail() {
+              return undefined;
+            }
+          },
+          sshAgent: {
+            async loadKey() {
+              return { ok: true };
+            }
+          },
+          repository: {
+            async getLocalUserName() {
+              return undefined;
+            },
+            async getLocalUserEmail() {
+              return undefined;
+            }
+          }
+        },
+        'no-role'
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ReservedRoleNameError);
+      assert.match(error.message, /role name "no-role" is reserved/);
+      return true;
+    }
+  );
+  assert.equal(saved, false);
+});
+
+test('remove-role still deletes a legacy saved role named no-role', async () => {
+  const role: Role = {
+    name: 'no-role',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const { dependencies } = createDependencies(role);
+
+  const removed = await removeRole(dependencies, 'no-role');
+
+  assert.equal(removed.name, 'no-role');
+  assert.equal(removed.email, 'alex@work.example');
+});
+
 test('role-referencing commands reject invalid role names consistently', async () => {
   const role: Role = {
     name: 'work',
@@ -751,6 +856,7 @@ test('role-referencing commands reject invalid role names consistently', async (
   const { dependencies } = createDependencies(role);
 
   await assert.rejects(() => useRole(dependencies, 'client acme'), InvalidRoleNameError);
+  await assert.rejects(() => useRole(dependencies, 'no-role'), ReservedRoleNameError);
   await assert.rejects(() => removeRole(dependencies, 'client acme'), InvalidRoleNameError);
   await assert.rejects(
     () =>
@@ -769,6 +875,24 @@ test('role-referencing commands reject invalid role names consistently', async (
         'client acme'
       ),
     InvalidRoleNameError
+  );
+  await assert.rejects(
+    () =>
+      pinRepoPolicy(
+        {
+          roleStore: dependencies.roleStore,
+          repository: {
+            async isInsideWorkTree() {
+              return true;
+            },
+            async getTopLevelPath() {
+              return '/tmp/gitrole';
+            }
+          }
+        },
+        'no-role'
+      ),
+    ReservedRoleNameError
   );
   await assert.rejects(
     () =>
@@ -2412,4 +2536,77 @@ test('doctor adds a fix hint when no saved role matches the active commit identi
   assert.equal(status.commit, 'warn');
   assert.equal(status.remote, 'ok');
   assert.equal(status.auth, 'ok');
+  assert.equal(
+    result.checks.some((check) => check.message.includes('reserved for the status and prompt sentinel')),
+    false
+  );
+});
+
+test('doctor flags a legacy saved role named no-role and still reports status', async () => {
+  const role: Role = {
+    name: 'no-role',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const dependencies = createDoctorDependencies(role);
+  const result = await doctor(dependencies);
+
+  assert.equal(result.role?.name, 'no-role');
+  assert.equal(result.overall, 'warning');
+  assert.equal(
+    result.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.label === 'role' &&
+        check.message === 'saved role "no-role" is reserved for the status and prompt sentinel'
+    ),
+    true
+  );
+  assert.equal(
+    result.checks.some(
+      (check) =>
+        check.status === 'info' &&
+        check.label === 'fix' &&
+        check.message ===
+          'rename saved role "no-role" (Alex Developer <alex@work.example>): gitrole add <name> --name "Alex Developer" --email "alex@work.example", then gitrole remove no-role'
+    ),
+    true
+  );
+
+  const status = await getStatus(dependencies);
+  assert.equal(status.roleName, 'no-role');
+  assert.equal(status.commit, 'ok');
+});
+
+test('doctor flags a stored no-role role that is not the active identity', async () => {
+  const reserved: Role = {
+    name: 'no-role',
+    fullName: 'Old Name',
+    email: 'old@example.com'
+  };
+  const active: Role = {
+    name: 'work',
+    fullName: 'Alex Developer',
+    email: 'alex@work.example'
+  };
+  const result = await doctor(
+    createDoctorDependencies(active, {
+      roles: [active, reserved]
+    })
+  );
+
+  assert.equal(result.role?.name, 'work');
+  assert.equal(result.overall, 'warning');
+  assert.equal(
+    result.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.message === 'saved role "no-role" is reserved for the status and prompt sentinel'
+    ),
+    true
+  );
+  assert.equal(
+    result.checks.some((check) => check.message.includes('gitrole remove no-role')),
+    true
+  );
 });

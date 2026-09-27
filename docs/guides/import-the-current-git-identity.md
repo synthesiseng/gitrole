@@ -53,12 +53,18 @@ If the role name already exists, import replaces that saved role with the curren
 
 <h2 id="role-names">Role names</h2>
 
-<code>&lt;role&gt;</code> uses the same rules as <code>gitrole add</code>: lowercase letters, numbers, <code>-</code>, and <code>_</code>.
+<code>&lt;role&gt;</code> uses the same rules as <code>gitrole add</code>: lowercase letters, numbers, <code>-</code>, and <code>_</code>. <code>no-role</code> is reserved for the status and prompt sentinel, so it cannot be saved.
 
 An invalid name fails before anything is saved. The command exits <code>1</code>, writes the error to stderr, and prints nothing on stdout:
 
 ```text
 error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
+```
+
+The reserved name fails the same way, with its own message:
+
+```text
+error: role name "no-role" is reserved for the status and prompt sentinel when no saved role matches; choose a different name
 ```
 
 <h2 id="when-it-fails">When the current identity is incomplete</h2>

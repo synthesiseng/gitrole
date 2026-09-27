@@ -4,6 +4,7 @@
 import {
   matchesIdentity,
   normalizeRole,
+  parseStoredRoleName,
   validateRoleName,
   type Role
 } from '../../domain/role.js';
@@ -253,7 +254,7 @@ export async function removeRole(
   dependencies: AppDependencies,
   name: string
 ): Promise<Role> {
-  const roleName = validateRoleName(name);
+  const roleName = parseStoredRoleName(name);
   const role = await dependencies.roleStore.get(roleName);
 
   if (!role) {

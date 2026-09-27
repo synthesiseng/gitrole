@@ -15,7 +15,7 @@ import type {
   StatusResult,
   UseRoleResult
 } from '../application/contracts.js';
-import type { Role } from '../domain/role.js';
+import { UNMATCHED_ROLE_NAME, type Role } from '../domain/role.js';
 
 export function renderSavedRole(role: Role): string {
   const lines = [
@@ -150,7 +150,9 @@ export function renderStatus(result: StatusResult): string {
   const summary =
     result.overall === 'aligned' ? chalk.green(result.overall) : chalk.yellow(result.overall);
   const roleLabel =
-    result.roleName === 'no-role' ? chalk.yellow('no matching role') : chalk.bold(result.roleName);
+    result.roleName === UNMATCHED_ROLE_NAME
+      ? chalk.yellow('no matching role')
+      : chalk.bold(result.roleName);
 
   const lines = [`${roleLabel}  ${summary}`];
 

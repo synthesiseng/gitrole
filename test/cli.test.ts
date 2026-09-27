@@ -321,6 +321,166 @@ test('cli import current rejects invalid role names with the same clear error', 
   );
 });
 
+test('cli add rejects the reserved role name no-role and leaves a legacy role in place', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-add-reserved-role-'));
+  const configHome = path.join(tempDir, 'config');
+  const rolesFile = path.join(configHome, 'gitrole', 'roles.json');
+  const legacy = `${JSON.stringify(
+    {
+      roles: [
+        {
+          name: 'no-role',
+          fullName: 'Alex Developer',
+          email: 'alex@work.example'
+        }
+      ]
+    },
+    null,
+    2
+  )}\n`;
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: configHome
+  };
+
+  await mkdir(path.dirname(rolesFile), { recursive: true });
+  await writeFile(rolesFile, legacy, 'utf8');
+
+  const result = spawnSync(
+    process.execPath,
+    [cliPath, 'add', 'no-role', '--name', 'Alex Developer', '--email', 'alex@work.example'],
+    {
+      encoding: 'utf8',
+      env
+    }
+  );
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(
+    result.stderr,
+    /error: role name "no-role" is reserved for the status and prompt sentinel when no saved role matches; choose a different name/
+  );
+  assert.doesNotMatch(result.stderr, /invalid role name/);
+  assert.equal(await readFile(rolesFile, 'utf8'), legacy);
+});
+
+test('cli import current rejects the reserved role name no-role', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-import-reserved-role-'));
+  const configHome = path.join(tempDir, 'config');
+  const repoDir = await initRealRepo('gitrole-cli-import-reserved-role-repo-');
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: configHome
+  };
+
+  runGit(['config', '--global', 'user.name', 'Alex Developer'], repoDir, env);
+  runGit(['config', '--global', 'user.email', 'alex@work.example'], repoDir, env);
+
+  const result = spawnSync(
+    process.execPath,
+    [cliPath, 'import', 'current', '--name', 'no-role'],
+    {
+      cwd: repoDir,
+      encoding: 'utf8',
+      env
+    }
+  );
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(
+    result.stderr,
+    /error: role name "no-role" is reserved for the status and prompt sentinel when no saved role matches; choose a different name/
+  );
+  await assert.rejects(() => readFile(path.join(configHome, 'gitrole', 'roles.json'), 'utf8'));
+});
+
+test('cli doctor flags a legacy saved role named no-role and status still prints', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-doctor-reserved-role-'));
+  const configHome = path.join(tempDir, 'config');
+  const repoDir = await initRealRepo('gitrole-cli-doctor-reserved-role-repo-');
+  const rolesFile = path.join(configHome, 'gitrole', 'roles.json');
+  const legacy = `${JSON.stringify(
+    {
+      roles: [
+        {
+          name: 'no-role',
+          fullName: 'Alex Developer',
+          email: 'alex@work.example'
+        }
+      ]
+    },
+    null,
+    2
+  )}\n`;
+  const env = {
+    ...process.env,
+    HOME: tempDir,
+    XDG_CONFIG_HOME: configHome
+  };
+
+  await mkdir(path.dirname(rolesFile), { recursive: true });
+  await writeFile(rolesFile, legacy, 'utf8');
+  runGit(['config', '--global', 'user.name', 'Alex Developer'], repoDir, env);
+  runGit(['config', '--global', 'user.email', 'alex@work.example'], repoDir, env);
+
+  const doctorResult = spawnSync(process.execPath, [cliPath, 'doctor', '--json'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    env
+  });
+  const diagnosis = JSON.parse(doctorResult.stdout) as {
+    overall: string;
+    role?: { name: string };
+    checks: Array<{ status: string; label: string; message: string }>;
+  };
+
+  assert.equal(doctorResult.status, 2);
+  assert.equal(doctorResult.stderr, '');
+  assert.equal(diagnosis.overall, 'warning');
+  assert.equal(diagnosis.role?.name, 'no-role');
+  assert.equal(
+    diagnosis.checks.some(
+      (check) =>
+        check.status === 'warn' &&
+        check.label === 'role' &&
+        check.message === 'saved role "no-role" is reserved for the status and prompt sentinel'
+    ),
+    true
+  );
+  assert.equal(
+    diagnosis.checks.some(
+      (check) => check.status === 'info' && check.label === 'fix' && check.message.includes('gitrole remove no-role')
+    ),
+    true
+  );
+  assert.equal(await readFile(rolesFile, 'utf8'), legacy);
+
+  const statusResult = spawnSync(process.execPath, [cliPath, 'status', '--short', '--offline'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    env
+  });
+
+  assert.notEqual(statusResult.status, 1);
+  assert.equal(statusResult.stderr, '');
+  assert.match(statusResult.stdout, /^role=no-role /);
+
+  const removeResult = spawnSync(process.execPath, [cliPath, 'remove', 'no-role'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+    env
+  });
+
+  assert.equal(removeResult.status, 0);
+  assert.match(removeResult.stdout, /removed\s+no-role/);
+  assert.equal(removeResult.stderr, '');
+  assert.doesNotMatch(await readFile(rolesFile, 'utf8'), /"name": "no-role"/);
+});
+
 test('cli pin rejects fixture invalid-role-name-spaces before writing .gitrole', async () => {
   const repoDir = await initRealRepo('gitrole-cli-pin-invalid-role-name-spaces-');
   const result = spawnSync(process.execPath, [cliPath, 'pin', 'client acme'], {
