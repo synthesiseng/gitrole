@@ -17,6 +17,7 @@
 #
 #   gitrole-prompt --format    parse one short line from stdin
 #
+# Contract: examples/prompt/README.md
 # Docs: docs/guides/show-gitrole-in-your-shell-prompt.md
 
 set -u

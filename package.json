@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "hooks",
-    "shell"
+    "shell",
+    "skills"
   ],
   "engines": {
     "node": ">=20"

@@ -20,6 +20,7 @@ const cliPath = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
 const readmePath = fileURLToPath(new URL('../../README.md', import.meta.url));
 const promptSourcePath = fileURLToPath(new URL('../../shell/gitrole-prompt', import.meta.url));
+const promptExamplesDir = fileURLToPath(new URL('../../examples/prompt/', import.meta.url));
 
 const alignedSegment = 'gitrole:work ✓';
 const warningSegment = 'gitrole:work ⚠';
@@ -239,6 +240,7 @@ test('readme, status help, and the helper point at offline status', async () => 
 
   assert.match(readme, /gitrole-prompt/);
   assert.match(readme, /show-gitrole-in-your-shell-prompt/);
+  assert.match(readme, /examples\/prompt/);
   assert.match(readme, /--short --offline/);
   assert.match(promptSource, /gitrole status --short --offline/);
   assert.doesNotMatch(promptSource, /GITROLE_PROMPT_TTL/);
@@ -248,4 +250,57 @@ test('readme, status help, and the helper point at offline status', async () => 
   assert.match(help.stdout, /--offline/);
   assert.match(help.stdout, /does not switch roles/);
   assert.match(help.stdout, /status --short --offline/);
+});
+
+test('prompt snippets call gitrole-prompt and keep the segment contract', async () => {
+  const contract = await readFile(path.join(promptExamplesDir, 'README.md'), 'utf8');
+  const snippetNames = ['starship.toml', 'oh-my-zsh.zsh', 'zsh.zsh', 'bash.sh', 'fish.fish'];
+
+  assert.match(contract, /gitrole status --short --offline/);
+  assert.match(contract, /gitrole:<role> ✓/);
+  assert.match(contract, /gitrole:<role> ⚠/);
+  assert.match(contract, /gitrole:\? ⚠/);
+  assert.match(contract, /role scope override commit remote auth policy overall/);
+  assert.doesNotMatch(contract, /GITROLE_PROMPT_TTL/);
+
+  for (const name of snippetNames) {
+    const source = await readFile(path.join(promptExamplesDir, name), 'utf8');
+    const code = source
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('#'))
+      .join('\n');
+    assert.match(code, /gitrole-prompt/);
+    assert.doesNotMatch(code, /gitrole status/);
+    assert.doesNotMatch(source, /--refresh/);
+  }
+
+  const syntax = spawnSync('bash', ['-n', path.join(promptExamplesDir, 'bash.sh')], {
+    encoding: 'utf8'
+  });
+  assert.equal(syntax.status, 0, syntax.stderr);
+
+  const fakeBin = await mkdtemp(path.join(os.tmpdir(), 'gitrole-prompt-snippet-'));
+  const fakePrompt = path.join(fakeBin, 'gitrole-prompt');
+  await writeFile(fakePrompt, '#!/bin/sh\nprintf \'%s\\n\' \'gitrole:work ✓\'\n');
+  await chmod(fakePrompt, 0o755);
+
+  const rendered = spawnSync(
+    'bash',
+    [
+      '-c',
+      '. "$1"; gitrole_prompt_segment',
+      'bash',
+      path.join(promptExamplesDir, 'bash.sh')
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${fakeBin}:/usr/bin:/bin`
+      }
+    }
+  );
+
+  assert.equal(rendered.status, 0, rendered.stderr);
+  assert.equal(rendered.stdout, 'gitrole:work ✓ ');
 });

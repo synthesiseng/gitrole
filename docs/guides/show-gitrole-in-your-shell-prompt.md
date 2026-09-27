@@ -49,6 +49,8 @@ Do not point a prompt at `gitrole status --short` without `--offline`. That comm
 
 Each snippet calls `gitrole-prompt`. The segment has no trailing space. The functions below add one only when the segment is non-empty, so directories outside a repo stay unchanged.
 
+The copy-paste files and the stdout contract are in `examples/prompt/` in the repo. The command stays `gitrole status --short --offline`. The segment lines stay `gitrole:<role> ✓`, `gitrole:<role> ⚠`, and `gitrole:? ⚠`. Setup prose on this page can change without moving those.
+
 <h3 id="starship">Starship</h3>
 
 Add this to `~/.config/starship.toml`. `gitrole-prompt` is the offline check, not a live SSH probe.

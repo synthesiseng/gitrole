@@ -99,7 +99,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 
 `gitrole-prompt` prints one segment from `gitrole status --short --offline`. `overall=aligned` shows `gitrole:work ✓`. Any other overall shows `gitrole:work ⚠`. A failed or unreadable status shows `gitrole:? ⚠`. The offline check skips the live SSH probe. It is opt-in and check-only. It does not switch roles or install hooks.
 
-Snippets for Starship, oh-my-zsh, zsh, bash, and fish are in [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/).
+Snippets for Starship, oh-my-zsh, zsh, bash, and fish are in [`examples/prompt/`](examples/prompt/README.md). The stdout contract is in that directory: `gitrole status --short --offline`, then `gitrole:<role> ✓`, `gitrole:<role> ⚠`, or `gitrole:? ⚠`. The same setup is written up in [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/).
 
 ## Diagnosis policy
 
