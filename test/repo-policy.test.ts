@@ -113,6 +113,24 @@ test('loadRepoPolicy accepts fixture valid-role-names', async () => {
   });
 });
 
+test('loadRepoPolicy rejects the reserved role name no-role', async () => {
+  const tempDir = await writeRepoPolicy('gitrole-policy-reserved-role-', {
+    version: 1,
+    defaultRole: 'no-role',
+    allowedRoles: ['no-role']
+  });
+
+  await assert.rejects(() => loadRepoPolicy(createRepositoryStub(tempDir)), (error: unknown) => {
+    assert.ok(error instanceof InvalidRepoPolicyError);
+    assert.match(
+      error.message,
+      /repo policy file \.gitrole is invalid: defaultRole role name "no-role" is reserved/
+    );
+    assert.doesNotMatch(error.message, /use lowercase letters/);
+    return true;
+  });
+});
+
 test('loadRepoPolicy rejects fixture invalid-default-role-spaces', async () => {
   const tempDir = await writeRepoPolicy('gitrole-policy-invalid-default-role-spaces-', {
     version: 1,

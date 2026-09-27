@@ -70,7 +70,7 @@ What each field means:
 
 The default role must also appear in <code>allowedRoles</code>.
 
-<code>defaultRole</code> and every <code>allowedRoles</code> entry must also be a valid role name: lowercase letters, numbers, <code>-</code>, and <code>_</code>. <code>company-main</code> and <code>agent_bot</code> are valid. <code>client acme</code>, <code>Work</code>, and <code>Client</code> are not.
+<code>defaultRole</code> and every <code>allowedRoles</code> entry must also be a valid role name: lowercase letters, numbers, <code>-</code>, and <code>_</code>. <code>company-main</code> and <code>agent_bot</code> are valid. <code>client acme</code>, <code>Work</code>, <code>Client</code>, and the reserved sentinel <code>no-role</code> are not.
 
 <h2 id="resolve-the-default-role">Resolve the default role</h2>
 
@@ -110,7 +110,7 @@ An invalid role name is a different failure. See <a href="#invalid-role-names-fa
 
 <h2 id="invalid-role-names-fail-closed">Invalid role names fail closed</h2>
 
-If <code>defaultRole</code> or any <code>allowedRoles</code> entry is outside that name format, gitrole does not warn and continue. These commands exit <code>1</code>, write the error to stderr, and print nothing on stdout:
+If <code>defaultRole</code> or any <code>allowedRoles</code> entry is outside that name format, or is the reserved sentinel <code>no-role</code>, gitrole does not warn and continue. These commands exit <code>1</code>, write the error to stderr, and print nothing on stdout:
 
 <ul>
   <li><code>gitrole resolve</code></li>

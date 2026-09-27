@@ -15,6 +15,10 @@
 
 ### Bug Fixes
 
+* **roles:** reserve the name `no-role` so a saved role cannot collide with the status and prompt sentinel
+  * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and do not write the role
+  * an existing saved role named `no-role` is left in place; `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`
+  * `gitrole status` and the prompt segment still run for that legacy role; prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
 ## [0.10.2](https://github.com/synthesiseng/gitrole/compare/v0.10.1...v0.10.2) (2026-09-27)

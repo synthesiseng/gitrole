@@ -147,6 +147,7 @@ Exit `1` writes the error to stderr and does not print the line.
 | Condition | Result |
 | --------- | ------ |
 | Saved role data contains a name outside the [role name format](#role-name-format) | exit `1`, empty stdout, stderr `error: saved role data is invalid; fix or recreate the roles file` |
+| Saved role is already named `no-role` | not this failure; the line is still printed. [`gitrole doctor`](#doctor-json) warns and suggests a rename |
 | `.gitrole` is invalid JSON or fails schema validation | exit `1`, stderr, empty stdout |
 | Invalid `.gitrole` `defaultRole` or `allowedRoles` name | exit `1`, empty stdout. Policy is loaded before the line is written. See [Role name format](#role-name-format). |
 | Another operational failure before the line is written | exit `1`, stderr, empty stdout |
@@ -392,6 +393,7 @@ Exit `1` writes the error to stderr and does not print JSON.
 | Condition | Result |
 | --------- | ------ |
 | Saved role data contains a name outside the [role name format](#role-name-format) | exit `1`, stderr, no JSON |
+| Saved role is already named `no-role` | not this failure; JSON is printed, `overall` is `warning`, and a `warn` check suggests a rename |
 | `.gitrole` is invalid JSON or fails schema validation | exit `1`, stderr, no JSON |
 | Invalid `.gitrole` `defaultRole` or `allowedRoles` name | exit `1`, stderr, no JSON. See [Role name format](#role-name-format). |
 | Another operational failure before JSON is written | exit `1`, stderr, no JSON |
@@ -494,6 +496,7 @@ Saved role names use this format so machine-readable values such as `role=` stay
 | `client acme` | no |
 | `Work` | no |
 | `my@role` | no |
+| `no-role` | no; reserved sentinel |
 
 Creating a role with an invalid name prints:
 
@@ -501,7 +504,15 @@ Creating a role with an invalid name prints:
 error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
 ```
 
-If saved role data already contains a name outside this format, commands that load saved roles fail closed: exit `1`, error on stderr, nothing on stdout. That includes [`gitrole status --short`](#status-short-failures) and [`gitrole doctor --json`](#doctor-json-failures).
+`no-role` matches the shape above, and it is still reserved. `status --short` writes `role=no-role` when no saved role matches. `gitrole add no-role` and `gitrole import current --name no-role` exit `1`, write this to stderr, and print nothing on stdout:
+
+```text
+error: role name "no-role" is reserved for the status and prompt sentinel when no saved role matches; choose a different name
+```
+
+A saved role that already uses that name is not deleted or renamed. `gitrole doctor` warns and suggests adding the identity under a new name, then `gitrole remove no-role`. `gitrole status` still prints its line. The prompt segment still chooses `✓` or `⚠` from the status fields only, so a hand-built aligned line with `role=no-role` stays `gitrole:no-role ✓`.
+
+If saved role data already contains a name outside this format, commands that load saved roles fail closed: exit `1`, error on stderr, nothing on stdout. That includes [`gitrole status --short`](#status-short-failures) and [`gitrole doctor --json`](#doctor-json-failures). The reserved name `no-role` is not that failure.
 
 The same rules apply to `.gitrole` `defaultRole` and every `allowedRoles` entry. An invalid policy name is fail-closed. These commands exit `1`, write the error to stderr, and write nothing to stdout:
 

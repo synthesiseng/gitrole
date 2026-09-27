@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { validateRoleName } from '../src/domain/role.js';
+import { ReservedRoleNameError, validateRoleName } from '../src/domain/role.js';
 import {
   httpsPinAligned,
   statusShortBaseline,
@@ -113,11 +113,15 @@ test('prompt segment checks commit and policy and does not treat auth as verifie
       'role=no-role scope=global override=false commit=warn remote=ok auth=na policy=na overall=warning',
       'gitrole:no-role ⚠'
     ],
-    // Current formatter behavior. status --offline does not emit an aligned
-    // no-role line (commit is warn). A check on this line is awaiting a decision.
+    // Hand-built aligned line. Glyphs follow the status fields, including role=no-role.
     [
       'role=no-role scope=global override=false commit=ok remote=ok auth=na policy=na overall=aligned',
       'gitrole:no-role ✓'
+    ],
+    // auth=ok is not produced by status --offline. no-role does not change that glyph.
+    [
+      'role=no-role scope=global override=false commit=ok remote=ok auth=ok policy=na overall=aligned',
+      'gitrole:no-role ⚠'
     ],
     ['overall=aligned role=agent_bot', unknownSegment],
     [
@@ -380,7 +384,6 @@ test('prompt segment renders every role name validateRoleName accepts', () => {
     'zzz',
     'agent_bot',
     'client-acme',
-    'no-role',
     'a'.repeat(64),
     '-lead',
     '_0'
@@ -426,4 +429,14 @@ test('prompt segment renders every role name validateRoleName accepts', () => {
 
     assert.equal(result.stdout, `${unknownSegment}\n`, name);
   }
+
+  assert.throws(() => validateRoleName('no-role'), ReservedRoleNameError);
+  const reserved = runPrompt(
+    os.tmpdir(),
+    { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
+    ['--format'],
+    'role=no-role scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned\n'
+  );
+
+  assert.equal(reserved.stdout, 'gitrole:no-role ✓\n');
 });

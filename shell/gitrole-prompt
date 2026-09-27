@@ -12,8 +12,11 @@
 # status --short --offline does not emit auth=ok. A line that still says
 # auth=ok is unexpected. The formatter prints gitrole:<role> ⚠ for it.
 #
-# Role tokens use validateRoleName in src/domain/role.ts (^[a-z0-9_-]+$).
-# The case pattern below is that rule in POSIX sh.
+# Role tokens match ^[a-z0-9_-]+$, the shape in validateRoleName
+# (src/domain/role.ts). This formatter does not apply that function's
+# reserved-name rejection, so no-role still prints. Glyphs come from the
+# status fields only.
+# The case pattern below is that shape in POSIX sh.
 #
 #   gitrole-prompt --format    parse one short line from stdin
 #   gitrole-prompt             inside a git repo, run status --short --offline once
@@ -63,7 +66,7 @@ format_segment() {
     esac
   done
 
-  # validateRoleName: src/domain/role.ts
+  # shape from validateRoleName in src/domain/role.ts; reserved names still print
   case $_role in
     ''|*[!a-z0-9_-]*)
       printf '%s\n' 'gitrole:? ⚠'

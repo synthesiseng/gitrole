@@ -9,6 +9,7 @@ import {
   summarizeAlignment,
   type HttpsAuthDescription
 } from '../alignment.js';
+import { UNMATCHED_ROLE_NAME } from '../../domain/role.js';
 import type { DoctorDependencies, DoctorResult, NonMergeCommit, StatusResult } from '../contracts.js';
 import { collectObservedState, type ObservedState } from '../observed-state.js';
 import { evaluateRepoPolicy, loadOptionalRepoPolicy } from '../repo-policy.js';
@@ -45,7 +46,7 @@ export async function getStatus(
   });
 
   return {
-    roleName: role?.name ?? 'no-role',
+    roleName: role?.name ?? UNMATCHED_ROLE_NAME,
     commitIdentity,
     pushAuth: formatPushAuth(role, observedState, httpsAuth),
     scope: observedState.scope.effective,
