@@ -365,8 +365,11 @@ Examples:
   $ gitrole status --short --offline
 
 Shell prompt:
-  gitrole-prompt runs 'gitrole status --short --offline' and prints gitrole:<role> ✓ or gitrole:<role> ⚠.
-  It is an opt-in helper. It does not switch roles.
+  Snippets run 'gitrole status --short --offline' and print a segment. There is no auth cache.
+  gitrole:<role> ✓ means commit and policy are ok and auth was not checked.
+  It does not mean network auth was verified. auth=na is a skipped SSH probe, not a green auth check.
+  gitrole:<role> ⚠ means a local offline field is warn.
+  It is opt-in. It does not switch roles.
 `
     )
     .action(async (options: { short?: boolean; offline?: boolean }) => {

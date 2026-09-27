@@ -4,13 +4,15 @@ Copy-paste setup for Starship, oh-my-zsh, zsh, bash, and fish. Shell setup docs 
 
 ## Command
 
-Prompts call `gitrole-prompt`. That helper runs only:
+Every snippet calls only:
 
 ```text
 gitrole status --short --offline
 ```
 
-It does not run `gitrole status --short` without `--offline`. That command can open SSH.
+That skips the live SSH `githubUser` probe. Snippets do not call `gitrole status --short` without `--offline`. There is no auth cache and no prompt memo. Each prompt runs that command.
+
+`gitrole-prompt --format` reads one short line from stdin and prints the segment. It does not run `gitrole` and it does not cache.
 
 ## Short line
 
@@ -20,7 +22,7 @@ It does not run `gitrole status --short` without `--offline`. That command can o
 role scope override commit remote auth policy overall
 ```
 
-`--offline` does not change the names or the order. It skips the live SSH `githubUser` probe. On an SSH remote, `auth=na`. That `na` does not by itself set `overall=warning`. HTTPS pin checks are the same as a live status: no pin, or a pin that does not allow the active role, is `auth=warn`.
+`--offline` does not change the names or the order. On SSH, the skipped probe is `auth=na`. That `na` is not a passed auth check and does not by itself set `overall=warning`.
 
 | Exit | Stdout |
 | ---- | ------ |
@@ -30,22 +32,20 @@ role scope override commit remote auth policy overall
 
 ## Segment
 
-`gitrole-prompt` prints at most one line. It exits `0` when it prints a segment, including a warning, so prompt substitution does not fail. The line has no trailing space. The snippets in this directory add one space only when the segment is non-empty.
+The formatter prints at most one line and exits `0`, including for a warning. No trailing space. Snippets add one space only when the segment is non-empty.
 
 Glyphs are U+2713 CHECK MARK (`✓`) and U+26A0 WARNING SIGN (`⚠`), with no variation selector.
 
+`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. `auth=na` is a skipped check, not a green auth check. `auth=ok` never prints `✓`.
+
 | When | Stdout |
 | ---- | ------ |
-| `overall=aligned` and `role` matches `^[a-z0-9_-]+$` | `gitrole:<role> ✓` |
-| any other `overall`, with a role token of that shape | `gitrole:<role> ⚠` |
-| missing or invalid `role`, missing `overall`, more than one line, command failure, or `gitrole` not on `PATH` | `gitrole:? ⚠` |
+| `commit=ok`, `policy` is `ok` or `na`, `remote` is `ok` or `na`, `auth=na`, `overall=aligned`, and `role` matches `^[a-z0-9_-]+$` | `gitrole:<role> ✓` |
+| `commit`, `policy`, `remote`, or `auth` is `warn`, `auth=ok`, or `overall=warning`, with a role token | `gitrole:<role> ⚠` |
+| missing or invalid `role`, missing `commit` / `remote` / `auth` / `policy` / `overall`, more than one line, command failure, or `gitrole` not on `PATH` | `gitrole:? ⚠` |
 | outside a git work tree | empty, and `gitrole` is not called |
 
-`no-role`, `agent_bot`, and `client-acme` match the role token. Only `overall=aligned` prints `✓`.
-
-`gitrole-prompt --format` reads one short line from stdin and prints the segment. It does not look for a git repo and it does not use the memo.
-
-The helper may reuse the last offline segment while local inputs are unchanged. There is no timer and no background refresh. A changed input runs `gitrole status --short --offline` before the segment is printed.
+`no-role`, `agent_bot`, and `client-acme` match the role token. `policy=na` means no `.gitrole` file. That can sit next to `✓` when commit is ok and auth was not checked.
 
 ## Files
 
@@ -57,4 +57,4 @@ The helper may reuse the last offline segment while local inputs are unchanged. 
 | [bash.sh](bash.sh) | `~/.bashrc` |
 | [fish.fish](fish.fish) | `~/.config/fish/config.fish` |
 
-Each file calls `gitrole-prompt`. None calls `gitrole status`.
+Each file calls `gitrole status --short --offline` and pipes that line to `gitrole-prompt --format`.

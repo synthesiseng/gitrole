@@ -60,7 +60,8 @@ async function makeWorkspace() {
     LANG: 'C.UTF-8',
     LC_ALL: 'C.UTF-8',
     GITROLE_FAKE_ARGS: argsFile,
-    GITROLE_FAKE_LINE: statusShortBaseline.line
+    GITROLE_FAKE_LINE:
+      'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned'
   };
 
   return { root, repo, argsFile, env };
@@ -94,18 +95,40 @@ async function readArgs(argsFile: string): Promise<string> {
   }
 }
 
-test('prompt segment follows overall and role from the short line', () => {
+test('prompt segment checks commit and policy and does not treat auth as verified', () => {
   const cases: Array<[string, string]> = [
-    [statusShortBaseline.line, alignedSegment],
+    [statusShortBaseline.line, warningSegment],
     [statusShortPolicyWarn.line, 'gitrole:client-acme ⚠'],
     [httpsPinAligned.line, alignedSegment],
     [
       'role=personal scope=local override=true commit=ok remote=ok auth=warn policy=warn overall=warning',
       'gitrole:personal ⚠'
     ],
-    ['overall=warning role=no-role', 'gitrole:no-role ⚠'],
-    ['overall=aligned role=agent_bot', 'gitrole:agent_bot ✓'],
-    ['role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned', alignedSegment],
+    [
+      'role=no-role scope=global override=false commit=warn remote=ok auth=na policy=na overall=warning',
+      'gitrole:no-role ⚠'
+    ],
+    ['overall=aligned role=agent_bot', unknownSegment],
+    [
+      'role=agent_bot scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned',
+      'gitrole:agent_bot ✓'
+    ],
+    [
+      'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned',
+      alignedSegment
+    ],
+    [
+      'role=work scope=local override=true commit=warn remote=ok auth=na policy=ok overall=warning',
+      warningSegment
+    ],
+    [
+      'role=work scope=local override=true commit=ok remote=warn auth=na policy=ok overall=warning',
+      warningSegment
+    ],
+    [
+      'role=work scope=local override=true commit=ok remote=ok auth=ok policy=ok overall=aligned',
+      warningSegment
+    ],
     ['role=Work overall=aligned', unknownSegment],
     ['role= overall=aligned', unknownSegment],
     ['role=work', unknownSegment],
@@ -135,7 +158,7 @@ test('prompt segment stays quiet outside a git work tree and does not run status
   assert.equal(await readArgs(workspace.argsFile), '');
 });
 
-test('prompt segment calls only status --short --offline and reruns when local inputs change', async () => {
+test('prompt segment calls status --short --offline on every run and does not cache', async () => {
   const workspace = await makeWorkspace();
   const first = runPrompt(workspace.repo, workspace.env);
   const second = runPrompt(workspace.repo, workspace.env);
@@ -143,17 +166,6 @@ test('prompt segment calls only status --short --offline and reruns when local i
   assert.equal(first.status, 0);
   assert.equal(first.stdout, `${alignedSegment}\n`);
   assert.equal(second.stdout, `${alignedSegment}\n`);
-  assert.equal(await readArgs(workspace.argsFile), 'status --short --offline\n');
-
-  const configPath = path.join(workspace.repo, '.git', 'config');
-  await writeFile(configPath, `${await readFile(configPath, 'utf8')}\n# touched\n`, 'utf8');
-  const afterConfig = runPrompt(workspace.repo, {
-    ...workspace.env,
-    GITROLE_FAKE_LINE:
-      'role=personal scope=local override=true commit=ok remote=ok auth=na policy=na overall=warning'
-  });
-
-  assert.equal(afterConfig.stdout, 'gitrole:personal ⚠\n');
   assert.equal(
     await readArgs(workspace.argsFile),
     'status --short --offline\nstatus --short --offline\n'
@@ -162,12 +174,14 @@ test('prompt segment calls only status --short --offline and reruns when local i
   const afterAuthor = runPrompt(workspace.repo, {
     ...workspace.env,
     GIT_AUTHOR_EMAIL: 'other@example.com',
-    GITROLE_FAKE_LINE: 'role=work scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning'
+    GITROLE_FAKE_LINE:
+      'role=work scope=local override=true commit=warn remote=ok auth=na policy=na overall=warning'
   });
 
   assert.equal(afterAuthor.stdout, `${warningSegment}\n`);
   assert.equal((await readArgs(workspace.argsFile)).trim().split('\n').length, 3);
   assert.doesNotMatch(await readArgs(workspace.argsFile), /status --short\n/);
+  assert.doesNotMatch(await readFile(promptSourcePath, 'utf8'), /GITROLE_PROMPT_CACHE/);
 });
 
 test('prompt segment treats offline exit 2 as a warning and exit 1 as unknown', async () => {
@@ -242,17 +256,22 @@ test('readme, status help, and the helper point at offline status', async () => 
   assert.match(readme, /show-gitrole-in-your-shell-prompt/);
   assert.match(readme, /examples\/prompt/);
   assert.match(readme, /--short --offline/);
+  assert.match(readme, /auth was not checked/);
+  assert.match(readme, /does not mean network auth was verified/);
   assert.match(promptSource, /gitrole status --short --offline/);
-  assert.doesNotMatch(promptSource, /GITROLE_PROMPT_TTL/);
+  assert.match(promptSource, /auth was not checked/);
+  assert.doesNotMatch(promptSource, /GITROLE_PROMPT_TTL|GITROLE_PROMPT_CACHE/);
   assert.equal(packageJson.bin['gitrole-prompt'], 'shell/gitrole-prompt');
   assert.ok(packageJson.files.includes('shell'));
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--offline/);
   assert.match(help.stdout, /does not switch roles/);
   assert.match(help.stdout, /status --short --offline/);
+  assert.match(help.stdout, /auth was not checked/);
+  assert.match(help.stdout, /does not mean network auth was verified/);
 });
 
-test('prompt snippets call gitrole-prompt and keep the segment contract', async () => {
+test('prompt snippets call status --short --offline only and keep the segment contract', async () => {
   const contract = await readFile(path.join(promptExamplesDir, 'README.md'), 'utf8');
   const snippetNames = ['starship.toml', 'oh-my-zsh.zsh', 'zsh.zsh', 'bash.sh', 'fish.fish'];
 
@@ -260,8 +279,9 @@ test('prompt snippets call gitrole-prompt and keep the segment contract', async 
   assert.match(contract, /gitrole:<role> ✓/);
   assert.match(contract, /gitrole:<role> ⚠/);
   assert.match(contract, /gitrole:\? ⚠/);
+  assert.match(contract, /does not mean network auth was verified/);
   assert.match(contract, /role scope override commit remote auth policy overall/);
-  assert.doesNotMatch(contract, /GITROLE_PROMPT_TTL/);
+  assert.doesNotMatch(contract, /GITROLE_PROMPT_TTL|GITROLE_PROMPT_CACHE/);
 
   for (const name of snippetNames) {
     const source = await readFile(path.join(promptExamplesDir, name), 'utf8');
@@ -269,9 +289,9 @@ test('prompt snippets call gitrole-prompt and keep the segment contract', async 
       .split('\n')
       .filter((line) => !line.trim().startsWith('#'))
       .join('\n');
-    assert.match(code, /gitrole-prompt/);
-    assert.doesNotMatch(code, /gitrole status/);
-    assert.doesNotMatch(source, /--refresh/);
+    assert.match(code, /gitrole status --short --offline/);
+    assert.doesNotMatch(code, /gitrole status(?! --short --offline)/);
+    assert.doesNotMatch(source, /--refresh|GITROLE_PROMPT_CACHE/);
   }
 
   const syntax = spawnSync('bash', ['-n', path.join(promptExamplesDir, 'bash.sh')], {
@@ -280,9 +300,14 @@ test('prompt snippets call gitrole-prompt and keep the segment contract', async 
   assert.equal(syntax.status, 0, syntax.stderr);
 
   const fakeBin = await mkdtemp(path.join(os.tmpdir(), 'gitrole-prompt-snippet-'));
-  const fakePrompt = path.join(fakeBin, 'gitrole-prompt');
-  await writeFile(fakePrompt, '#!/bin/sh\nprintf \'%s\\n\' \'gitrole:work ✓\'\n');
-  await chmod(fakePrompt, 0o755);
+  const argsFile = path.join(fakeBin, 'args');
+  await writeFile(
+    path.join(fakeBin, 'gitrole'),
+    `#!/bin/sh\nprintf '%s\\n' \"$*\" >> '${argsFile}'\nprintf '%s\\n' 'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned'\n`
+  );
+  await chmod(path.join(fakeBin, 'gitrole'), 0o755);
+  await writeFile(path.join(fakeBin, 'gitrole-prompt'), await readFile(scriptPath));
+  await chmod(path.join(fakeBin, 'gitrole-prompt'), 0o755);
 
   const rendered = spawnSync(
     'bash',
@@ -294,6 +319,7 @@ test('prompt snippets call gitrole-prompt and keep the segment contract', async 
     ],
     {
       encoding: 'utf8',
+      cwd: process.cwd(),
       env: {
         ...process.env,
         PATH: `${fakeBin}:/usr/bin:/bin`
@@ -303,4 +329,5 @@ test('prompt snippets call gitrole-prompt and keep the segment contract', async 
 
   assert.equal(rendered.status, 0, rendered.stderr);
   assert.equal(rendered.stdout, 'gitrole:work ✓ ');
+  assert.equal(await readFile(argsFile, 'utf8'), 'status --short --offline\n');
 });

@@ -1,9 +1,17 @@
-# gitrole-prompt runs `gitrole status --short --offline`.
-# Segment contract: examples/prompt/README.md
+# Calls `gitrole status --short --offline` only. No auth cache.
+# ✓ means commit and policy are ok and auth was not checked. ✓ ≠ auth verified.
+# Contract: examples/prompt/README.md
 
 gitrole_prompt_segment() {
-  local segment
-  segment=$(gitrole-prompt) || return
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  local line status segment
+  line=$(gitrole status --short --offline 2>/dev/null)
+  status=$?
+  if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then
+    printf '%s ' 'gitrole:? ⚠'
+    return 0
+  fi
+  segment=$(printf '%s\n' "$line" | gitrole-prompt --format) || return 0
   if [ -n "$segment" ]; then
     printf '%s ' "$segment"
   fi
