@@ -129,4 +129,12 @@ jobs:
             grep -v '_authToken' "$npmrc" > "${npmrc}.tmp" || true
             mv "${npmrc}.tmp" "$npmrc"
           fi
-          npm publish --provenance --access public
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+            # npm rejects a dist-tag that is a semver range, so the package
+            # version itself cannot be the tag. Prefix it. The release stays
+            # installable as <name>@<version> and does not move latest.
+            npm publish --provenance --access public --tag "version-${PACKAGE_VERSION}"
+          else
+            npm publish --provenance --access public
+          fi
