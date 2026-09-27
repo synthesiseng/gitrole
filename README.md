@@ -74,6 +74,7 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 - [Guide: Use the right Git identity for this repo](https://docs.gitrole.dev/guides/use-the-right-git-identity-for-this-repo/)
 - [Guide: Use repo-local identity policy with .gitrole](https://docs.gitrole.dev/guides/use-repo-local-identity-policy-with-gitrole/)
 - [Use case: Fix pushes using the wrong GitHub account](https://docs.gitrole.dev/use-cases/fix-pushes-using-the-wrong-github-account/)
+- [Guide: Verify Git identity before an agent commits](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/)
 
 ## Commands
 
@@ -104,6 +105,12 @@ Start with the docs if you want the full workflow, setup guides, and use cases:
 - remote owner and repository are context by default
 - `overall=warning` only happens when at least one actionable check is `warn`
 - `gitrole status --short` fields, in order: `role scope override commit remote auth policy overall` (`policy` is `ok`, `warn`, or `na`)
+
+## Agents
+
+The published package includes an agent skill at `skills/gitrole/SKILL.md`. Point Claude Code, Codex, or Cursor at that directory. The skill tells the agent to run `gitrole status --short` before a commit, or `gitrole doctor --json` for the full diagnosis, and to stop when `overall=warning` (exit `2`) or any check is `warn`. Exit `0` is aligned. Exit `1` is a failure.
+
+The skill verifies. It does not install hooks or block git. The optional check-only hook still runs `gitrole status --short` only when you install it yourself.
 
 ## What it does not do
 

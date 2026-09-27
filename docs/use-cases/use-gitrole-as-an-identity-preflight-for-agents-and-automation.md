@@ -12,6 +12,8 @@ Use this page when an agent or automation should work under an existing role ins
 
 If you need the baseline one-repo setup first, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>.
 
+Coding agents can load the skill shipped at <code>skills/gitrole/SKILL.md</code>. Install steps for Claude Code, Codex, and Cursor are in <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify Git identity before an agent commits</a>. The skill tells the agent to run <code>gitrole status --short</code> or <code>gitrole doctor --json</code> and to stop on a warning. It does not install hooks.
+
 This is useful when:
 
 - the repository already has a role like <code>work</code>, <code>personal</code>, or <code>client-acme</code>
