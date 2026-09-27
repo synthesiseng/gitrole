@@ -13,6 +13,13 @@
 
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.9.0](https://github.com/synthesiseng/gitrole/compare/v0.8.0...v0.9.0) (2026-09-27)
+
+
+### Features
+
+* add a shell prompt segment from status --short ([#66](https://github.com/synthesiseng/gitrole/issues/66)) ([804515b](https://github.com/synthesiseng/gitrole/commit/804515bb4b91229b8f9a22b55d02078104b7d3ed))
+
 ## [0.8.0](https://github.com/synthesiseng/gitrole/compare/v0.7.6...v0.8.0) (2026-09-27)
 
 
