@@ -40,7 +40,7 @@ Glyphs are U+2713 CHECK MARK (`✓`) and U+26A0 WARNING SIGN (`⚠`), with no va
 
 `✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. `auth=na` is a skipped check, not a green auth check. `auth=ok` never prints `✓`. Live auth verification is for push-time `gitrole doctor` and the optional check-only hook, not the prompt.
 
-`gitrole status --short --offline` does not emit `auth=ok`. SSH auth is `na`. HTTPS auth is `na` or `warn`. A short line that still contains `auth=ok` is unexpected on this path. The formatter prints `gitrole:<role> ⚠` for it.
+`gitrole status --short --offline` does not emit `auth=ok`. SSH auth is `na`. HTTPS auth is `na` or `warn`. `auth=ok` means the line did not come from `--offline`; the segment shows ⚠ because ✓ only covers the offline contract. `gitrole:? ⚠` stays reserved for an unreadable or malformed line, missing fields, a failed command, or `gitrole` not on `PATH`.
 
 | When | Stdout |
 | ---- | ------ |
