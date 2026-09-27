@@ -13,6 +13,14 @@
 
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.8.0](https://github.com/synthesiseng/gitrole/compare/v0.7.6...v0.8.0) (2026-09-27)
+
+
+### Bug Fixes
+
+* **status:** warn on unpinned and mismatched HTTPS auth ([#62](https://github.com/synthesiseng/gitrole/issues/62)) ([607d1cd](https://github.com/synthesiseng/gitrole/commit/607d1cdd4307f654cb198006e458cdfb2fabbcc2))
+* **test:** keep npm pack from truncating dist during e2e ([#64](https://github.com/synthesiseng/gitrole/issues/64)) ([9f26dfe](https://github.com/synthesiseng/gitrole/commit/9f26dfe9f99f81e3ec45af3eaf21ec369b7cb236))
+
 ## [0.7.6](https://github.com/synthesiseng/gitrole/compare/v0.7.5...v0.7.6) (2026-09-26)
 
 
