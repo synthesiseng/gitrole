@@ -6,51 +6,13 @@ summary: Enable tab completion for gitrole subcommands and saved role names in z
 order: 5
 ---
 
-<h2 id="when-to-use-this">When to use this</h2>
+<p>Tab on <code>gitrole</code> does nothing useful until your shell loads a completion script. Installing gitrole doesn't edit your shell config, so the command is on <code>PATH</code> and the completions are not. This page turns Tab on for subcommands, flags, and saved role names.</p>
 
-Use this after <code>gitrole</code> is installed when you want Tab to fill subcommands and saved role names.
+<h2 id="when-to-use-this">Quick start</h2>
 
-<code>npm install</code> does not edit your shell config. Add the snippet for your shell.
+<p>The path below is a global npm install on zsh. bash and fish are further down. <code>brew install synthesiseng/tap/gitrole</code> puts <code>gitrole</code> and <code>gitrole-prompt</code> on <code>PATH</code>. The Homebrew formula doesn't install the completion scripts into your shell, and this page doesn't document a Homebrew prefix path for them. If you installed with Homebrew, use the npm paths below or a checkout of this repository.</p>
 
-<h2 id="where-the-scripts-live">Where the scripts live</h2>
-
-The repository and the published package both contain:
-
-```text
-completions/gitrole.bash
-completions/_gitrole
-completions/gitrole.fish
-```
-
-Global install (<code>npm install -g gitrole</code>). <code>npm root -g</code> prints the global <code>node_modules</code> directory:
-
-```text
-$(npm root -g)/gitrole/completions/gitrole.bash
-$(npm root -g)/gitrole/completions/_gitrole
-$(npm root -g)/gitrole/completions/gitrole.fish
-```
-
-Project install (<code>npm install gitrole</code>), from that project:
-
-```text
-node_modules/gitrole/completions/gitrole.bash
-node_modules/gitrole/completions/_gitrole
-node_modules/gitrole/completions/gitrole.fish
-```
-
-Repository checkout, from the repo root:
-
-```text
-completions/gitrole.bash
-completions/_gitrole
-completions/gitrole.fish
-```
-
-<h2 id="zsh">zsh</h2>
-
-There is no oh-my-zsh plugin. Add the completions directory to <code>fpath</code> before <code>compinit</code>. If your startup file already runs <code>compinit</code>, put the <code>fpath</code> line above that call.
-
-Global install:
+<p>Add the completions directory to <code>fpath</code> before <code>compinit</code>. zsh only loads <code>_gitrole</code> from <code>fpath</code> during <code>compinit</code>, so sourcing the file doesn't register completion. If your startup file already runs <code>compinit</code>, put the <code>fpath</code> line above that call.</p>
 
 ```zsh
 completions="$(npm root -g)/gitrole/completions"
@@ -59,7 +21,13 @@ autoload -Uz compinit
 compinit
 ```
 
-Project install, from that project directory:
+<p>Open a new shell. Press Tab at the end of <code>gitrole </code> (with the trailing space). zsh should list subcommands such as <code>add</code>, <code>use</code>, and <code>status</code>. You can stop there. bash, fish, and the other install locations are below.</p>
+
+<h2 id="zsh">zsh</h2>
+
+<p>There is no oh-my-zsh plugin. Use the same <code>fpath</code> lines as the quick start, with a different directory.</p>
+
+<p>Project install, from that project directory:</p>
 
 ```zsh
 completions="$(pwd)/node_modules/gitrole/completions"
@@ -68,7 +36,7 @@ autoload -Uz compinit
 compinit
 ```
 
-Repository checkout, from the repo root:
+<p>Repository checkout, from the repo root:</p>
 
 ```zsh
 completions="$(pwd)/completions"
@@ -77,64 +45,62 @@ autoload -Uz compinit
 compinit
 ```
 
-<code>compinit</code> loads <code>_gitrole</code> from <code>fpath</code>. Sourcing <code>_gitrole</code> does not register completion.
-
 <h2 id="bash">bash</h2>
 
-Source <code>gitrole.bash</code> from <code>~/.bashrc</code>.
+<p>Source <code>gitrole.bash</code> from <code>~/.bashrc</code>. bash completion registers when the file is sourced, which is why this isn't the zsh <code>fpath</code> setup.</p>
 
-Global install:
+<p>Global npm install:</p>
 
 ```bash
 source "$(npm root -g)/gitrole/completions/gitrole.bash"
 ```
 
-Project install, from that project directory:
+<p>Project install, from that project directory:</p>
 
 ```bash
 source "$(pwd)/node_modules/gitrole/completions/gitrole.bash"
 ```
 
-Repository checkout, from the repo root:
+<p>Repository checkout, from the repo root:</p>
 
 ```bash
 source "$(pwd)/completions/gitrole.bash"
 ```
 
+<p>Open a new shell and press Tab after <code>gitrole </code>. bash lists the same subcommands.</p>
+
 <h2 id="fish">fish</h2>
 
-Symlink <code>gitrole.fish</code> into <code>~/.config/fish/completions/</code>.
+<p>fish loads completions from files in <code>~/.config/fish/completions/</code>. A symlink keeps the script on the installed package when the package updates.</p>
 
-Global install:
+<p>Global npm install:</p>
 
 ```fish
 mkdir -p ~/.config/fish/completions
 ln -sf (npm root -g)/gitrole/completions/gitrole.fish ~/.config/fish/completions/gitrole.fish
 ```
 
-Project install, from that project directory:
+<p>Project install, from that project directory:</p>
 
 ```fish
 mkdir -p ~/.config/fish/completions
 ln -sf (pwd)/node_modules/gitrole/completions/gitrole.fish ~/.config/fish/completions/gitrole.fish
 ```
 
-Repository checkout, from the repo root:
+<p>Repository checkout, from the repo root:</p>
 
 ```fish
 mkdir -p ~/.config/fish/completions
 ln -sf (pwd)/completions/gitrole.fish ~/.config/fish/completions/gitrole.fish
 ```
 
-For every user on the machine, symlink <code>gitrole.fish</code> into a vendor directory from <code>fish_complete_path</code>. <code>echo $fish_complete_path</code> prints that list. One entry is <code>/usr/share/fish/vendor_completions.d</code>.
+<p>Open a new fish shell and press Tab after <code>gitrole </code>. fish lists the same subcommands. For a machine-wide install, symlink <code>gitrole.fish</code> into a directory on <code>$fish_complete_path</code>. <code>echo $fish_complete_path</code> prints that list on your machine.</p>
 
 <h2 id="what-completes">What completes</h2>
 
-Tab offers the subcommands, including <code>import current</code> and <code>remote set</code>, and the flags each completion script lists.
+<p>Tab offers the subcommands, including <code>import current</code> and <code>remote set</code>, and the flags each script lists. For <code>gitrole status</code>, Tab offers <code>--short</code>, <code>--offline</code>, and <code>--help</code>. <code>--offline</code> is in the bash, zsh, and fish scripts so a prompt setup doesn't have to be typed by hand.</p>
 
-For <code>gitrole status</code>, Tab offers <code>--short</code>. Type <code>--offline</code> until the scripts include it.
-
-Saved role names are offered for:
+<p>Saved role names are offered for:</p>
 
 <ul>
   <li><code>gitrole use</code></li>
@@ -145,18 +111,41 @@ Saved role names are offered for:
   <li><code>gitrole import current --name</code></li>
 </ul>
 
-Role names come from <code>gitrole list</code>. That command reads the saved roles file. If the list cannot be read, role completion is empty and no error is printed.
+<p>Role names come from <code>gitrole list</code>, which reads the saved roles file. If that file can't be read, role completion is empty and no error is printed, so a broken roles file looks like "you have no roles" rather than a shell error.</p>
 
 <h2 id="verify">Verify</h2>
 
-Open a new shell after the snippet is in place. Press Tab at the end of this line:
+<p>Open a new shell after the snippet is in place. Press Tab at the end of this line:</p>
 
 ```text
 gitrole 
 ```
 
-zsh lists subcommands such as <code>add</code>, <code>use</code>, and <code>status</code>.
+<p>zsh, bash, and fish list subcommands such as <code>add</code>, <code>use</code>, and <code>status</code>. Then try <code>gitrole use </code> and confirm your saved role names appear.</p>
 
-bash lists the same subcommands.
+<h2 id="where-the-scripts-live">Where the scripts live</h2>
 
-fish lists the same subcommands.
+<p>The repository and the published npm package both contain:</p>
+
+```text
+completions/gitrole.bash
+completions/_gitrole
+completions/gitrole.fish
+```
+
+<table>
+  <thead>
+    <tr><th>Install</th><th>Path</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Global npm install</td><td><code>$(npm root -g)/gitrole/completions/</code></td></tr>
+    <tr><td>Project npm install</td><td><code>node_modules/gitrole/completions/</code></td></tr>
+    <tr><td>Repository checkout</td><td><code>completions/</code> at the repo root</td></tr>
+  </tbody>
+</table>
+
+<p><code>npm root -g</code> prints the global <code>node_modules</code> directory. That path is the npm install, not a Homebrew prefix.</p>
+
+<h2 id="what-it-does-not-do">What it doesn't do</h2>
+
+<p>Completion doesn't install gitrole, switch roles, or run <code>gitrole status</code>. It also doesn't enable itself when you install the package. The Homebrew formula isn't covered by a prefix path on this page.</p>

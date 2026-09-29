@@ -6,187 +6,142 @@ summary: Use .gitrole to declare the preferred Git identity role for a repositor
 order: 3
 ---
 
-<h2 id="what-this-is">What this is</h2>
-
-Use a root-level <code>.gitrole</code> file when a repository should say:
-
-- "this role is the normal one here"
-- "these roles are still okay here"
-
-This is repo-local identity policy, not workflow automation.
-
-If you have not done the normal role setup yet, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a> first. This guide is the next step when a repository should say which roles belong there.
-
-It does not:
-
-- switch roles for you
-- install hooks
-- block commits
-
-It just gives the repo a small, clear identity rule.
+<p>A shared repository doesn't say which Git identity belongs there, so a personal role can look fine until the history is full of the wrong author. A <code>.gitrole</code> file in the repo root names the role you normally want and the short list of roles that are still allowed. It doesn't switch you, install a hook, or block a commit. If you haven't saved a role yet, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>.</p>
 
 <h2 id="pin-a-repo-to-one-role">Pin a repo to one role</h2>
 
-If a repo should use exactly one saved role most of the time, this is the easiest path:
+<p>When one saved role is the one this repo should use, pin it:</p>
 
 ```bash
 gitrole pin company-main
 ```
 
-That creates a <code>.gitrole</code> file like this:
+<p>That writes <code>.gitrole</code> and prints:</p>
+
+```text
+pinned role company-main
+  file  .gitrole
+  default company-main
+  allowed company-main
+```
+
+<p>The file on disk is:</p>
 
 ```json
 {
   "version": 1,
   "defaultRole": "company-main",
-  "allowedRoles": ["company-main"]
+  "allowedRoles": [
+    "company-main"
+  ]
 }
 ```
 
-Think of <code>pin</code> as saying:
-
-- this repo belongs to <code>company-main</code>
-- do not guess
-- do not allow extra roles unless someone edits the policy on purpose
-
-If <code>.gitrole</code> already exists, <code>gitrole pin</code> fails on purpose. It will not merge, overwrite, or silently expand the policy.
-
-<h2 id="the-file-format">The file format</h2>
-
-The first version is intentionally small:
-
-```json
-{
-  "version": 1,
-  "defaultRole": "company-main",
-  "allowedRoles": ["company-main", "maintainer-personal"]
-}
-```
-
-What each field means:
-
-- <code>defaultRole</code> is the role that normally belongs in this repo
-- <code>allowedRoles</code> is the short list of roles that are still valid here
-
-The default role must also appear in <code>allowedRoles</code>.
-
-<code>defaultRole</code> and every <code>allowedRoles</code> entry must also be a valid role name: lowercase letters, numbers, <code>-</code>, and <code>_</code>. <code>company-main</code> and <code>agent_bot</code> are valid. <code>client acme</code>, <code>Work</code>, <code>Client</code>, and the reserved sentinel <code>no-role</code> are not.
-
-<h2 id="resolve-the-default-role">Resolve the default role</h2>
-
-Run this inside the repository:
+<p>Check it:</p>
 
 ```bash
 gitrole resolve
 ```
 
-If the repo has a valid <code>.gitrole</code> file, <code>resolve</code> prints the <code>defaultRole</code>.
-
-Example:
-
 ```text
 company-main
 ```
 
-If you want the whole policy as JSON for scripts, prompts, or agents, use:
+<p>If <code>resolve</code> prints that name, you can stop. <code>defaultRole</code> has to be in <code>allowedRoles</code>. Pin puts the same role in both, so you don't have a preferred role that the file then rejects.</p>
 
-```bash
-gitrole resolve --json
+<p>If <code>.gitrole</code> already exists, pin exits <code>1</code> and leaves the file alone. A second run can't merge or widen the list by accident:</p>
+
+```text
+error: .gitrole already exists in this repo; gitrole pin will not overwrite or merge existing repo policy
 ```
 
-Example:
+<h2 id="how-to-read-status">How to read status</h2>
 
-```json
-{
-  "version": 1,
-  "defaultRole": "company-main",
-  "allowedRoles": ["company-main", "maintainer-personal"]
-}
+<p>When <code>.gitrole</code> exists, <code>gitrole status</code> and <code>gitrole doctor</code> add the policy on top of the commit, remote, and SSH checks. Allowed-but-not-default stays aligned. The role is on the list, so it isn't a warning, and the default is still visible so you can see it isn't the preferred one.</p>
+
+<p>This is <code>gitrole status</code> when the file prefers <code>company-main</code>, also allows <code>maintainer-personal</code>, and the global identity matches <code>maintainer-personal</code>:</p>
+
+```text
+maintainer-personal  aligned
+  commit Maintainer Name <maintainer@personal.example>
+  push  maintainer via github.com-personal
+  scope global
+  policy allowed role maintainer-personal (default: company-main)
 ```
 
-If no <code>.gitrole</code> file exists, <code>resolve</code> fails clearly. <code>status</code> and <code>doctor</code> still work normally without repo policy.
+<p>The same repo on one line is <code>policy=ok</code> and <code>overall=aligned</code>. <code>policy=ok</code> on <code>gitrole status --short</code> means the effective role is <code>defaultRole</code> or is listed in <code>allowedRoles</code>. It does not mean the role is the default:</p>
 
-An invalid role name is a different failure. See <a href="#invalid-role-names-fail-closed">Invalid role names fail closed</a>.
+```text
+role=maintainer-personal scope=global override=false commit=ok remote=ok auth=ok policy=ok overall=aligned
+```
 
-<h2 id="invalid-role-names-fail-closed">Invalid role names fail closed</h2>
+<p><code>gitrole doctor</code> uses a different word for that case. The policy check is <code>info</code>, not <code>warn</code>, because <code>info</code> doesn't select <code>overall=warning</code>:</p>
 
-If <code>defaultRole</code> or any <code>allowedRoles</code> entry is outside that name format, or is the reserved sentinel <code>no-role</code>, gitrole does not warn and continue. These commands exit <code>1</code>, write the error to stderr, and print nothing on stdout:
+```text
+  info policy effective role maintainer-personal is allowed here, but repo defaultRole is company-main
+```
+
+<p>On <code>status --short</code>, <code>policy=warn</code> and exit <code>2</code> only when the effective role is outside <code>allowedRoles</code>. <code>policy=na</code> means there is no <code>.gitrole</code> file. A missing file doesn't make <code>status</code> or <code>doctor</code> fail. <code>resolve</code> does fail when the file is absent, because that command's only job is to read it.</p>
+
+<h2 id="surprises">Surprises</h2>
+
+<p><code>defaultRole</code> and every <code>allowedRoles</code> entry use the same role-name rules as a saved role: lowercase letters, numbers, <code>-</code>, and <code>_</code>. <code>company-main</code> and <code>agent_bot</code> are valid. <code>client acme</code>, <code>Work</code>, <code>Client</code>, and <code>no-role</code> are not. <code>no-role</code> is reserved because <code>status --short</code> writes it when no saved role matches.</p>
+
+<p>An invalid name doesn't warn and continue. These commands exit <code>1</code>, write the error to stderr, and print nothing on stdout, including <code>gitrole status --short</code>. The line isn't written until the policy loads, so a bad name can't show up as a <code>role=</code> value:</p>
 
 <ul>
   <li><code>gitrole resolve</code></li>
   <li><code>gitrole resolve --json</code></li>
   <li><code>gitrole status</code></li>
+  <li><code>gitrole status --short</code></li>
   <li><code>gitrole doctor</code></li>
   <li><code>gitrole doctor --json</code></li>
 </ul>
 
-A <code>defaultRole</code> of <code>client acme</code> looks like this on stderr:
+<h2 id="what-it-does-not-do">What it doesn't do</h2>
 
-```text
-error: repo policy file .gitrole is invalid: defaultRole invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
-```
+<p>The file doesn't switch roles, install a hook, or block <code>git commit</code>. It tells <code>status</code> and <code>doctor</code> whether the current role is the one this repo asked for. If an agent should read that before it commits, continue with <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.</p>
 
-An invalid allowed role is named the same way. With <code>defaultRole</code> set to <code>work</code> and <code>Client</code> in <code>allowedRoles</code>, stderr includes:
+<h2 id="the-file-format">File format</h2>
 
-```text
-error: repo policy file .gitrole is invalid: allowedRoles invalid role name "Client"; use lowercase letters, numbers, "-" or "_"
-```
-
-A missing <code>.gitrole</code> file does not do this. <code>resolve</code> still fails when the file is absent, but <code>status</code> and <code>doctor</code> keep working without repo policy. Valid names such as <code>client-acme</code> and <code>agent_bot</code> still succeed.
-
-The machine-readable exit contract is in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.
-
-<h2 id="how-status-and-doctor-use-policy">How status and doctor use policy</h2>
-
-When <code>.gitrole</code> exists, <code>gitrole status</code> and <code>gitrole doctor</code> add repo policy on top of the normal identity, remote, and SSH checks.
-
-The policy states are simple:
-
-- <code>ok</code>: the effective role matches <code>defaultRole</code>
-- <code>info</code>: the effective role is allowed here, but it is not the default
-- <code>warn</code>: the effective role is not in <code>allowedRoles</code>
-
-Allowed-but-not-default does not degrade the repo to warning by itself.
-
-<h2 id="shared-repo-example">Shared repo example</h2>
-
-This is useful for a shared org repo where both the org identity and a maintainer's personal identity are valid:
+<p>Edit the file when more than one role is valid. This one prefers <code>company-main</code> and also allows <code>maintainer-personal</code>. <code>gitrole resolve --json</code> prints the same object:</p>
 
 ```json
 {
   "version": 1,
   "defaultRole": "company-main",
-  "allowedRoles": ["company-main", "maintainer-personal"]
+  "allowedRoles": [
+    "company-main",
+    "maintainer-personal"
+  ]
 }
 ```
 
-If you are currently using <code>maintainer-personal</code>, the repo can still be aligned.
+<table>
+  <thead>
+    <tr><th>Field</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>version</code></td><td>Schema version. Currently <code>1</code>.</td></tr>
+    <tr><td><code>defaultRole</code></td><td>The role that normally belongs in this repo. It also has to appear in <code>allowedRoles</code>.</td></tr>
+    <tr><td><code>allowedRoles</code></td><td>Roles that are still valid here.</td></tr>
+  </tbody>
+</table>
 
-Example status output:
+<p>On <code>gitrole doctor --json</code>, that evaluation is <code>repoPolicy.status</code>: <code>default</code>, <code>allowed</code>, or <code>notAllowed</code>. <code>default</code> and <code>allowed</code> are <code>policy=ok</code> on <code>status --short</code>. <code>notAllowed</code> is <code>policy=warn</code>. The exit codes and the exact failure text are in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.</p>
+
+<h2 id="invalid-role-names-fail-closed">Invalid names</h2>
+
+<p>A <code>defaultRole</code> of <code>client acme</code> looks like this on stderr:</p>
 
 ```text
-maintainer-personal  Maintainer Name <maintainer@personal.example>  global  aligned
-repo policy  allowed role maintainer-personal (default: company-main)
+error: repo policy file .gitrole is invalid: defaultRole invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
 ```
 
-Example doctor interpretation:
+<p>An invalid allowed role is named on that field. With <code>defaultRole</code> set to <code>work</code> and <code>Client</code> in <code>allowedRoles</code>:</p>
 
-- remote and SSH auth can still be correct
-- policy is surfaced as <code>info</code>, not <code>warn</code>, because the current role is allowed even though it is not the default
+```text
+error: repo policy file .gitrole is invalid: allowedRoles invalid role name "Client"; use lowercase letters, numbers, "-" or "_"
+```
 
-<h2 id="when-to-use-it">When to use it</h2>
-
-Add <code>.gitrole</code> when a repository has an identity policy you want to make explicit, such as:
-
-- a company repo that should normally use a work role
-- a shared repo where more than one role is valid
-- an open-source repo where a maintainer identity is allowed but not always the default
-
-Keep it small.
-
-Use <code>.gitrole</code> when you want the repo to answer two simple questions:
-
-- what role is preferred here?
-- is the current role allowed here?
-
-If automation should read that policy before it commits or pushes, continue with <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.
+<p>A missing <code>.gitrole</code> file is not this failure. <code>resolve</code> still exits <code>1</code> when the file is absent. <code>status</code> and <code>doctor</code> keep working, with <code>policy=na</code> on <code>status --short</code>.</p>
