@@ -6,13 +6,13 @@ summary: Save named roles, switch per repo, and check that commit identity and p
 ---
 
 <div class="button-row">
-  <a class="button button-primary" href="#workflow">See the workflow</a>
-  <a class="button button-secondary" href="#install">Install after you understand it</a>
+  <a class="button button-primary" href="#quick-start">Try the quick start</a>
+  <a class="button button-secondary" href="#keep-reading">Read the guides</a>
 </div>
 
-<h2 id="problem">What problem it solves</h2>
+<h2 id="problem">What goes wrong</h2>
 
-If you move between work, personal, freelance, or client repositories, it is easy to use the wrong Git identity without noticing.
+<p>If you move between work, personal, and client repositories, Git will commit or push as the wrong person and the history is annoying to fix later. gitrole saves each identity as a named role, switches this repository to one of them, and checks the commit identity and the push identity before you continue.</p>
 
 <div class="card-grid">
   <div class="surface">
@@ -32,31 +32,21 @@ If you move between work, personal, freelance, or client repositories, it is eas
   </div>
 </div>
 
-<h2 id="workflow">How it works</h2>
+<h2 id="quick-start">Quick start</h2>
 
-Do not think of `gitrole` as a system first. Think of it as a simple workflow:
+<p>Install, save one role, apply it to this repository, and check. If <code>gitrole status</code> looks aligned, you can stop.</p>
 
-<div class="step-grid">
-  <div class="surface">
-    <span class="eyebrow-inline">Step 1</span>
-    <h3>Save a role</h3>
-    <p>Create one saved role per identity, such as <code>work</code>, <code>personal</code>, or <code>client-acme</code>.</p>
-  </div>
-  <div class="surface">
-    <span class="eyebrow-inline">Step 2</span>
-    <h3>Switch to it</h3>
-    <p>Apply that role globally or only in the repository you are working in.</p>
-  </div>
-  <div class="surface">
-    <span class="eyebrow-inline">Step 3</span>
-    <h3>Check before you push</h3>
-    <p>Run <code>gitrole status</code> for the fast daily check. Run <code>gitrole doctor</code> when something looks wrong.</p>
-  </div>
-</div>
+```bash
+brew install synthesiseng/tap/gitrole
+```
 
-<h2 id="example">Tiny real example</h2>
+<p>or with npm:</p>
 
-This is the smallest useful flow for a repo that should use a local override:
+```bash
+npm install -g gitrole
+```
+
+<p>Then, in the repository:</p>
 
 ```bash
 gitrole add work --name "Alex Developer" --email "alex@work.example"
@@ -64,58 +54,43 @@ gitrole use work --local
 gitrole status
 ```
 
-What that does:
+<p><code>add</code> saves a role named <code>work</code>. <code>use --local</code> writes that name and email only in this repository, so your other repos stay on the global identity. <code>status</code> tells you what the next commit will use.</p>
 
-1. Saves a role named `work`
-2. Applies it only to the current repository
-3. Shows what this repo will actually use before the next commit
+<p>The full first-time setup, including SSH, is in <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>. If pushes still go through the wrong GitHub account, use <a href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/' | url }}">Fix pushes using the wrong GitHub account</a>.</p>
 
-If `status` looks clean, you have the basic setup working.
+<h2 id="status-vs-doctor">How to read a check</h2>
 
-If you want the full first-time setup, go straight to <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>.
-If pushes still go through the wrong GitHub account, jump to <a href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/' | url }}">Fix pushes using the wrong GitHub account</a>.
-
-<h2 id="status-vs-doctor">Status vs doctor</h2>
-
-Make this distinction early:
+<p>These three commands answer different questions. Use <code>current</code> when you want the role name, <code>status</code> before you commit or push, and <code>doctor</code> when something is wrong and you need the reason.</p>
 
 <div class="comparison-grid">
   <div class="surface">
     <span class="eyebrow-inline">Active role</span>
     <h3><code>gitrole current</code></h3>
-    <p>Use this when you want to know which saved role matches the active commit identity in this repo.</p>
+    <p>Which saved role matches the active commit identity in this repo.</p>
   </div>
   <div class="surface">
     <span class="eyebrow-inline">Fast daily check</span>
     <h3><code>gitrole status</code></h3>
-    <p>Use this before you commit or push. It answers "does this repo look right?" and checks the broader repo alignment.</p>
+    <p>Does this repo look right for the next commit and the next push.</p>
   </div>
   <div class="surface">
     <span class="eyebrow-inline">Full explanation</span>
     <h3><code>gitrole doctor</code></h3>
-    <p>Use this when the repo looks wrong, pushes use the wrong account, or you need to understand what is out of sync.</p>
+    <p>Why a check warned, including commit identity, remote, and SSH auth.</p>
   </div>
 </div>
 
-<h2 id="install">Install</h2>
+<h2 id="surprises">Surprises</h2>
 
-Install comes after understanding, not before:
+<p>A shell prompt can show <code>gitrole:work ✓</code>. That means commit and policy are ok and auth was not checked. The prompt runs <code>gitrole status --short --offline</code> so it doesn't open SSH on every redraw. Live auth is <code>gitrole doctor</code> or the optional check-only hook. Setup is in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
 
-```bash
-brew install synthesiseng/tap/gitrole
-```
+<p>A coding agent will commit as whatever <code>GIT_AUTHOR_EMAIL</code> says, even when <code>user.email</code> looks right. The packaged skill tells Claude Code, Codex, or Cursor to run <code>gitrole status --short</code> and stop on a warning. It doesn't install a hook. See <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify Git identity before an agent commits</a>.</p>
 
-or with npm:
-
-```bash
-npm install -g gitrole
-```
-
-Then create your first role and run the three-command example above.
+<p>Installing gitrole doesn't turn on shell completion. You add the script yourself. See <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">Enable shell tab completion</a>.</p>
 
 <h2 id="keep-reading">Keep reading</h2>
 
-Use the main guide when you want the normal setup. Use a focused page when you need help with one specific problem.
+<p>Use the main guide for the normal setup. Use a focused page when you have one problem.</p>
 
 <div class="link-grid">
   <a class="reference-card" href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">
@@ -171,6 +146,13 @@ Use the main guide when you want the normal setup. Use a focused page when you n
     <div>
       <strong>Use case: Use gitrole as an identity preflight for agents and automation</strong>
       <span>Check repo identity state before an agent commits or pushes under an existing role.</span>
+    </div>
+    <span aria-hidden="true">&rarr;</span>
+  </a>
+  <a class="reference-card" href="{{ '/machine-readable-contracts/' | url }}">
+    <div>
+      <strong>Machine Readable Contracts</strong>
+      <span>Field names, values, and exit codes for <code>status --short</code>, <code>doctor --json</code>, and <code>resolve --json</code>.</span>
     </div>
     <span aria-hidden="true">&rarr;</span>
   </a>

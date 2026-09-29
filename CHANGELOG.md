@@ -4,8 +4,8 @@
 
 ### Documentation
 
-* Homebrew install via `brew install synthesiseng/tap/gitrole` is documented (npm remains available)
-* **prompt:** shell segment needs gitrole 0.9.0 or newer; document `gitrole:? ⚠`, a missing `gitrole-prompt` on `PATH`, that `--offline` does not emit `auth=ok`, that an `auth=ok` line shows ⚠ because ✓ only covers the offline contract, and that live auth is `gitrole doctor` and the optional check-only hook, not the prompt
+* Install instructions lead with `brew install synthesiseng/tap/gitrole`. `npm install -g gitrole` is still the other install path.
+* The shell prompt needs gitrole 0.9.0 or newer. `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified. `gitrole status --short --offline` does not emit `auth=ok`. A line that still says `auth=ok` shows ⚠, because ✓ only covers the offline contract. If `gitrole-prompt` is not on `PATH`, the snippets print nothing. A failed or unreadable status shows `gitrole:? ⚠`. Live auth is `gitrole doctor` and the optional check-only hook, not the prompt.
 
 ### Breaking Changes
 

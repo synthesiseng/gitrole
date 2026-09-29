@@ -6,67 +6,29 @@ summary: Print a one-line gitrole segment from status --short --offline in Stars
 order: 4
 ---
 
-<h2 id="what-you-get">What you get</h2>
+<p>A repository can be on the wrong Git identity and the prompt won't say so until you run a command. A prompt that calls <code>gitrole status --short</code> without <code>--offline</code> also opens SSH every time the line redraws, and a checkmark on that line is easy to read as "auth passed" when the probe never ran. This page adds a segment that shows the role from a local check only.</p>
 
-Snippets run `gitrole status --short --offline` and pass that line to `gitrole-prompt --format`:
+<h2 id="quick-start">Quick start</h2>
 
-| Short line | Segment |
-| ---------- | ------- |
-| `commit=ok`, `policy` is `ok` or `na`, `remote` is `ok` or `na`, `auth=na`, `overall=aligned` | `gitrole:work ✓` |
-| `commit`, `policy`, `remote`, or `auth` is `warn`, `auth=ok`, or `overall=warning` | `gitrole:work ⚠` |
-| status failed, or `role` or those fields are missing or `role` is not a role token | `gitrole:? ⚠` |
-
-`role` has to match a saved role token: lowercase letters, digits, `-`, and `_`. `no-role` is that shape, so a repo with no matching role shows `gitrole:no-role ⚠` when commit or policy is warn. A hand-built aligned line with `role=no-role` still shows `gitrole:no-role ✓`. The glyph comes from the status fields. `no-role` cannot be saved as a role name. Fields are read by name.
-
-`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. Live auth verification is for push-time `gitrole doctor` and the optional check-only hook, not the prompt. On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `gitrole status --short --offline` does not emit `auth=ok`. `auth=ok` means the line did not come from `--offline`; the segment shows ⚠ because ✓ only covers the offline contract. `gitrole:? ⚠` stays reserved for an unreadable or malformed line, missing fields, a failed command, or `gitrole` not on `PATH`.
-
-Outside a git work tree the prompt prints nothing. The terminal needs UTF-8 for `✓` and `⚠`. The helper exits `0` when it prints a segment, including a warning, so the prompt itself does not fail. It does not switch roles, and it does not install hooks. There is no auth cache.
-
-<h2 id="install">Install</h2>
-
-The snippets need gitrole 0.9.0 or newer.
-
-Install puts `gitrole` and `gitrole-prompt` on `PATH`:
+<p>The snippets need gitrole 0.9.0 or newer. That release added <code>gitrole status --short --offline</code> and <code>gitrole-prompt</code>. Install puts both binaries on <code>PATH</code>:</p>
 
 ```bash
 brew install synthesiseng/tap/gitrole
 ```
 
-or with npm:
+<p>or with npm:</p>
 
 ```bash
 npm install -g gitrole
 ```
 
-Confirm the helper is on `PATH`:
+<p>Confirm the helper:</p>
 
 ```bash
 command -v gitrole-prompt
 ```
 
-From a checkout of this repo:
-
-```bash
-export PATH="/path/to/gitrole/shell:$PATH"
-```
-
-Parse a line you already have:
-
-```bash
-gitrole status --short --offline | gitrole-prompt --format
-```
-
-Do not point a prompt at `gitrole status --short` without `--offline`. That command can open an SSH connection.
-
-<h2 id="snippets">Snippets</h2>
-
-Each snippet calls `gitrole status --short --offline` only. The segment has no trailing space. The functions below add one only when the segment is non-empty, so directories outside a repo stay unchanged.
-
-The copy-paste files and the stdout contract are in `examples/prompt/` in the repo. The command stays `gitrole status --short --offline`. `✓` stays “commit and policy ok, auth not checked.” Setup prose on this page can change without moving those.
-
-<h3 id="starship">Starship</h3>
-
-Add this to `~/.config/starship.toml`. The command is the offline check, not a live SSH probe.
+<p>If you use Starship, add this to <code>~/.config/starship.toml</code>. The command is the offline check, not a live SSH probe. <code>when</code> walks up to the work tree. <code>detect_folders = [".git"]</code> would not. You can stop after Starship reloads if the segment shows a role inside a repo and nothing outside one.</p>
 
 ```toml
 # `when` walks up to the work tree. detect_folders = [".git"] would not.
@@ -86,9 +48,58 @@ format = "[$output]($style) "
 style = "bold"
 ```
 
+<p>From a checkout of this repo, before the package is installed, the helper lives in <code>shell/</code>:</p>
+
+```bash
+export PATH="/path/to/gitrole/shell:$PATH"
+```
+
+<p><code>/path/to/gitrole</code> is the repository root. Don't point a prompt at <code>gitrole status --short</code> without <code>--offline</code>. That command can open an SSH connection.</p>
+
+<h2 id="how-to-read-the-segment">How to read the segment</h2>
+
+<p>Each snippet runs <code>gitrole status --short --offline</code> and pipes that one line to <code>gitrole-prompt --format</code>. The helper prints at most one line and exits <code>0</code>, including for a warning, so the prompt itself doesn't fail. There is no trailing space on the helper's line. The functions add one space only when the segment is non-empty, so directories outside a repo stay unchanged.</p>
+
+<p>`✓` means commit and policy are ok and auth was not checked. `✓` does not mean network auth was verified. Live auth is `gitrole doctor` and the optional check-only hook, not the prompt.</p>
+
+<p>On SSH, `auth=na` because the live `githubUser` probe is skipped. That `na` is not a green auth check. `gitrole status --short --offline` does not emit `auth=ok`. SSH auth is `na`. HTTPS auth is `na` or `warn`. `auth=ok` means the line didn't come from `--offline`, and the segment shows ⚠ because ✓ only covers the offline contract.</p>
+
+<p>If `gitrole-prompt` is not on `PATH`, the shell reports `gitrole-prompt: command not found` and the segment is empty. A failed or unreadable status shows `gitrole:? ⚠`.</p>
+
+<p>Fields are read by name, in this order: <code>role scope override commit remote auth policy overall</code>. <code>role</code> has to match a role token: lowercase letters, digits, <code>-</code>, and <code>_</code>. <code>no-role</code> is that shape, so a repo with no matching role shows <code>gitrole:no-role ⚠</code> when commit or policy is warn. A hand-built aligned line with <code>role=no-role</code> still shows <code>gitrole:no-role ✓</code>. The glyph comes from the status fields. <code>no-role</code> can't be saved as a new role name.</p>
+
+<table>
+  <thead>
+    <tr><th>When</th><th>Segment</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>commit=ok</code>, <code>policy</code> is <code>ok</code> or <code>na</code>, <code>remote</code> is <code>ok</code> or <code>na</code>, <code>auth=na</code>, <code>overall=aligned</code></td><td><code>gitrole:work ✓</code></td></tr>
+    <tr><td><code>commit</code>, <code>policy</code>, <code>remote</code>, or <code>auth</code> is <code>warn</code>, or <code>auth=ok</code>, or <code>overall=warning</code></td><td><code>gitrole:work ⚠</code></td></tr>
+    <tr><td>status failed, fields are missing, or <code>role</code> isn't a role token</td><td><code>gitrole:? ⚠</code></td></tr>
+  </tbody>
+</table>
+
+<p>An offline SSH repo with a clean local role prints this line, and the segment is <code>gitrole:work ✓</code>:</p>
+
+```text
+role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned
+```
+
+<p>The same fields with <code>auth=ok</code> are not what <code>--offline</code> prints. The formatter still shows <code>gitrole:work ⚠</code>, so a copied online line doesn't get a checkmark in the prompt.</p>
+
+<h2 id="offline">What offline checks</h2>
+
+<p>Each prompt runs <code>gitrole status --short --offline</code> and never the networked <code>status --short</code>. There is no cache, so the next prompt sees a role switch or an env override without a refresh flag.</p>
+
+<p>Offline status still reads local git config, author and committer env vars, whether the repo has commits, <code>origin</code> (protocol, host, and the HTTPS pin check), the saved roles file, and <code>.gitrole</code>. It doesn't open SSH and it doesn't call GitHub. <code>gitrole status</code> and <code>gitrole status --short</code> without <code>--offline</code> still probe SSH remotes. Use those when you want the network check. The prompt snippets don't.</p>
+
+<h2 id="other-shells">Other shells</h2>
+
+<p>The copy-paste files are in <code>examples/prompt/</code>. Each one calls <code>gitrole status --short --offline</code> only. The stdout contract for the segment is in that directory's README, so setup prose here can change without moving the lines the snippets parse.</p>
+
 <h3 id="oh-my-zsh">oh-my-zsh</h3>
 
-Put this in `~/.zshrc` after `source $ZSH/oh-my-zsh.sh`. Themes that set `PROMPT` once at startup keep the segment. If a theme rewrites `PROMPT` on every precmd, add `$(gitrole_prompt_segment)` inside that theme string.
+<p>Put this in <code>~/.zshrc</code> after <code>source $ZSH/oh-my-zsh.sh</code>. Themes that set <code>PROMPT</code> once at startup keep the segment. If a theme rewrites <code>PROMPT</code> on every precmd, add <code>$(gitrole_prompt_segment)</code> inside that theme string, or the theme will drop the segment on the next prompt.</p>
 
 ```zsh
 gitrole_prompt_segment() {
@@ -156,7 +167,7 @@ PS1='$(gitrole_prompt_segment)'"$PS1"
 
 <h3 id="fish">fish</h3>
 
-This wraps the current `fish_prompt` instead of replacing it:
+<p>This wraps the current <code>fish_prompt</code> instead of replacing it, so the rest of your prompt stays:</p>
 
 ```fish
 functions -c fish_prompt _gitrole_original_prompt
@@ -180,22 +191,45 @@ function fish_prompt
 end
 ```
 
-<h2 id="offline">What offline checks</h2>
-
-Each prompt runs `gitrole status --short --offline` and never the networked `status --short`. There is no cache.
-
-Offline status still reads local git config, author and committer env vars, whether the repo has commits, `origin` (for protocol, host, and the HTTPS pin check), the saved roles file, and `.gitrole`.
-
-It does not open SSH and it does not call GitHub. On an SSH remote, `auth=na`. `✓` means commit and policy are ok and auth was not checked. It does not mean the githubUser probe succeeded.
-
-`gitrole status` and `gitrole status --short` without `--offline` still probe SSH remotes. Use those when you want the network check. The prompt snippets do not.
-
 <h2 id="troubleshooting">Troubleshooting</h2>
 
-The snippets need gitrole 0.9.0 or newer. That release added `gitrole status --short --offline` and `gitrole-prompt`.
+<p>The snippets need gitrole 0.9.0 or newer. The terminal needs UTF-8 for <code>✓</code> and <code>⚠</code>. Glyphs are U+2713 CHECK MARK and U+26A0 WARNING SIGN, with no variation selector.</p>
 
-| What you see | What to check |
-| ------------ | ------------- |
-| `gitrole:? ⚠` | Status failed, `gitrole` is not on `PATH`, or the short line had no readable role. Run `gitrole status --short --offline` in that repo. Exit `1` prints the error on stderr and no line. A role token is lowercase letters, digits, `-`, and `_`, the same rule as a saved role name. |
-| no segment, and the shell says `gitrole-prompt: command not found` | `gitrole-prompt` is not on `PATH`. The snippets ignore a failed format pipe, so they print nothing. `brew install synthesiseng/tap/gitrole` or `npm install -g gitrole` installs both commands. `command -v gitrole-prompt` should print a path. |
-| nothing, outside a git work tree | Expected. The snippets do not run `gitrole` there. |
+<table>
+  <thead>
+    <tr><th>What you see</th><th>What to check</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>gitrole:? ⚠</code></td>
+      <td>Status failed, <code>gitrole</code> is not on <code>PATH</code>, or the short line had no readable role. Run <code>gitrole status --short --offline</code> in that repo. Exit <code>1</code> prints the error on stderr and no line. A role token is lowercase letters, digits, <code>-</code>, and <code>_</code>, the same shape as a saved role name.</td>
+    </tr>
+    <tr>
+      <td>no segment, and the shell says <code>gitrole-prompt: command not found</code></td>
+      <td><code>gitrole-prompt</code> is not on <code>PATH</code>. The snippets ignore a failed format pipe, so they print nothing instead of <code>gitrole:? ⚠</code>. <code>brew install synthesiseng/tap/gitrole</code> or <code>npm install -g gitrole</code> installs both commands. <code>command -v gitrole-prompt</code> should print a path.</td>
+    </tr>
+    <tr>
+      <td>nothing, outside a git work tree</td>
+      <td>Expected. The snippets don't run <code>gitrole</code> there, so a home directory stays quiet.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="what-it-does-not-do">What it doesn't do</h2>
+
+<p>The prompt doesn't switch roles, install hooks, or verify network auth. It doesn't cache a previous line. <code>gitrole:? ⚠</code> stays reserved for an unreadable or malformed line, missing fields, a failed command, or <code>gitrole</code> not on <code>PATH</code>.</p>
+
+<h2 id="files">Snippet files</h2>
+
+<table>
+  <thead>
+    <tr><th>File in <code>examples/prompt/</code></th><th>Where it goes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>starship.toml</code></td><td><code>~/.config/starship.toml</code></td></tr>
+    <tr><td><code>oh-my-zsh.zsh</code></td><td><code>~/.zshrc</code>, after Oh My Zsh is sourced</td></tr>
+    <tr><td><code>zsh.zsh</code></td><td><code>~/.zshrc</code></td></tr>
+    <tr><td><code>bash.sh</code></td><td><code>~/.bashrc</code></td></tr>
+    <tr><td><code>fish.fish</code></td><td><code>~/.config/fish/config.fish</code></td></tr>
+  </tbody>
+</table>

@@ -6,7 +6,9 @@ compatibility: Requires the gitrole CLI on PATH.
 
 # Verify identity before you commit
 
-Run one command in the repository before `git commit`, `git commit --amend`, or `git push`. Prefer the first:
+Coding agents commit as whoever the environment names, and that person is often wrong for the repository. Before `git commit`, `git commit --amend`, or `git push`, check the identity gitrole reports and stop when it is a warning.
+
+Run this in the repository. Prefer the first command. Use the second when you need the reason, not only the line.
 
 ```bash
 gitrole status --short
@@ -18,7 +20,7 @@ gitrole doctor --json
 
 If `gitrole` is not on `PATH`, stop and tell the user. Do not commit.
 
-This skill verifies. It does not install hooks, switch roles, or rewrite remotes. Do those only when the user asks.
+This skill verifies. It doesn't install hooks, switch roles, or rewrite remotes. Do those only when the user asks. Run the two commands as written. Don't add `--offline` before a commit or push, because that flag skips the SSH probe this check is here to run.
 
 ## `gitrole status --short`
 
@@ -28,7 +30,7 @@ One line on stdout. Eight `key=value` fields, separated by single spaces, in thi
 role scope override commit remote auth policy overall
 ```
 
-Read `overall` by name. It is the eighth field. `policy` is the seventh.
+Read the fields by name. `overall` is the eighth field. `policy` is the seventh. A parser that still treats the seventh field as the summary is reading `policy`.
 
 | Result | Action |
 | --- | --- |
@@ -37,9 +39,9 @@ Read `overall` by name. It is the eighth field. `policy` is the seventh.
 | `commit`, `remote`, `auth`, or `policy` is `warn` | Stop. Do not commit or push. |
 | Exit `1` | Stop. Stdout is empty. The error is on stderr. |
 
-`na` means that check does not apply. It does not by itself mean stop. `policy=na` with `overall=aligned` is aligned.
+`na` means that check doesn't apply. It doesn't by itself mean stop. `policy=na` with `overall=aligned` is aligned, because no `.gitrole` file is present.
 
-Aligned:
+Aligned local role, no `.gitrole` file:
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned
@@ -47,35 +49,33 @@ role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overal
 
 ## Trust the effective identity
 
-`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` override Git config. A set `user.name` or `user.email` is not the commit identity.
+`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` override Git config. A set `user.name` or `user.email` is not the commit identity. Trust the gitrole result. Don't read Git config and decide the repo is aligned.
 
-Trust the `gitrole` result. Do not read Git config and decide the repo is aligned.
+On `gitrole doctor --json`, `commitIdentity` is who the commit will use. `commitIdentity.fullName.source` and `commitIdentity.email.source` are `local`, `global`, `env`, or `unset`. `configuredIdentity` is only the raw config, so it can look fine while the commit uses an env override.
 
-On `gitrole doctor --json`, `commitIdentity` is who the commit will use. `commitIdentity.fullName.source` and `commitIdentity.email.source` are `local`, `global`, `env`, or `unset`. `configuredIdentity` is only the raw config.
-
-An env value that changes the effective author away from the saved role is `commit=warn` and `overall=warning`. Stop.
+An env value that changes the effective author away from the saved role is `commit=warn` and `overall=warning`. Stop. This line is `GIT_AUTHOR_EMAIL` set to an address that matches no saved role:
 
 ```text
 role=no-role scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
 ```
 
-`GIT_COMMITTER_EMAIL` or `GIT_COMMITTER_NAME` that disagrees with the effective author is also `commit=warn`. Stop.
+`GIT_COMMITTER_EMAIL` or `GIT_COMMITTER_NAME` that disagrees with the effective author is also `commit=warn`. Stop. The saved role can still match, because the author didn't change:
 
 ```text
 role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
 ```
 
-An env value that matches the saved role can be `info` with `overall=aligned`. That `info` is not a warning. Still use the `gitrole` result, not the config keys.
+An env value that matches the saved role can be `info` with `overall=aligned`. That `info` is not a warning. Still use the gitrole result, not the config keys.
 
 ## Warnings that still stop
 
-HTTPS origin with no `.gitrole` pin. `auth=warn` and `overall=warning`. Exit `2`. Stop. `auth=na` on HTTPS is only when a pin allows the active role and that role has a `githubUser`.
+HTTPS origin with no `.gitrole` pin. `auth=warn` and `overall=warning`. Exit `2`. Stop. `auth=na` on HTTPS is only when a pin allows the active role and that role has a `githubUser`. Without that pin, gitrole can't tell which GitHub user the HTTPS push will use:
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
 ```
 
-A repository with no commits yet is `overall=warning`. `remote=warn` because `HEAD` does not exist. Stop even when `commit=ok`.
+A repository with no commits yet is `overall=warning`. `remote=warn` because `HEAD` doesn't exist. Stop even when `commit=ok`. The first commit is the one that is hardest to fix later.
 
 No local role:
 
@@ -91,7 +91,7 @@ role=work scope=local override=true commit=ok remote=warn auth=ok policy=na over
 
 ## `gitrole doctor --json`
 
-JSON on stdout. Read `overall`, `commitIdentity`, and `checks[].status`. Do not parse `checks[].message`. Do not treat `configuredIdentity` as the commit identity.
+JSON on stdout. Read `overall`, `commitIdentity`, and `checks[].status`. Don't parse `checks[].message`. Don't treat `configuredIdentity` as the commit identity.
 
 | Result | Action |
 | --- | --- |
@@ -99,14 +99,12 @@ JSON on stdout. Read `overall`, `commitIdentity`, and `checks[].status`. Do not 
 | Exit `2`, `overall` is `warning`, or any `checks[].status` is `warn` | Stop. Do not commit or push. |
 | Exit `1` | Stop. There is no JSON. The error is on stderr. |
 
-`checks[].status` of `info` is not a warning.
+`checks[].status` of `info` is not a warning. It doesn't select exit `2`.
 
 ## After a warning
 
 Report the command, the exit code, and `overall`. Quote any `warn` field from `status --short`, or any `warn` check `label` from `doctor --json`. Then stop.
 
-Do not run `gitrole use`, `gitrole pin`, or `gitrole remote set` to clear the warning unless the user asks.
+Don't run `gitrole use`, `gitrole pin`, or `gitrole remote set` to clear the warning unless the user asks. Fixing the identity is a separate action, and the user has to choose the role.
 
 The package also ships `hooks/pre-commit`, which only runs `gitrole status --short`. Leave it uninstalled unless the user asks for that optional hook.
-
-These commands take no input. Do not add flags.
