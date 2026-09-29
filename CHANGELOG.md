@@ -16,18 +16,18 @@
 
 ### Bug Fixes
 
-* **roles:** reserve the name `no-role` so a saved role cannot collide with the status and prompt sentinel
-  * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and do not write the role
-  * an existing saved role named `no-role` is left in place; `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`
-  * `gitrole status` and the prompt segment still run for that legacy role; prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
-* **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`; no pin or a github user mismatch is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
+* **roles:** `no-role` is reserved so a saved role can't collide with the status and prompt sentinel
+  * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and don't write the role
+  * an existing saved role named `no-role` is left in place. `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`
+  * `gitrole status` and the prompt segment still run for that legacy role. Prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
+* **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
 ## [0.10.3](https://github.com/synthesiseng/gitrole/compare/v0.10.2...v0.10.3) (2026-09-27)
 
 
 ### Bug Fixes
 
-* **roles:** reserve the no-role status sentinel ([#78](https://github.com/synthesiseng/gitrole/issues/78)) ([2c28ea8](https://github.com/synthesiseng/gitrole/commit/2c28ea8f5613caf459fa99e8198e83b55659910a))
+* **roles:** `no-role` is reserved for the status line when no saved role matches, so you can't save a role with that name. `gitrole add no-role` and `gitrole import current --name no-role` exit `1` and don't write the role. A role already saved under that name is left in place ([#78](https://github.com/synthesiseng/gitrole/issues/78)) ([2c28ea8](https://github.com/synthesiseng/gitrole/commit/2c28ea8f5613caf459fa99e8198e83b55659910a))
 
 ## [0.10.2](https://github.com/synthesiseng/gitrole/compare/v0.10.1...v0.10.2) (2026-09-27)
 
@@ -41,35 +41,35 @@
 
 ### Bug Fixes
 
-* **completions:** offer --offline for status ([#73](https://github.com/synthesiseng/gitrole/issues/73)) ([46a07e3](https://github.com/synthesiseng/gitrole/commit/46a07e33b47a98160883a3195457cfb3cab3c66b))
+* **completions:** Tab on `gitrole status` offers `--offline` along with `--short`. `--offline` skips the live SSH probe ([#73](https://github.com/synthesiseng/gitrole/issues/73)) ([46a07e3](https://github.com/synthesiseng/gitrole/commit/46a07e33b47a98160883a3195457cfb3cab3c66b))
 
 ## [0.10.0](https://github.com/synthesiseng/gitrole/compare/v0.9.1...v0.10.0) (2026-09-27)
 
 
 ### Features
 
-* add shell tab completion for bash, zsh, and fish ([#70](https://github.com/synthesiseng/gitrole/issues/70)) ([e422313](https://github.com/synthesiseng/gitrole/commit/e422313f8b293f4aa441234e88cc90c10c44ab5e))
+* bash, zsh, and fish can complete gitrole commands, flags, and saved role names. Installing gitrole doesn't turn completion on. You add the script yourself ([#70](https://github.com/synthesiseng/gitrole/issues/70)) ([e422313](https://github.com/synthesiseng/gitrole/commit/e422313f8b293f4aa441234e88cc90c10c44ab5e))
 
 ## [0.9.1](https://github.com/synthesiseng/gitrole/compare/v0.9.0...v0.9.1) (2026-09-27)
 
 
 ### Bug Fixes
 
-* **prompt:** skip auth on every prompt and drop the segment cache ([#68](https://github.com/synthesiseng/gitrole/issues/68)) ([af19e12](https://github.com/synthesiseng/gitrole/commit/af19e124f406926ca9d206890f239de76d827b97))
+* **prompt:** the shell prompt skips the live SSH probe on every redraw and doesn't cache the segment. `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified ([#68](https://github.com/synthesiseng/gitrole/issues/68)) ([af19e12](https://github.com/synthesiseng/gitrole/commit/af19e124f406926ca9d206890f239de76d827b97))
 
 ## [0.9.0](https://github.com/synthesiseng/gitrole/compare/v0.8.0...v0.9.0) (2026-09-27)
 
 
 ### Features
 
-* add a shell prompt segment from status --short ([#66](https://github.com/synthesiseng/gitrole/issues/66)) ([804515b](https://github.com/synthesiseng/gitrole/commit/804515bb4b91229b8f9a22b55d02078104b7d3ed))
+* you can show the active role in the shell prompt. The segment comes from `gitrole status --short --offline` and `gitrole-prompt` ([#66](https://github.com/synthesiseng/gitrole/issues/66)) ([804515b](https://github.com/synthesiseng/gitrole/commit/804515bb4b91229b8f9a22b55d02078104b7d3ed))
 
 ## [0.8.0](https://github.com/synthesiseng/gitrole/compare/v0.7.6...v0.8.0) (2026-09-27)
 
 
 ### Bug Fixes
 
-* **status:** warn on unpinned and mismatched HTTPS auth ([#62](https://github.com/synthesiseng/gitrole/issues/62)) ([607d1cd](https://github.com/synthesiseng/gitrole/commit/607d1cdd4307f654cb198006e458cdfb2fabbcc2))
+* **status:** an HTTPS origin is `auth=warn` and exit `2` when no `.gitrole` pin allows the active role, or when that role's GitHub user doesn't match the pin. `auth=na` on HTTPS is only when a pin allows the active role and that role has a `githubUser` ([#62](https://github.com/synthesiseng/gitrole/issues/62)) ([607d1cd](https://github.com/synthesiseng/gitrole/commit/607d1cdd4307f654cb198006e458cdfb2fabbcc2))
 * **test:** keep npm pack from truncating dist during e2e ([#64](https://github.com/synthesiseng/gitrole/issues/64)) ([9f26dfe](https://github.com/synthesiseng/gitrole/commit/9f26dfe9f99f81e3ec45af3eaf21ec369b7cb236))
 
 ## [0.7.6](https://github.com/synthesiseng/gitrole/compare/v0.7.5...v0.7.6) (2026-09-26)
