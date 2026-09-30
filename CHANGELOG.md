@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Push identity correctness
+
+* `status` and `doctor` inspect the effective destination of a default `git push`, including every Git-resolved push URL, instead of authenticating the fetch origin. `repository.remote` now means the first push endpoint; additive `fetchRemote` and `push.targets` retain separate context. Short field order and exit codes are unchanged; strict consumers must account for the changed remote meaning.
+* Unsupported SSH commands, alternate diagnostic binaries, incomplete or interactive SSH contexts remain unverified. Online OpenSSH inspection may execute configured `Match exec` commands or DNS lookups. Offline status and prompts invoke no SSH; HTTPS pin checks remain local. Mixed SSH/HTTPS warns online.
+* Destination and account observation does not prove refspec readiness, authorization or successful push, and excludes future explicit push arguments.
+
 ### Documentation
 
 * Install instructions lead with `brew install synthesiseng/tap/gitrole`. `npm install -g gitrole` is still the other install path.

@@ -2,7 +2,7 @@
  * Collects the shared application contracts and result shapes used across gitrole.
  */
 import type { GitIdentity, Role } from '../domain/role.js';
-import type { RemoteInfo, RemoteProtocol } from '../adapters/git-repository.js';
+import type { RemoteInfo, RemoteProtocol, PushDestination } from '../adapters/git-repository.js';
 
 export type { RemoteInfo, RemoteProtocol } from '../adapters/git-repository.js';
 
@@ -110,6 +110,12 @@ export interface DoctorResult {
     currentBranch?: string;
     upstreamBranch?: string;
     remote?: RemoteInfo;
+    fetchRemote?: RemoteInfo;
+    push?: {
+      remoteName?: string;
+      message?: string;
+      targets: Array<{ remote: RemoteInfo; sshAuth?: SshAuthProbeResult; message?: string }>;
+    };
   };
   sshAuth?: SshAuthProbeResult;
   repoPolicy?: RepoPolicyEvaluation;
@@ -181,6 +187,7 @@ export interface GitRepository {
   getUpstreamBranch(): Promise<string | undefined>;
   getOriginUrl(): Promise<string | undefined>;
   getOriginRemote(): Promise<RemoteInfo | undefined>;
+  getPushDestination?(env?: NodeJS.ProcessEnv): Promise<PushDestination>;
   setOriginUrl(url: string): Promise<void>;
   getLocalUserName(): Promise<string | undefined>;
   getLocalUserEmail(): Promise<string | undefined>;
@@ -196,7 +203,7 @@ export interface SshAuthProbeResult {
 }
 
 export interface SshAuthProbe {
-  probeGithubUser(host: string): Promise<SshAuthProbeResult>;
+  probeGithubUser(host: string, context?: { user?: string; port?: number; path?: string; env?: NodeJS.ProcessEnv }): Promise<SshAuthProbeResult>;
 }
 
 export interface AppDependencies {

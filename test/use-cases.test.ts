@@ -156,6 +156,10 @@ function createDoctorDependencies(role: Role, options: {
       async getOriginUrl() {
         return options.remoteUrl ?? 'git@github.com-acmedeploy:acmedeploy/gitrole.git';
       },
+      async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
       async getOriginRemote() {
         return getOriginRemote(
           options.remoteUrl ?? 'git@github.com-acmedeploy:acmedeploy/gitrole.git'
@@ -347,7 +351,11 @@ test('use-role succeeds when post-switch alignment assessment throws', async () 
         async getOriginUrl() {
           return 'git@github.com-acme-dev:acme-dev/gitrole.git';
         },
-        async getOriginRemote() {
+        async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
+      async getOriginRemote() {
           return getOriginRemote('git@github.com-acme-dev:acme-dev/gitrole.git');
         },
         async setOriginUrl() {
@@ -424,7 +432,11 @@ test('use-role can apply the selected git identity to local repository config', 
         async getOriginUrl() {
           return 'git@github.com-acme-dev:acme-dev/gitrole.git';
         },
-        async getOriginRemote() {
+        async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
+      async getOriginRemote() {
           return getOriginRemote('git@github.com-acme-dev:acme-dev/gitrole.git');
         },
         async setOriginUrl() {
@@ -921,7 +933,11 @@ test('role-referencing commands reject invalid role names consistently', async (
             async getOriginUrl() {
               return 'git@github.com-work:acme/service.git';
             },
-            async getOriginRemote() {
+            async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
+      async getOriginRemote() {
               return getOriginRemote('git@github.com-work:acme/service.git');
             },
             async setOriginUrl() {
@@ -1123,7 +1139,11 @@ test('use-role rejects local scope outside a git repository', async () => {
             async getOriginUrl() {
               return undefined;
             },
-            async getOriginRemote() {
+            async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
+      async getOriginRemote() {
               return undefined;
             },
             async setOriginUrl() {
@@ -1185,7 +1205,11 @@ test('use-role returns repo-aware warnings when the selected role does not match
         async getOriginUrl() {
           return 'git@github.com-saraeloop:acmedeploy/gitrole.git';
         },
-        async getOriginRemote() {
+        async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
+      async getOriginRemote() {
           return getOriginRemote('git@github.com-saraeloop:acmedeploy/gitrole.git');
         },
         async setOriginUrl() {
@@ -1359,6 +1383,10 @@ test('doctor aligns commit identity, remote metadata, and SSH auth', async () =>
       async getOriginUrl() {
         return 'git@github.com-acmedeploy:acmedeploy/gitrole.git';
       },
+      async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
       async getOriginRemote() {
         return getOriginRemote('git@github.com-acmedeploy:acmedeploy/gitrole.git');
       },
@@ -1485,6 +1513,10 @@ test('doctor reports local scope when repo-local identity overrides are active',
       async getOriginUrl() {
         return 'git@github.com-acme-dev:acme-dev/gitrole.git';
       },
+      async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
       async getOriginRemote() {
         return getOriginRemote('git@github.com-acme-dev:acme-dev/gitrole.git');
       },
@@ -1599,6 +1631,10 @@ test('doctor stays aligned for org remotes when auth and host match the role', a
       },
       async getOriginUrl() {
         return 'git@github.com-personal:acme-org/gitrole.git';
+      },
+      async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
       },
       async getOriginRemote() {
         return getOriginRemote('git@github.com-personal:acme-org/gitrole.git');
@@ -1863,6 +1899,8 @@ test('status summary evaluation derives warnings from observed state, not diagno
       repository: {
         isInsideWorkTree: true,
         hasCommits: true,
+        push: { targets: [{ remote: parseRemoteUrl('origin', 'git@github.com-saraeloop:acmedeploy/gitrole.git'),
+          sshAuth: { ok: true, host: 'github.com-saraeloop', githubUser: 'saraeloop' } }] },
         remote: parseRemoteUrl(
           'origin',
           'git@github.com-saraeloop:acmedeploy/gitrole.git'
@@ -1981,6 +2019,10 @@ test('doctor warns on HTTPS with no repo pin and still warns when history is mis
       async getOriginUrl() {
         return 'https://github.com/acmedeploy/gitrole.git';
       },
+      async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
       async getOriginRemote() {
         return getOriginRemote('https://github.com/acmedeploy/gitrole.git');
       },
@@ -2017,7 +2059,7 @@ test('doctor warns on HTTPS with no repo pin and still warns when history is mis
       (check) =>
         check.label === 'auth' &&
         check.status === 'warn' &&
-        check.message === 'origin uses HTTPS and no repo pin is configured'
+        check.message === 'push destination uses HTTPS and no repo pin is configured'
     ),
     true
   );
@@ -2121,7 +2163,7 @@ test('HTTPS with no identity pin warns instead of auth=na', async () => {
   assert.equal(status.pushAuth, 'HTTPS (no identity pin)');
   assert.equal(result.overall, 'warning');
   assert.equal(authCheck?.status, 'warn');
-  assert.equal(authCheck?.message, 'origin uses HTTPS and no identity pin is configured');
+  assert.equal(authCheck?.message, 'push destination uses HTTPS and no identity pin is configured');
 });
 
 test('HTTPS pin mismatch warns when the active github user is not the pin', async () => {
@@ -2183,7 +2225,7 @@ test('HTTPS pin mismatch warns when the active github user is not the pin', asyn
   assert.equal(authCheck?.status, 'warn');
   assert.equal(
     authCheck?.message,
-    'origin uses HTTPS; github user thisyearearth does not match pin alex-dev'
+    'push destination uses HTTPS; github user thisyearearth does not match pin alex-dev'
   );
 });
 
@@ -2257,7 +2299,8 @@ test('GIT_AUTHOR_EMAIL that matches the saved role stays aligned and is visible'
     email: 'alex@work.example'
   };
   const dependencies = createDoctorDependencies(role, {
-    remoteUrl: 'git@github.com:acme-corp/service.git'
+    remoteUrl: 'git@github.com:acme-corp/service.git',
+    sshAuth: { ok: true, host: 'github.com', githubUser: 'observed-account' }
   });
   dependencies.env = {
     GIT_AUTHOR_EMAIL: role.email
@@ -2385,7 +2428,11 @@ test('useRemoteForRole rewrites origin to the role host alias', async () => {
         async getOriginUrl() {
           return 'git@github.com:acmedeploy/gitrole.git';
         },
-        async getOriginRemote() {
+        async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
+      },
+      async getOriginRemote() {
           return getOriginRemote('git@github.com:acmedeploy/gitrole.git');
         },
         async setOriginUrl(url: string) {
@@ -2474,6 +2521,10 @@ test('doctor adds a fix hint when no saved role matches the active commit identi
       },
       async getOriginUrl() {
         return 'git@github.com-acme-dev:acme-dev/gitrole.git';
+      },
+      async getPushDestination() {
+        const remote = await this.getOriginRemote();
+        return { remoteName: 'origin', targets: remote ? [remote] : [], transport: { supported: true } };
       },
       async getOriginRemote() {
         return getOriginRemote('git@github.com-acme-dev:acme-dev/gitrole.git');

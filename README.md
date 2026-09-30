@@ -17,7 +17,7 @@
   <a href="https://github.com/synthesiseng/gitrole/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/synthesiseng/gitrole?style=flat-square"></a>
 </p>
 
-One machine often has a work identity and a personal one, and Git will commit or push as the wrong person without saying so. gitrole saves those identities as named roles, switches a repository to the right one, and checks who the next commit will be and who GitHub will see on an SSH push.
+One machine often has a work identity and a personal one, and Git will commit or push as the wrong person without saying so. gitrole saves those identities as named roles, switches a repository to the right one, and checks the effective commit identity and supported authentication for the current default push destinations.
 
 It answers two questions: who will this commit say it is from, and who will GitHub think you are when you push?
 
@@ -56,11 +56,15 @@ For ordinary commits in the current environment, gitrole reads Git’s effective
 
 The eight short fields, their order, and exit codes stay the same. Identity provenance now supports `system`, `worktree`, `command`, and `git` alongside the existing source values. `git` identifies a Git-derived value without a configured field. `scope` reports the underlying configured author scope, including `mixed` or `unset`, even when an identity field has source `env`. Strict consumers must accept the expanded source/scope vocabulary and the additional `committerIdentity` JSON field.
 
+Push checks observe the current default `git push` remote and every URL Git resolves with `git remote get-url --push --all`. A successful check of the origin fetch host does not establish authentication for a different push destination. Online checks evaluate every endpoint: unsupported or unverified SSH authentication, or a violated role expectation, warns. HTTPS-only destinations retain the matching-pin exception described below; mixed SSH/HTTPS destinations warn online. Custom Git SSH commands/wrappers, interactive or partially observed standard SSH contexts are unverified and warn rather than guessing. Online SSH configuration inspection may run `Match exec` commands or DNS lookups. A missing upstream alone does not make an identity warning; this check does not establish refspec readiness or guarantee a push succeeds. Explicit targets or other arguments on a future `git push`, and later configuration/environment changes, are outside this snapshot.
+
+In `doctor --json`, `repository.remote` is the first resolved default push endpoint; `repository.fetchRemote` separately retains origin’s fetch endpoint. `repository.push` reports `remoteName`, any observation `message`, and all `targets` with their remote and available authentication evidence. The legacy top-level `sshAuth` appears only for a single SSH target with probe evidence. Strict JSON consumers must accept these additions and the changed meaning of `repository.remote`; the eight short fields, order and exits remain unchanged.
+
 gitrole warns on violated expectations, not assumptions. `overall=warning` happens when at least one actionable check is `warn`. `na` means that check doesn't apply, and it doesn't by itself make the result a warning.
 
 ## Shell prompt
 
-You can print the active role in the shell prompt. The snippets need gitrole 0.9.0 or newer. They run `gitrole status --short --offline` on every prompt and format that line with `gitrole-prompt --format`. There is no auth cache. `--offline` skips the live SSH probe, so a prompt doesn't open a connection every time the line redraws.
+You can print the active role in the shell prompt. The snippets need gitrole 0.9.0 or newer. They run `gitrole status --short --offline` on every prompt and format that line with `gitrole-prompt --format`. There is no auth cache. `--offline` runs zero SSH commands, including SSH configuration inspection; skipped SSH authentication is `auth=na`. Local HTTPS pin checks still apply and can report `auth=warn` when the pin is absent or mismatched. A prompt does not open an SSH connection when the line redraws; local remote, identity and policy checks can still warn.
 
 `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified. Live auth is `gitrole doctor` and the optional check-only hook, not the prompt. `auth=na` is a skipped SSH probe, not a green auth check. `gitrole status --short --offline` doesn't emit `auth=ok`. If a line still says `auth=ok`, the segment shows ⚠, because ✓ only covers the offline contract. A local warn shows `gitrole:work ⚠`. A failed or unreadable status shows `gitrole:? ⚠`.
 
@@ -70,7 +74,7 @@ The segment is opt-in and check-only. It doesn't switch roles or install hooks. 
 
 Coding agents commit quickly, and they often commit as whoever the environment variables name. The published package includes an agent skill at `skills/gitrole/SKILL.md`. Point Claude Code, Codex, or Cursor at that directory. The skill tells the agent to run `gitrole status --short` before a commit, or `gitrole doctor --json` for the full diagnosis, and to stop when `overall=warning` (exit `2`) or any check is `warn`. Exit `0` is aligned. Exit `1` is a failure.
 
-The agent uses the effective author and committer those commands report. `GIT_AUTHOR_*` and `GIT_COMMITTER_*`, author/committer-specific config, and included config can change the identity, so a set `user.name` or `user.email` is not enough. An author that matches no saved role or a committer that differs from the author produces a commit warning. HTTPS with no pin and a repository with no commits yet also produce warnings. Stop on a warning.
+The agent uses the effective author and committer those commands report. `GIT_AUTHOR_*` and `GIT_COMMITTER_*`, author/committer-specific config, and included config can change the identity, so a set `user.name` or `user.email` is not enough. An author that matches no saved role or a committer that differs from the author produces a commit warning. HTTPS push targets without an allowing matching pin warn, including offline. A repository with no commits and no local role warns; an explicitly applied local role with an otherwise aligned destination can be aligned. A valid destination can be `remote=ok` before the first commit; account observation does not establish refspec readiness or push success. Stop on a warning.
 
 The skill verifies. It doesn't install hooks or block git. The optional check-only hook still runs `gitrole status --short` only when you install it yourself. Install steps are in [Verify Git identity before an agent commits](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/).
 
@@ -122,7 +126,7 @@ gitrole checks and switches the identity you name. It doesn't take over the rest
 
 ## Diagnosis policy
 
-`githubUser` checks the resolved SSH auth user on SSH remotes. HTTPS origins report `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn`. `githubHost` checks the remote host alias. Remote owner and repository are context by default, so a different owner alone doesn't warn. `policy` is `ok`, `warn`, or `na`.
+Online, `githubUser` checks the resolved SSH auth user for every supported SSH push target. HTTPS-only push destinations report `auth=na` when a repo pin allows the active role and that role has a `githubUser`; this does not verify HTTPS credentials. No allowing pin is `auth=warn`. With multiple push targets, any authentication warning makes the combined result `auth=warn`. Mixed SSH/HTTPS destinations always warn online; online `auth=ok` requires every endpoint to be supported SSH with observed authentication satisfying the role’s expectations. HTTPS-only destinations retain the matching-pin `auth=na` exception. Offline skips all SSH commands and SSH authentication is `na`, while absent or mismatched HTTPS pins still warn. `githubHost` checks each push target’s host alias. Remote owner and repository are context by default, so a different owner alone doesn't warn. `policy` is `ok`, `warn`, or `na`.
 
 The field names, values, and exit codes are specified in [Machine Readable Contracts](https://docs.gitrole.dev/machine-readable-contracts/).
 

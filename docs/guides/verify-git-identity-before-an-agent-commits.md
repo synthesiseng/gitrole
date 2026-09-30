@@ -77,23 +77,19 @@ role=work scope=global override=false commit=warn remote=ok auth=ok policy=na ov
 
 <p>These are <code>overall=warning</code> and exit <code>2</code>. The agent stops and doesn't commit.</p>
 
-<p><strong>HTTPS origin with no <code>.gitrole</code> pin.</strong> <code>auth=warn</code> because gitrole can't tell which GitHub user an HTTPS push will use unless a pin allows the active role and that role has a <code>githubUser</code>. <code>auth=na</code> on HTTPS is only that pinned case. Anything else warns, including a clean commit identity:</p>
+<p><strong>HTTPS-only push destination with no <code>.gitrole</code> pin.</strong> <code>auth=warn</code> because gitrole can't tell which GitHub user an HTTPS push will use unless a pin allows the active role and that role has a <code>githubUser</code>. <code>auth=na</code> on HTTPS is only that pinned case. Anything else warns, including a clean commit identity:</p>
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
 ```
 
-<p><strong>A repository with no commits yet.</strong> <code>remote=warn</code> because <code>HEAD</code> doesn't exist yet, and the agent stops even when <code>commit=ok</code>. This catches the first commit in a fresh repository, which is the hardest one to fix later. With no local role, <code>commit=warn</code> as well, because the first commit would use the global identity:</p>
+<p><strong>A repository with no commits and no local role.</strong> <code>commit=warn</code> protects against taking the global identity for the first commit. The push destination is checked separately; an unborn branch can still resolve a destination:</p>
 
 ```text
-role=work scope=global override=false commit=warn remote=warn auth=ok policy=na overall=warning
+role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
 ```
 
-<p>A local role keeps <code>commit=ok</code>, and <code>remote=warn</code> still stops the commit:</p>
-
-```text
-role=work scope=local override=true commit=ok remote=warn auth=ok policy=na overall=warning
-```
+<p>An explicit local role can keep <code>commit=ok</code>. If the destination, supported authentication and policy also pass, status can be aligned even before the first commit. That observes identity; it does not prove branch/refspec readiness or that a push succeeds.</p>
 
 <h2 id="full-diagnosis">Full diagnosis</h2>
 

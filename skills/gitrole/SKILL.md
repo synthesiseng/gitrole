@@ -69,25 +69,19 @@ An env value that matches the saved role can be `info` with `overall=aligned`. T
 
 ## Warnings that still stop
 
-HTTPS origin with no `.gitrole` pin. `auth=warn` and `overall=warning`. Exit `2`. Stop. `auth=na` on HTTPS is only when a pin allows the active role and that role has a `githubUser`. Without that pin, gitrole can't tell which GitHub user the HTTPS push will use:
+HTTPS-only push destination with no `.gitrole` pin. `auth=warn` and `overall=warning`. Exit `2`. Stop. `auth=na` on HTTPS is only when a pin allows the active role and that role has a `githubUser`. Without that pin, gitrole can't tell which GitHub user the HTTPS push will use:
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
 ```
 
-A repository with no commits yet is `overall=warning`. `remote=warn` because `HEAD` doesn't exist. Stop even when `commit=ok`. The first commit is the one that is hardest to fix later.
-
-No local role:
+A repository with no commits and no local role warns on commit identity. A destination can still be resolved without HEAD; `remote=ok` does not prove refspec readiness. Stop on the warning:
 
 ```text
-role=work scope=global override=false commit=warn remote=warn auth=ok policy=na overall=warning
+role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
 ```
 
-Local role, still no commits:
-
-```text
-role=work scope=local override=true commit=ok remote=warn auth=ok policy=na overall=warning
-```
+An explicit local role can keep `commit=ok` and the result can be aligned when all remaining checks pass. This observes identity, not branch readiness, push permission or successful push.
 
 ## `gitrole doctor --json`
 
@@ -108,3 +102,5 @@ Report the command, the exit code, and `overall`. Quote any `warn` field from `s
 Don't run `gitrole use`, `gitrole pin`, or `gitrole remote set` to clear the warning unless the user asks. Fixing the identity is a separate action, and the user has to choose the role.
 
 The package also ships `hooks/pre-commit`, which only runs `gitrole status --short`. Leave it uninstalled unless the user asks for that optional hook.
+
+Default push observation checks every Git-resolved push URL, independently of fetch origin. Mixed SSH/HTTPS warns online. Custom commands, alternate diagnostic SSH binaries and interactive or incomplete SSH contexts remain unverified. Online inspection may execute configured Match commands or DNS; offline invokes no SSH. Alignment does not prove refspec readiness, push authorization or success and does not predict future explicit push arguments.

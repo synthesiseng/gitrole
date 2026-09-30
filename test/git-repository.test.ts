@@ -76,6 +76,7 @@ test('git repository adapter reads repository state', async () => {
     name: 'origin',
     url: 'git@github.com-acmedeploy:acmedeploy/gitrole.git',
     protocol: 'ssh',
+    user: 'git', path: 'acmedeploy/gitrole.git',
     host: 'github.com-acmedeploy',
     owner: 'acmedeploy',
     repository: 'gitrole'
@@ -121,6 +122,7 @@ test('parseRemoteUrl parses ssh host aliases and https remotes', () => {
       name: 'origin',
       url: 'git@github.com-acmedeploy:acmedeploy/gitrole.git',
       protocol: 'ssh',
+      user: 'git', path: 'acmedeploy/gitrole.git',
       host: 'github.com-acmedeploy',
       owner: 'acmedeploy',
       repository: 'gitrole'

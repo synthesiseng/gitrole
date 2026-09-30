@@ -92,6 +92,23 @@ async function assertPolicyCommandsRejectRoleName(
 // Extend existing Git command fixtures with the effective-identity query surface.
 // The real-Git precedence tests live in effective-identity.test.ts.
 const effectiveGitStub = `
+// Model the new read-only default-push query contract without changing each fixture's URL.
+if (args[0] === 'config' && args[1] === '--get') process.exit(1);
+if (args[0] === 'config' && args.includes('--null') && args.includes('--get-all')) {
+  if (args.at(-1).endsWith('.pushurl')) process.exit(1);
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(process.execPath, [process.argv[1], 'remote', 'get-url', 'origin'], { encoding: 'utf8' });
+  if (result.status === 0 && result.stdout) process.stdout.write(result.stdout.replace(/\\n$/, '') + '\\0');
+  process.exit(result.status ?? 1);
+}
+
+if (args[0] === 'remote' && args.length === 1) {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(process.execPath, [process.argv[1], 'remote', 'get-url', 'origin'], { encoding: 'utf8' });
+  if (result.status === 0 && result.stdout.trim()) process.stdout.write('origin\\n');
+  process.exit(0);
+}
+if (args[0] === 'remote' && args[1] === 'get-url' && args.includes('--push')) args.splice(2, args.length - 2, 'origin');
 if (args[0] === 'var' || (args[0] === 'config' && args.includes('--show-scope'))) {
   const { spawnSync } = await import('node:child_process');
   const read = (key) => {
@@ -561,7 +578,7 @@ test('cli doctor and status help describe the warning policy', () => {
   assert.match(doctorHelp.stdout, /Remote owner\/repository is context, not a warning by default/i);
   assert.match(
     doctorHelp.stdout,
-    /HTTPS origins record auth as info only when a repo pin allows the active role and that role has a githubUser/i
+    /HTTPS-only push destinations record auth as info only when a repo pin allows the active role and that role has a githubUser/i
   );
   assert.match(doctorHelp.stdout, /No pin or a github user mismatch warns/i);
 
@@ -571,7 +588,7 @@ test('cli doctor and status help describe the warning policy', () => {
   assert.match(statusHelp.stdout, /role scope override commit remote auth policy overall/);
   assert.match(
     statusHelp.stdout,
-    /HTTPS origins report auth=na only when a repo pin allows the active role and that role has a githubUser/i
+    /HTTPS-only push destinations report auth=na only when a repo pin allows the active role and that role has a githubUser/i
   );
   assert.match(statusHelp.stdout, /No pin or a github user mismatch is auth=warn/i);
 });
@@ -709,7 +726,7 @@ test('cli doctor --json emits valid JSON and exits 0 when aligned', async () => 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-doctor-json-ok-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -763,6 +780,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acme-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -795,7 +816,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'doctor', '--json'], {
@@ -816,7 +839,7 @@ test('cli doctor --json stays aligned when remote owner differs from the auth us
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-doctor-json-org-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -870,6 +893,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi alex-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -902,7 +929,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'doctor', '--json'], {
@@ -1389,7 +1418,7 @@ test('cli doctor --json includes repo policy state when .gitrole allows the effe
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-doctor-policy-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     path.join(tempDir, '.gitrole'),
@@ -1456,6 +1485,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi saraeloop! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -1488,7 +1521,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'doctor', '--json'], {
@@ -1525,7 +1560,7 @@ test('cli use --local applies the role to repository-local git config', async ()
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
   const gitLogPath = path.join(tempDir, 'git.log');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -1584,6 +1619,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acme-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -1616,7 +1655,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'use', 'work', '--local'], {
@@ -1639,7 +1680,7 @@ test('cli use prints a repo note only when warn-level alignment issues are found
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-use-note-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -1696,6 +1737,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi alex-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -1728,7 +1773,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'use', 'work', '--local'], {
@@ -1801,7 +1848,7 @@ test('cli status exits with code 2 and prints a compact warning summary when mis
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -1856,6 +1903,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acme-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -1890,7 +1941,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'status'], {
@@ -1912,7 +1965,7 @@ test('cli doctor shows the hidden global identity when a local override is activ
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-doctor-local-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -1971,6 +2024,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -2003,7 +2060,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'doctor'], {
@@ -2022,7 +2081,7 @@ test('cli status shows local override when repo-local identity is effective', as
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-local-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -2081,6 +2140,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -2113,7 +2176,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'status'], {
@@ -2137,7 +2202,7 @@ test('cli status --short fixture status-short-baseline keeps field order and key
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-short-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -2192,6 +2257,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acme-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -2226,7 +2295,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'status', '--short'], {
@@ -2253,7 +2324,7 @@ test('cli status --short preserves contract-safe role names like agent_bot', asy
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-short-agent-bot-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -2308,6 +2379,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acme-build-agent! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -2341,7 +2416,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'status', '--short'], {
@@ -2501,7 +2578,7 @@ test('cli status stays aligned when the current identity is correct and only the
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-status-history-note-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
-  const sshStubPath = path.join(tempDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(tempDir, 'ssh');
 
   await writeFile(
     gitStubPath,
@@ -2561,6 +2638,10 @@ process.exit(1);
   await writeFile(
     sshStubPath,
     `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 process.stderr.write("Hi acmedeploy! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -2594,7 +2675,9 @@ process.exit(1);
     HOME: tempDir,
     XDG_CONFIG_HOME: configHome,
     GITROLE_GIT_BIN: gitStubPath,
-    GITROLE_SSH_BIN: sshStubPath
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${tempDir}:${process.env.PATH}`
   };
 
   const result = spawnSync(process.execPath, [cliPath, 'status'], {

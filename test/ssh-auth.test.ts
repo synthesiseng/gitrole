@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 
 import { SystemSshAuthProbe, mapProbeOutput } from '../src/adapters/ssh-auth.js';
 
+const supportedConfiguration = 'hostname host.test\nuser git\nport 22\nidentityfile /fixture/key\nidentitiesonly yes\nbatchmode yes\npasswordauthentication no\nkbdinteractiveauthentication no\npubkeyauthentication yes\npreferredauthentications publickey\n';
+
 test('ssh auth probe extracts the GitHub username from the SSH handshake output', async () => {
   const probe = new SystemSshAuthProbe({
     binaryPath: 'ssh',
@@ -36,4 +38,87 @@ test('mapProbeOutput returns a warning result when no GitHub username is present
     host: 'github.com',
     message: 'Permission denied (publickey).'
   });
+});
+
+test('SSH inspection preserves URL user/port, inherited IdentityAgent and caller environment', async () => {
+  const calls: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+  const env = { SSH_AUTH_SOCK: '/fixture/agent' };
+  const probe = new SystemSshAuthProbe({ exec: async (_file, args, options) => {
+    calls.push({ args, env: options?.env });
+    if (args[0] === '-G') return { stdout: 'hostname github.test\nuser alice\nport 2222\nidentityagent /custom/agent\nidentityfile /fixture/key\nidentitiesonly yes\nbatchmode yes\npasswordauthentication no\nkbdinteractiveauthentication no\npubkeyauthentication yes\npreferredauthentications publickey\nremotecommand none\n', stderr: '' };
+    return { stdout: '', stderr: "Hi alice! You've successfully authenticated" };
+  } });
+  const result = await probe.probeGithubUser('alias.test', { user: 'alice', port: 2222, path: '/acme/repo.git', env });
+  assert.equal(result.githubUser, 'alice'); assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0].args, ['-G', '-p', '2222', 'alice@alias.test', "git-receive-pack '/acme/repo.git'"]);
+  assert.deepEqual(calls[2].args, ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-p', '2222', 'alice@alias.test']);
+  assert.ok(calls.every((call) => call.env === env));
+  assert.deepEqual(env, { SSH_AUTH_SOCK: '/fixture/agent' });
+});
+
+test('SSH context mismatch, unavailable inspection, malformed output and remote commands never reach handshake', async () => {
+  for (const variant of ['agent', 'identity', 'proxy', 'user', 'unavailable', 'malformed', 'remotecommand']) {
+    let handshakes = 0;
+    const probe = new SystemSshAuthProbe({ exec: async (_file, args) => {
+      if (args[0] !== '-G') { handshakes++; return { stdout: "Hi wrong! You've successfully authenticated", stderr: '' }; }
+      if (variant === 'unavailable') throw new Error('missing ssh');
+      if (variant === 'malformed') return { stdout: 'not openssh configuration', stderr: '' };
+      const receive = args.at(-1)?.startsWith('git-receive-pack');
+      const key = { agent: 'identityagent', identity: 'identityfile', proxy: 'proxycommand', user: 'user' }[variant];
+      const configuration = supportedConfiguration.split('\n').filter((line) => !key || !line.startsWith(`${key} `)).join('\n');
+      return { stdout: configuration + `remotecommand ${variant === 'remotecommand' ? 'custom' : 'none'}\n${key ? `${key} ${receive ? 'push-value' : 'probe-value'}\n` : ''}`, stderr: '' };
+    } });
+    const result = await probe.probeGithubUser('host.test', { path: 'acme/repo.git' });
+    assert.equal(result.ok, false, variant); assert.equal(handshakes, 0, variant);
+  }
+});
+
+test('an alternate diagnostic SSH binary is unverified before inspection or handshake', async () => {
+  let attempts = 0;
+  const probe = new SystemSshAuthProbe({ binaryPath: '/fixture/alternate-ssh', exec: async () => {
+    attempts++;
+    return { stdout: 'hostname host.test\nuser git\nport 22\n', stderr: "Hi work! You've successfully authenticated" };
+  } });
+  const result = await probe.probeGithubUser('host.test', { path: 'acme/repo.git' });
+  assert.equal(result.ok, false); assert.match(result.message!, /differs from Git transport/);
+  assert.equal(attempts, 0);
+});
+
+
+test('partial and interactive SSH contexts cannot qualify a greeting', async () => {
+  for (const configuration of ['hostname host.test\nuser git\nport 22\n', supportedConfiguration.replace('batchmode yes', 'batchmode no')]) {
+    let handshakes = 0;
+    const probe = new SystemSshAuthProbe({ exec: async (_file, args) => {
+      if (args[0] === '-G') return { stdout: configuration, stderr: '' };
+      handshakes++; return { stdout: "Hi wrong! You've successfully authenticated", stderr: '' };
+    } });
+    assert.equal((await probe.probeGithubUser('host.test', { path: 'acme/repo.git' })).ok, false);
+    assert.equal(handshakes, 0);
+  }
+});
+
+test('a terminated handshake with partial greeting remains unverified', async () => {
+  const probe = new SystemSshAuthProbe({ exec: async (_file, args) => {
+    if (args[0] === '-G') return { stdout: supportedConfiguration, stderr: '' };
+    throw Object.assign(new Error('timeout'), { killed: true, signal: 'SIGTERM', stderr: "Hi wrong! You've successfully authenticated" });
+  } });
+  assert.equal((await probe.probeGithubUser('host.test', { path: 'acme/repo.git' })).ok, false);
+});
+
+test('OpenSSH may omit default preferred authentication order without making the context partial', async () => {
+  const configuration = supportedConfiguration.replace('preferredauthentications publickey\n', '');
+  const probe = new SystemSshAuthProbe({ exec: async (_file, args) => args[0] === '-G'
+    ? { stdout: configuration, stderr: '' }
+    : { stdout: '', stderr: "Hi fixture! You've successfully authenticated" } });
+  assert.equal((await probe.probeGithubUser('host.test', { path: 'acme/repo.git' })).ok, true);
+});
+
+
+test('invalid explicit SSH ports refuse before any configuration or handshake execution', async () => {
+  for (const port of [0, -1, 65536, 1.5]) {
+    let attempts = 0;
+    const probe = new SystemSshAuthProbe({ exec: async () => { attempts++; return { stdout: supportedConfiguration, stderr: '' }; } });
+    assert.equal((await probe.probeGithubUser('host.test', { port, path: 'acme/repo.git' })).ok, false);
+    assert.equal(attempts, 0);
+  }
 });

@@ -2,7 +2,7 @@
  * Implements repository diagnosis and post-switch alignment checks.
  */
 import { isReservedRoleName, type Role } from '../../domain/role.js';
-import { describeHttpsAuth, findMatchingRole, findPinnedRole } from '../alignment.js';
+import { findMatchingRole, findPinnedRole, buildPushAlignmentChecks } from '../alignment.js';
 import {
   getDoctorOverall,
   DoctorCheck,
@@ -194,59 +194,11 @@ function buildDoctorChecks(input: {
     }
   }
 
-  if (!observedState.repository.remote) {
-    checks.push({
-      status: 'warn',
-      label: 'remote',
-      message: 'origin remote is not configured'
-    });
-
-    return checks;
+  if (input.role) {
+    checks.push(...buildRoleAlignmentChecks({ role: input.role, observedState, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole, enforceHttpsPin: true }));
+  } else {
+    checks.push(...buildPushAlignmentChecks({ observedState, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole, enforceHttpsPin: true }));
   }
-
-  checks.push({
-    status: 'info',
-    label: 'remote',
-    message: `origin uses ${observedState.repository.remote.protocol} at ${observedState.repository.remote.url}`
-  });
-
-  if (observedState.sshAuth?.ok && observedState.sshAuth.githubUser) {
-    const commitIdentity = formatCommitIdentity(observedState.commitIdentity);
-    const shouldReportIdentityDivergence =
-      !input.role ||
-      (input.role.githubUser !== undefined &&
-        observedState.sshAuth.githubUser !== input.role.githubUser);
-
-    if (commitIdentity && shouldReportIdentityDivergence) {
-      checks.push({
-        status: 'warn',
-        label: 'identity',
-        message: `commit identity is ${commitIdentity} but SSH auth resolves to ${observedState.sshAuth.githubUser}`
-      });
-    }
-  }
-
-  if (!input.role) {
-    if (observedState.repository.remote.protocol === 'https') {
-      checks.push(buildHttpsAuthCheck(input));
-    }
-
-    if (input.repoPolicy) {
-      checks.push(buildRepoPolicyCheck(input.repoPolicy));
-    }
-
-    return checks;
-  }
-
-  checks.push(
-    ...buildRoleAlignmentChecks({
-      role: input.role,
-      observedState,
-      repoPolicy: input.repoPolicy,
-      pinnedRole: input.pinnedRole,
-      enforceHttpsPin: true
-    })
-  );
 
   if (input.repoPolicy) {
     checks.push(buildRepoPolicyCheck(input.repoPolicy));
@@ -305,74 +257,7 @@ function buildRoleAlignmentChecks(input: {
     return dedupeChecks(checks);
   }
 
-  if (!observedState.repository.remote) {
-    checks.push({
-      status: 'warn',
-      label: 'remote',
-      message: 'origin remote is not configured'
-    });
-    return dedupeChecks(checks);
-  }
-
-  if (role.githubHost && observedState.repository.remote.host) {
-    checks.push({
-      status: role.githubHost === observedState.repository.remote.host ? 'ok' : 'warn',
-      label: 'host',
-      message:
-        role.githubHost === observedState.repository.remote.host
-          ? `remote host matches role githubHost ${role.githubHost}`
-          : `remote host ${observedState.repository.remote.host} does not match role githubHost ${role.githubHost}`
-    });
-  }
-
-  if (observedState.repository.remote.protocol === 'https') {
-    checks.push(
-      input.enforceHttpsPin
-        ? buildHttpsAuthCheck(input)
-        : {
-            status: 'info',
-            label: 'auth',
-            message: 'origin uses HTTPS; SSH auth verification does not apply'
-          }
-    );
-    return dedupeChecks(checks);
-  }
-
-  if (!observedState.sshAuth) {
-    checks.push({
-      status: 'warn',
-      label: 'auth',
-      message: 'SSH auth could not be probed for the current remote host'
-    });
-    return dedupeChecks(checks);
-  }
-
-  if (!observedState.sshAuth.ok) {
-    checks.push({
-      status: 'warn',
-      label: 'auth',
-      message: observedState.sshAuth.message ?? 'SSH auth identity could not be determined'
-    });
-    return dedupeChecks(checks);
-  }
-
-  if (role.githubUser) {
-    checks.push({
-      status: observedState.sshAuth.githubUser === role.githubUser ? 'ok' : 'warn',
-      label: 'auth',
-      message:
-        observedState.sshAuth.githubUser === role.githubUser
-          ? `SSH auth matches role githubUser ${role.githubUser}`
-          : `SSH auth resolved to ${observedState.sshAuth.githubUser}, expected ${role.githubUser}`
-    });
-  } else if (observedState.sshAuth.githubUser) {
-    checks.push({
-      status: 'info',
-      label: 'auth',
-      message: `SSH auth resolved to ${observedState.sshAuth.githubUser}`
-    });
-  }
-
+  checks.push(...buildPushAlignmentChecks({ ...input, enforceHttpsPin: input.enforceHttpsPin ?? false }));
   return dedupeChecks(checks);
 }
 
@@ -434,24 +319,6 @@ function buildCommitEnvChecks(observedState: ObservedState, role?: Role): Doctor
   return checks;
 }
 
-function buildHttpsAuthCheck(input: {
-  role?: Role;
-  repoPolicy?: DoctorResult['repoPolicy'];
-  pinnedRole?: Role;
-}): DoctorCheck {
-  const httpsAuth = describeHttpsAuth({
-    role: input.role,
-    repoPolicy: input.repoPolicy,
-    pinnedRole: input.pinnedRole
-  });
-
-  return {
-    status: httpsAuth.auth === 'na' ? 'info' : 'warn',
-    label: 'auth',
-    message: httpsAuth.message
-  };
-}
-
 function dedupeChecks(checks: DoctorCheck[]): DoctorCheck[] {
   const seen = new Set<string>();
 
@@ -465,14 +332,6 @@ function dedupeChecks(checks: DoctorCheck[]): DoctorCheck[] {
     seen.add(key);
     return true;
   });
-}
-
-function formatCommitIdentity(identity: DoctorResult['commitIdentity']): string | undefined {
-  if (!identity.fullName.value || !identity.email.value) {
-    return undefined;
-  }
-
-  return `${identity.fullName.value} <${identity.email.value}>`;
 }
 
 function buildRepoPolicyCheck(repoPolicy: NonNullable<DoctorResult['repoPolicy']>): DoctorCheck {

@@ -2,12 +2,12 @@
  * Shared alignment primitives consumed by stable status summaries and diagnosis flows.
  */
 import { matchesIdentity, type Role } from '../domain/role.js';
-import type { DoctorResult, RepoPolicyEvaluation, StatusResult } from './contracts.js';
+import type { DoctorCheck, DoctorResult, RepoPolicyEvaluation, StatusResult } from './contracts.js';
 import type { ObservedState } from './observed-state.js';
 
-const httpsAlignedMessage = 'origin uses HTTPS; SSH auth verification does not apply';
-const httpsNoIdentityPinMessage = 'origin uses HTTPS and no identity pin is configured';
-const httpsNoRepoPinMessage = 'origin uses HTTPS and no repo pin is configured';
+const httpsAlignedMessage = 'push destination uses HTTPS; SSH auth verification does not apply';
+const httpsNoIdentityPinMessage = 'push destination uses HTTPS and no identity pin is configured';
+const httpsNoRepoPinMessage = 'push destination uses HTTPS and no repo pin is configured';
 
 export type HttpsAuthReason = 'aligned' | 'no-identity-pin' | 'no-repo-pin' | 'mismatch';
 
@@ -77,14 +77,14 @@ export function describeHttpsAuth(input: {
       return {
         auth: 'warn',
         reason: 'mismatch',
-        message: `origin uses HTTPS; github user ${role.githubUser} does not match pin ${pinnedGithubUser}`
+        message: `push destination uses HTTPS; github user ${role.githubUser} does not match pin ${pinnedGithubUser}`
       };
     }
 
     return {
       auth: 'warn',
       reason: 'mismatch',
-      message: `origin uses HTTPS; active identity does not match pinned role ${repoPolicy.defaultRole}`
+      message: `push destination uses HTTPS; active identity does not match pinned role ${repoPolicy.defaultRole}`
     };
   }
 
@@ -212,18 +212,10 @@ function getRemoteStatus(input: {
     return 'na';
   }
 
-  if (!observedState.repository.remote || observedState.repository.hasCommits === false) {
-    return 'warn';
-  }
-
-  if (
-    role?.githubHost &&
-    observedState.repository.remote.host &&
-    observedState.repository.remote.host !== role.githubHost
-  ) {
-    return 'warn';
-  }
-
+  const push = observedState.repository.push;
+  if (!push || push.message || push.targets.length === 0) return 'warn';
+  if (push.targets.some(({ remote }) => remote.protocol === 'unknown' ||
+    (role?.githubHost && remote.host && remote.host !== role.githubHost))) return 'warn';
   return 'ok';
 }
 
@@ -235,34 +227,24 @@ function getAuthStatus(input: {
   offline?: boolean;
 }): StatusResult['auth'] {
   const { observedState, role } = input;
-
-  if (!observedState.repository.isInsideWorkTree || !observedState.repository.remote) {
-    return 'na';
+  if (!observedState.repository.isInsideWorkTree) return 'na';
+  const push = observedState.repository.push;
+  if (!push || push.message || push.targets.length === 0) return input.offline ? 'na' : 'warn';
+  // A local HTTPS pin is not observed authentication for a second push endpoint.
+  if (!input.offline && push.targets.some(({ remote }) => remote.protocol === 'ssh') &&
+    push.targets.some(({ remote }) => remote.protocol === 'https')) return 'warn';
+  let hasSsh = false;
+  for (const target of push.targets) {
+    if (target.message) return 'warn';
+    if (target.remote.protocol === 'https') {
+      if (describeHttpsAuth({ role, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole }).auth === 'warn') return 'warn';
+    } else if (target.remote.protocol === 'ssh') {
+      if (input.offline) continue;
+      hasSsh = true;
+      if (!target.sshAuth?.ok || !target.sshAuth.githubUser || (role?.githubUser && target.sshAuth.githubUser !== role.githubUser)) return 'warn';
+    } else if (!input.offline) return 'warn';
   }
-
-  // SSH auth cannot be probed on HTTPS. Quiet na is only the pinned match.
-  if (observedState.repository.remote.protocol === 'https') {
-    return describeHttpsAuth({
-      role,
-      repoPolicy: input.repoPolicy,
-      pinnedRole: input.pinnedRole
-    }).auth;
-  }
-
-  // Offline skips the SSH round-trip. na does not by itself set overall=warning.
-  if (input.offline) {
-    return 'na';
-  }
-
-  if (!observedState.sshAuth || !observedState.sshAuth.ok) {
-    return 'warn';
-  }
-
-  if (role?.githubUser && observedState.sshAuth.githubUser !== role.githubUser) {
-    return 'warn';
-  }
-
-  return 'ok';
+  return hasSsh ? 'ok' : 'na';
 }
 
 function getPolicyStatus(repoPolicy?: RepoPolicyEvaluation): StatusResult['policy'] {
@@ -278,12 +260,48 @@ function getPolicyStatus(repoPolicy?: RepoPolicyEvaluation): StatusResult['polic
 }
 
 function hasIdentityDivergence(role: Role, observedState: ObservedState): boolean {
-  return Boolean(
-    observedState.sshAuth?.ok &&
-      observedState.sshAuth.githubUser &&
-      role.githubUser !== undefined &&
-      observedState.sshAuth.githubUser !== role.githubUser &&
-      observedState.commitIdentity.fullName.value &&
-      observedState.commitIdentity.email.value
-  );
+  return Boolean(role.githubUser && observedState.commitIdentity.fullName.value && observedState.commitIdentity.email.value &&
+    observedState.repository.push?.targets.some((target) => target.sshAuth?.ok && target.sshAuth.githubUser !== role.githubUser));
+}
+
+/** Describes every default push endpoint using the same authentication rules as status. */
+export function buildPushAlignmentChecks(input: {
+  role?: Role;
+  observedState: ObservedState;
+  repoPolicy?: RepoPolicyEvaluation;
+  pinnedRole?: Role;
+  enforceHttpsPin?: boolean;
+}): DoctorCheck[] {
+  const { role, observedState } = input;
+  const push = observedState.repository.push;
+  if (!observedState.repository.isInsideWorkTree) return [];
+  if (!push || push.message || !push.targets.length) return [{
+    status: 'warn', label: 'remote', message: push?.message ?? 'default push destination could not be observed'
+  }];
+  const checks: DoctorCheck[] = [];
+  if (push.targets.some(({ remote }) => remote.protocol === 'ssh') && push.targets.some(({ remote }) => remote.protocol === 'https')) {
+    checks.push({ status: 'warn', label: 'auth', message: 'mixed SSH and HTTPS push destinations include unverified authentication' });
+  }
+  for (const target of push.targets) {
+    const { remote, sshAuth } = target;
+    const endpoint = push.targets.length > 1 ? ` [${remote.url}]` : '';
+    checks.push({ status: 'info', label: 'remote', message: `default push remote ${remote.name} uses ${remote.protocol} at ${remote.url}` });
+    if (role?.githubHost && remote.host) checks.push({
+      status: role.githubHost === remote.host ? 'ok' : 'warn', label: 'host',
+      message: (role.githubHost === remote.host ? `remote host matches role githubHost ${role.githubHost}` : `remote host ${remote.host} does not match role githubHost ${role.githubHost}`) + endpoint
+    });
+    if (remote.protocol === 'https') {
+      const description = describeHttpsAuth(input);
+      checks.push({ status: description.auth === 'warn' && input.enforceHttpsPin !== false ? 'warn' : 'info', label: 'auth', message: description.message + endpoint });
+    } else if (remote.protocol !== 'ssh' || target.message || !sshAuth?.ok || !sshAuth.githubUser) {
+      checks.push({ status: 'warn', label: 'auth', message: (target.message ?? sshAuth?.message ?? 'SSH auth could not be probed for the current push target') + endpoint });
+    } else {
+      checks.push({ status: role?.githubUser && role.githubUser !== sshAuth.githubUser ? 'warn' : role?.githubUser ? 'ok' : 'info', label: 'auth',
+        message: (role?.githubUser ? role.githubUser === sshAuth.githubUser ? `SSH auth matches role githubUser ${role.githubUser}` : `SSH auth resolved to ${sshAuth.githubUser}, expected ${role.githubUser}` : `SSH auth resolved to ${sshAuth.githubUser}`) + endpoint });
+      if ((!role || (role.githubUser && role.githubUser !== sshAuth.githubUser)) && observedState.commitIdentity.fullName.value && observedState.commitIdentity.email.value) {
+        checks.push({ status: 'warn', label: 'identity', message: `commit identity is ${observedState.commitIdentity.fullName.value} <${observedState.commitIdentity.email.value}> but SSH auth resolves to ${sshAuth.githubUser}` + endpoint });
+      }
+    }
+  }
+  return checks;
 }

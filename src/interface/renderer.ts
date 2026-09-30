@@ -232,6 +232,10 @@ export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
       lines.push(formatDetail('upstream', result.repository.upstreamBranch));
     }
 
+    if (result.repository.fetchRemote) lines.push(formatDetail('fetch', result.repository.fetchRemote.url));
+    for (const target of result.repository.push?.targets ?? []) {
+      lines.push(formatDetail('push', target.remote.url));
+    }
     if (result.repository.remote) {
       lines.push(formatDetail('remote', result.repository.remote.url));
 
@@ -248,7 +252,7 @@ export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
         );
       }
     } else {
-      lines.push(formatDetail('remote', chalk.yellow('origin not configured')));
+      lines.push(formatDetail('remote', chalk.yellow(result.repository.push?.message ?? 'default push destination not configured')));
     }
   } else {
     lines.push(formatDetail('repo', chalk.yellow('not a git repository')));

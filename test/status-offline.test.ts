@@ -73,7 +73,7 @@ async function makeRepo(prefix: string) {
   const configHome = path.join(root, 'config');
   const gitconfig = path.join(root, 'gitconfig');
   const sshMarker = path.join(root, 'ssh-called');
-  const sshStub = path.join(root, 'ssh-stub.mjs');
+  const sshStub = path.join(root, 'ssh');
 
   await mkdir(repo, { recursive: true });
   await mkdir(path.join(configHome, 'gitrole'), { recursive: true });
@@ -82,6 +82,11 @@ async function makeRepo(prefix: string) {
     `#!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
 appendFileSync(${JSON.stringify(sshMarker)}, 'called\\n');
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
+
 process.stderr.write("Hi alex-dev! You've successfully authenticated, but GitHub does not provide shell access.\\n");
 process.exit(1);
 `,
@@ -94,7 +99,9 @@ process.exit(1);
     XDG_CONFIG_HOME: configHome,
     GIT_CONFIG_GLOBAL: gitconfig,
     GIT_CONFIG_NOSYSTEM: '1',
-    GITROLE_SSH_BIN: sshStub
+    GITROLE_SSH_BIN: undefined,
+    GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+    PATH: `${root}:${process.env.PATH}`
   });
 
   runGit(repo, ['init', '-b', 'main'], env);
@@ -141,7 +148,8 @@ test('offline alignment ignores an SSH probe result and still warns on a local H
       repository: {
         isInsideWorkTree: true,
         hasCommits: true,
-        remote: parseRemoteUrl('origin', 'git@github.com-work:acme/service.git')
+        remote: parseRemoteUrl('origin', 'git@github.com-work:acme/service.git'),
+        push: { targets: [{ remote: parseRemoteUrl('origin', 'git@github.com-work:acme/service.git'), sshAuth: { ok: true, host: 'github.com-work', githubUser: 'someone-else' } }] }
       },
       sshAuth: {
         ok: true,
@@ -175,7 +183,8 @@ test('offline alignment ignores an SSH probe result and still warns on a local H
       repository: {
         isInsideWorkTree: true,
         hasCommits: true,
-        remote: parseRemoteUrl('origin', 'git@github.com-work:acme/service.git')
+        remote: parseRemoteUrl('origin', 'git@github.com-work:acme/service.git'),
+        push: { targets: [{ remote: parseRemoteUrl('origin', 'git@github.com-work:acme/service.git'), sshAuth: { ok: true, host: 'github.com-work', githubUser: 'someone-else' } }] }
       },
       sshAuth: {
         ok: true,
@@ -206,7 +215,8 @@ test('offline alignment ignores an SSH probe result and still warns on a local H
       repository: {
         isInsideWorkTree: true,
         hasCommits: true,
-        remote: parseRemoteUrl('origin', 'https://github.com/acme/service.git')
+        remote: parseRemoteUrl('origin', 'https://github.com/acme/service.git'),
+        push: { targets: [{ remote: parseRemoteUrl('origin', 'https://github.com/acme/service.git') }] }
       }
     }
   });
@@ -258,6 +268,15 @@ test('status --short --offline does not run SSH and reports auth=na', async () =
 
   const reversed = runStatus(workspace.repo, ['--offline', '--short'], workspace.env);
   assert.equal(reversed.stdout.trim(), offline.stdout.trim());
+
+  // Exercise the installed helper's normal entry point against the real CLI, not --format.
+  const cliWrapper = path.join(path.dirname(workspace.repo), 'gitrole');
+  await writeFile(cliWrapper, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(cliPath)} \"$@\"\n`);
+  await chmod(cliWrapper, 0o755);
+  const prompt = spawnSync(promptScriptPath, { cwd: workspace.repo, env: workspace.env, encoding: 'utf8' });
+  assert.equal(prompt.status, 0, prompt.stderr);
+  assert.equal(prompt.stdout, 'gitrole:work ✓\n');
+  await assert.rejects(readFile(workspace.sshMarker, 'utf8'), { code: 'ENOENT' });
 
   const live = runStatus(workspace.repo, ['--short'], workspace.env);
   const markerAfterLive = await readFile(workspace.sshMarker, 'utf8');
@@ -355,7 +374,7 @@ test('status --short --offline keeps HTTPS pin, env, fresh-repo, and policy chec
     XDG_CONFIG_HOME: freshConfig,
     GIT_CONFIG_GLOBAL: path.join(freshRoot, 'gitconfig'),
     GIT_CONFIG_NOSYSTEM: '1',
-    GITROLE_SSH_BIN: workspace.env.GITROLE_SSH_BIN
+    GITROLE_SSH_BIN: undefined, PATH: workspace.env.PATH
   });
   runGit(freshRepo, ['init', '-b', 'main'], freshEnv);
   runGit(freshRepo, ['config', '--global', 'user.name', 'Alex Developer'], freshEnv);
@@ -412,7 +431,7 @@ test('status --short --offline never emits auth=ok', async () => {
   assert.doesNotMatch(offline.stdout, /auth=ok/);
   assert.match(live.stdout, / auth=ok /);
   assert.equal(formatSegment(offline.stdout).stdout, 'gitrole:work ✓\n');
-  assert.equal(await readFile(workspace.sshMarker, 'utf8'), 'called\n');
+  assert.equal(await readFile(workspace.sshMarker, 'utf8'), 'called\n'.repeat(3));
 });
 
 test('status --short --offline no-role is commit=warn and the segment is not a check', async () => {

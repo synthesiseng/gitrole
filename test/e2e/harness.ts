@@ -45,7 +45,7 @@ export async function createHermeticWorkspace(options: {
   const homeDir = path.join(rootDir, 'home');
   const configHome = path.join(rootDir, 'config');
   const repoDir = path.join(rootDir, options.repoName ?? 'repo');
-  const sshStubPath = path.join(rootDir, 'ssh-stub.mjs');
+  const sshStubPath = path.join(rootDir, 'ssh');
   const sshAddStubPath = path.join(rootDir, 'ssh-add-stub.mjs');
 
   await mkdir(homeDir, { recursive: true });
@@ -68,7 +68,9 @@ export async function createHermeticWorkspace(options: {
       GIT_CONFIG_NOSYSTEM: '1',
       NO_COLOR: '1',
       FORCE_COLOR: '0',
-      GITROLE_SSH_BIN: sshStubPath,
+      GITROLE_SSH_BIN: undefined,
+      GIT_SSH: undefined, GIT_SSH_COMMAND: undefined, GIT_SSH_VARIANT: undefined,
+      PATH: `${rootDir}:${process.env.PATH}`,
       GITROLE_SSH_ADD_BIN: sshAddStubPath
     }
   };
@@ -291,6 +293,10 @@ async function writeSshStub(
   sshMessagesByHost: Record<string, string>
 ): Promise<void> {
   const source = `#!/usr/bin/env node
+if (process.argv.includes('-G')) {
+  process.stdout.write('hostname fixture.test\\nuser git\\nport 22\\nidentityfile /fixture/key\\nidentitiesonly yes\\nbatchmode yes\\npasswordauthentication no\\nkbdinteractiveauthentication no\\npubkeyauthentication yes\\npreferredauthentications publickey\\n');
+  process.exit(0);
+}
 const usersByHost = ${JSON.stringify(sshUsersByHost)};
 const messagesByHost = ${JSON.stringify(sshMessagesByHost)};
 const target = process.argv.at(-1) ?? '';
