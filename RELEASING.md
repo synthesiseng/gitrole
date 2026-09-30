@@ -76,3 +76,45 @@ Keep the notes focused on externally meaningful changes. Pull request bodies are
 - The repository includes `.github/workflows/release-please.yml` to manage the release PR, release tag, and GitHub Release for the root npm package. It should use a GitHub App token generated from the `RELEASE_PLEASE_APP_ID` Actions variable and the `RELEASE_PLEASE_APP_PRIVATE_KEY` secret; the default `GITHUB_TOKEN` is not sufficient because tags and releases created with it will not trigger `.github/workflows/publish.yml`.
 - The repository includes a tag-validation workflow for release tags. It validates version alignment and runs the release-confidence checks, but it does not publish to npm or create a GitHub Release automatically.
 - The repository also includes `.github/workflows/publish.yml` for npm Trusted Publishing. When npm Trusted Publishing is configured for this repository and workflow filename, a published GitHub Release can publish the tagged version to npm without an npm token.
+
+## Local npm-to-Homebrew qualification
+
+Run `npm run test:release-workflow` for the bounded release fixtures. This also
+runs at the end of `npm run test:release`. It executes the current workflow's
+named shell blocks with stubbed npm/curl and disposable local bare tap remotes.
+It checks formula update/replay, validation failures, download attempts, npm
+failure boundaries, denied/concurrent pushes and lost push acknowledgments.
+The fixture scheduler and source-contract checks do not execute GitHub Actions
+or prove App permissions, OIDC, tap protection or installed CLI/helper pairing.
+
+The suite characterizes inherited risks rather than approving them: failed npm
+lookups are treated as absence, curl has five attempts without a request timeout,
+and the rewriter can downgrade a newer formula or replace matching version text
+outside its primary fields. Green fixtures do not make those behaviors safe
+recovery policy. Consequential changes need an owner decision.
+
+## Proposed recovery of an already published version
+
+A failed Homebrew job after npm success does not undo npm publication. An old
+Actions run reruns its original SHA/ref; the release event uses the tagged source.
+Rerunning a historical release therefore cannot adopt a workflow fix merged
+later. Normal Publish dispatch deliberately skips the Homebrew job.
+
+For exact 0.10.4 recovery, the smallest proposed route is a separately reviewed,
+one-time tap-only workflow on updated main. It requires an explicit owner
+exception to the release-only tap policy before implementation and separate
+approval before live execution. No recovery entrypoint is added by this change.
+
+The proposed operation would pin 0.10.4, verify its existing release and published
+npm artifact, hash the downloaded bytes, and use the existing tap-only App token
+scope. It would read current tap main, reject a newer formula, treat equal bytes
+as a no-op, preserve unrelated bytes, and use a normal non-force push of the
+checked-out parent. Concurrent rejection requires a fresh read and separately
+authorized retry; it must not silently force, roll back or republish npm.
+Review the exact resulting formula and tap commit before claiming recovery.
+Remove the one-time workflow after verified recovery if the owner selects it.
+
+Do not move a shipped tag, recreate a release to pick up new workflow source,
+change normal dispatch semantics, or infer live success from these fixtures.
+A future approved release containing the updated workflow can advance the tap,
+but does not establish recovery of exactly 0.10.4. Live recovery remains unproven.
