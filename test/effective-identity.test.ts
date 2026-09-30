@@ -22,7 +22,10 @@ test('effective author/committer follow Git includes, role commands, config and 
   const repo = path.join(root, 'repo');
   await mkdir(repo);
   const git = (args: string[]) => exec('git', args, { cwd: repo, env });
-  const adapter = new SystemGitConfig({ exec: async (file, args) => exec(file, args, { cwd: repo, env }) });
+  // Bind role commands to the fixture environment too; honor probe locale options.
+  const adapter = new SystemGitConfig({ exec: async (file, args, options) => exec(file, args, {
+    cwd: repo, env: args[0] === 'var' ? { ...env, LC_ALL: options?.env.LC_ALL, LANG: options?.env.LANG, LANGUAGE: options?.env.LANGUAGE } : env
+  }) });
   try {
     await git(['init', '-q']);
     await git(['config', 'user.name', 'Alex Work']);

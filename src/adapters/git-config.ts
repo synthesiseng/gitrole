@@ -14,7 +14,7 @@ export interface ExecResult {
   stderr: string;
 }
 
-export type ExecFile = (file: string, args: string[]) => Promise<ExecResult>;
+export type ExecFile = (file: string, args: string[], options?: { env: NodeJS.ProcessEnv }) => Promise<ExecResult>;
 type ExecFailure = NodeJS.ErrnoException;
 
 export interface GitConfigOptions {
@@ -25,12 +25,10 @@ export interface GitConfigOptions {
 export class SystemGitConfig {
   private readonly binaryPath: string;
   private readonly exec: ExecFile;
-  private readonly customExec: boolean;
 
   constructor(options: GitConfigOptions = {}) {
     this.binaryPath = options.binaryPath ?? process.env.GITROLE_GIT_BIN ?? 'git';
     this.exec = options.exec ?? execFile;
-    this.customExec = options.exec !== undefined;
   }
 
   async getGlobalUserName(): Promise<string | undefined> {
@@ -51,11 +49,10 @@ export class SystemGitConfig {
 
   /** Read Git's actual author and committer, including config and environment precedence. */
   async getEffectiveIdentity(env?: NodeJS.ProcessEnv): Promise<EffectiveGitIdentity> {
-    const run = async (args: string[]) => {
-      if (env && !this.customExec) {
-        return execFile(this.binaryPath, args, { env });
-      }
-      return this.run(args);
+    const run = async (args: string[], identityProbe = false) => {
+      // Known benign identity errors are classified from Git's C-locale diagnostics.
+      const commandEnv = identityProbe ? { ...(env ?? process.env), LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C' } : env;
+      return this.run(args, commandEnv ? { env: commandEnv } : undefined);
     };
     const config = async (key: string): Promise<{ value?: string; source: IdentitySource }> => {
       try {
@@ -77,7 +74,7 @@ export class SystemGitConfig {
       }));
       let values: string[];
       try {
-        const result = await run(['var', `GIT_${kind}_IDENT`]);
+        const result = await run(['var', `GIT_${kind}_IDENT`], true);
         const match = /^(.*) <([^<>]*)> \d+ [+-]\d{4}\n?$/.exec(result.stdout);
         if (!match) throw new Error('git returned an invalid identity');
         values = [match[1], match[2]];
@@ -128,9 +125,9 @@ export class SystemGitConfig {
     }
   }
 
-  private async run(args: string[]): Promise<ExecResult> {
+  private async run(args: string[], options?: { env: NodeJS.ProcessEnv }): Promise<ExecResult> {
     try {
-      return await this.exec(this.binaryPath, args);
+      return await this.exec(this.binaryPath, args, options);
     } catch (error) {
       throw mapGitError(error as ExecFailure);
     }
