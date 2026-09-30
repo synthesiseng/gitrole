@@ -141,10 +141,10 @@ jobs:
 
   # Formula lives in synthesiseng/homebrew-tap (Formula/gitrole.rb), not this
   # repo. Bump it only after a published release. workflow_dispatch backfills
-  # must not move the tap. Tap writes use HOMEBREW_TAP_TOKEN, a GitHub App
-  # installation token or fine-grained PAT with contents: write on that
-  # repository only. GITHUB_TOKEN stays read-only here, so a missing tap
-  # secret fails this job and does not publish to npm again.
+  # must not move the tap. Tap writes use a short-lived release App token
+  # scoped to homebrew-tap with contents: write only. GITHUB_TOKEN stays
+  # read-only here. App authentication failure stops this job after npm
+  # publication; this job does not publish to npm again.
   brew-bump:
     name: Bump Homebrew formula
     needs: [publish]
@@ -154,16 +154,15 @@ jobs:
       contents: read
 
     steps:
-      - name: Require Homebrew tap token
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          if [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
-            echo "HOMEBREW_TAP_TOKEN is not set." >&2
-            echo "Add a GitHub App installation token or fine-grained PAT that can push to synthesiseng/homebrew-tap only (contents: write on that repository)." >&2
-            echo "Do not use a broad organization PAT. npm publish already finished; this job does not publish again." >&2
-            exit 1
-          fi
+      - name: Create Homebrew tap App token
+        id: tap-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          owner: synthesiseng
+          repositories: homebrew-tap
+          permission-contents: write
 
       - name: Check out repository
         uses: actions/checkout@v5
@@ -238,7 +237,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: synthesiseng/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ steps.tap-token.outputs.token }}
           path: homebrew-tap
           fetch-depth: 1
           persist-credentials: true
