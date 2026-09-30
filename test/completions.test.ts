@@ -120,7 +120,10 @@ fi
 COMP_CWORD=\$((\${#COMP_WORDS[@]} - 1))
 COMPREPLY=()
 _gitrole
-printf '%s\\n' "\${COMPREPLY[@]}"
+# Bash 3.2 with nounset rejects expanding an empty array; retain every nonempty result.
+if (( \${#COMPREPLY[@]} )); then
+  printf '%s\\n' "\${COMPREPLY[@]}"
+fi
 `;
   const result = spawnSync('bash', ['-c', driver, 'bash', line], {
     encoding: 'utf8',
