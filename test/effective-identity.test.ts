@@ -139,16 +139,51 @@ test('effective author/committer follow Git includes, role commands, config and 
     await git(['config', '--global', '--unset', 'user.email']);
     (env as NodeJS.ProcessEnv).GIT_CONFIG_NOSYSTEM = '1';
     (env as NodeJS.ProcessEnv).EMAIL = 'fallback@example.test';
+    // EMAIL supplies no name; runners need not have a usable OS account name.
+    await git(['config', 'user.name', 'Fallback User']);
     actual = await oracle();
     assert.equal(actual.author.email.source, 'env');
-    assert.equal(actual.author.fullName.source, 'git');
+    assert.equal(actual.author.fullName.value, 'Fallback User');
+    assert.equal(actual.author.fullName.source, 'local');
+    assert.equal(actual.committer.email.source, 'env');
+    // Force the same empty-name rejection seen on Linux, without depending on the OS.
+    Object.assign(env, { GIT_AUTHOR_NAME: '', GIT_COMMITTER_NAME: '' });
+    for (const kind of ['AUTHOR', 'COMMITTER']) {
+      await assert.rejects(() => git(['var', `GIT_${kind}_IDENT`]), /empty ident name/);
+    }
+    actual = await adapter.getEffectiveIdentity(env);
+    assert.equal(actual.author.fullName.source, 'unset');
+    assert.equal(actual.committer.fullName.source, 'unset');
+    delete (env as NodeJS.ProcessEnv).GIT_AUTHOR_NAME;
+    delete (env as NodeJS.ProcessEnv).GIT_COMMITTER_NAME;
+    await git(['config', '--unset', 'user.name']);
     delete (env as NodeJS.ProcessEnv).EMAIL;
     await git(['config', 'user.useConfigOnly', 'true']);
     actual = await adapter.getEffectiveIdentity(env);
+    assert.equal(actual.author.fullName.source, 'unset');
     assert.equal(actual.author.email.source, 'unset');
+    assert.equal(actual.committer.fullName.source, 'unset');
     assert.equal(actual.committer.email.source, 'unset');
 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('Git-generated identity provenance does not depend on the host account', async () => {
+  const calls: string[][] = [];
+  const adapter = new SystemGitConfig({ exec: async (_file, args) => {
+    calls.push(args);
+    if (args[0] === 'config') throw Object.assign(new Error('missing config'), { code: 1 });
+    assert.equal(args[0], 'var');
+    assert.ok(['GIT_AUTHOR_IDENT', 'GIT_COMMITTER_IDENT'].includes(args[1]));
+    return { stdout: 'Generated User <fallback@example.test> 1700000000 +0000\n', stderr: '' };
+  } });
+  const actual = await adapter.getEffectiveIdentity({ EMAIL: 'fallback@example.test' });
+  for (const identity of [actual.author, actual.committer]) {
+    assert.deepEqual(identity.fullName, { value: 'Generated User', source: 'git' });
+    assert.deepEqual(identity.email, { value: 'fallback@example.test', source: 'env' });
+  }
+  assert.deepEqual(actual.scope, { effective: 'mixed', hasLocalOverride: false });
+  assert.equal(calls.filter(args => args[0] === 'var').length, 2);
 });
