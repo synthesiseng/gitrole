@@ -9,6 +9,7 @@ import {
   type Role
 } from '../../domain/role.js';
 import {
+  type EffectiveConfigScope,
   type AppDependencies,
   type CurrentRoleDependencies,
   type CurrentRoleResult,
@@ -226,8 +227,12 @@ async function getEffectiveCurrentIdentity(
 ): Promise<{
   fullName?: string;
   email?: string;
-  scope: 'global' | 'local';
+  scope: EffectiveConfigScope;
 }> {
+  if (dependencies.gitConfig.getEffectiveIdentity) {
+    const effective = await dependencies.gitConfig.getEffectiveIdentity();
+    return { fullName: effective.author.fullName.value, email: effective.author.email.value, scope: effective.scope.effective };
+  }
   const [globalName, globalEmail, localName, localEmail] = await Promise.all([
     dependencies.gitConfig.getGlobalUserName(),
     dependencies.gitConfig.getGlobalUserEmail(),

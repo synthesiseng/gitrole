@@ -51,7 +51,7 @@ role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overal
 
 `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` override Git config. A set `user.name` or `user.email` is not the commit identity. Trust the gitrole result. Don't read Git config and decide the repo is aligned.
 
-On `gitrole doctor --json`, `commitIdentity` is who the commit will use. `commitIdentity.fullName.source` and `commitIdentity.email.source` are `local`, `global`, `env`, or `unset`. `configuredIdentity` is only the raw config, so it can look fine while the commit uses an env override.
+On `gitrole doctor --json`, `commitIdentity` is who the commit will use. `commitIdentity.fullName.source` and `commitIdentity.email.source` are `local`, `global`, `system`, `worktree`, `command`, `git`, `env`, or `unset`. `configuredIdentity` is only the raw config, so it can look fine while the commit uses an env override. `committerIdentity` reports the effective committer; divergence from the author warns. Gitrole reads Git’s ordinary-commit identity, including config includes and author/committer-specific settings. Current/import use the effective author. Strict consumers must accept the expanded provenance vocabulary; eight short fields and exits are unchanged. Later `git commit --author` or config/environment changes require a new check.
 
 An env value that changes the effective author away from the saved role is `commit=warn` and `overall=warning`. Stop. This line is `GIT_AUTHOR_EMAIL` set to an address that matches no saved role:
 

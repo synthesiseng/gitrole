@@ -304,7 +304,7 @@ function formatPath(input: string): string {
 
 function formatDiagnosedValue(input: {
   value?: string;
-  source: 'local' | 'global' | 'env' | 'unset';
+  source: DoctorResult['commitIdentity']['fullName']['source'];
 }): string {
   if (!input.value) {
     return chalk.dim(`not set (${input.source})`);

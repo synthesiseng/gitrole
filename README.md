@@ -48,9 +48,13 @@ gitrole status
 
 ## How to read a check
 
-`gitrole current` tells you which saved role matches the active commit identity. `gitrole status` is the check you run before a commit or a push. `gitrole doctor` explains a result that isn't clean.
+`gitrole current` tells you which saved role matches Git’s effective author identity. `gitrole status` is the check you run before a commit or a push. `gitrole doctor` explains a result that isn't clean.
 
 `gitrole status --short` is the same check on one line for scripts. The fields, in order, are `role scope override commit remote auth policy overall`. Read `overall` by name. It is the eighth field, because `policy` sits in front of it. `overall=aligned` exits `0`. `overall=warning` exits `2` and still prints the line. Exit `1` is a failure: the error is on stderr and stdout is empty.
+
+For ordinary commits in the current environment, gitrole reads Git’s effective author and committer with `git var GIT_AUTHOR_IDENT` and `git var GIT_COMMITTER_IDENT`, including Git configuration includes and environment overrides. `doctor --json` reports the author as `commitIdentity` and the committer as `committerIdentity`; a missing or different committer produces a commit warning. An earlier check cannot predict flags on a future command, such as `git commit --author`, or later configuration/environment changes.
+
+The eight short fields, their order, and exit codes stay the same. Identity provenance now supports `system`, `worktree`, `command`, and `git` alongside the existing source values. `git` identifies a Git-derived value without a configured field. `scope` reports the underlying configured author scope, including `mixed` or `unset`, even when an identity field has source `env`. Strict consumers must accept the expanded source/scope vocabulary and the additional `committerIdentity` JSON field.
 
 gitrole warns on violated expectations, not assumptions. `overall=warning` happens when at least one actionable check is `warn`. `na` means that check doesn't apply, and it doesn't by itself make the result a warning.
 
@@ -66,13 +70,13 @@ The segment is opt-in and check-only. It doesn't switch roles or install hooks. 
 
 Coding agents commit quickly, and they often commit as whoever the environment variables name. The published package includes an agent skill at `skills/gitrole/SKILL.md`. Point Claude Code, Codex, or Cursor at that directory. The skill tells the agent to run `gitrole status --short` before a commit, or `gitrole doctor --json` for the full diagnosis, and to stop when `overall=warning` (exit `2`) or any check is `warn`. Exit `0` is aligned. Exit `1` is a failure.
 
-The agent trusts the effective identity those commands report. `GIT_AUTHOR_*` and `GIT_COMMITTER_*` can override Git config, so a set `user.name` or `user.email` is not enough. HTTPS with no pin, an env override that changes the effective identity, and a repository with no commits yet are warnings. Stop.
+The agent uses the effective author and committer those commands report. `GIT_AUTHOR_*` and `GIT_COMMITTER_*`, author/committer-specific config, and included config can change the identity, so a set `user.name` or `user.email` is not enough. An author that matches no saved role or a committer that differs from the author produces a commit warning. HTTPS with no pin and a repository with no commits yet also produce warnings. Stop on a warning.
 
 The skill verifies. It doesn't install hooks or block git. The optional check-only hook still runs `gitrole status --short` only when you install it yourself. Install steps are in [Verify Git identity before an agent commits](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/).
 
 ## Common next steps
 
-If Git is already configured and you only want to save that identity:
+To save Git’s effective author name and email in the current environment, including author environment overrides:
 
 ```bash
 gitrole import current --name work
@@ -102,12 +106,12 @@ gitrole checks and switches the identity you name. It doesn't take over the rest
 | Command                                                                                             | Purpose                                                                             |
 | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `gitrole add <name> --name "..." --email "..." [--ssh ...] [--github-user ...] [--github-host ...]` | Create or update a saved role profile                                               |
-| `gitrole import current --name <role>`                                                               | Save the effective current commit identity as a named role                          |
+| `gitrole import current --name <role>`                                                               | Save the effective current author identity as a named role                          |
 | `gitrole use <name> [--global \| --local]`                                                          | Switch git identity at global or repository-local scope and optionally load SSH key |
 | `gitrole pin <role>`                                                                                 | Create a strict repo-local `.gitrole` policy for a single saved role                |
 | `gitrole resolve`                                                                                   | Print the repo-local default role from `.gitrole`                                   |
 | `gitrole resolve --json`                                                                            | Emit the repo-local policy as structured JSON                                       |
-| `gitrole current`                                                                                   | Show which saved role matches the active commit identity                            |
+| `gitrole current`                                                                                   | Show which saved role matches the effective author identity                            |
 | `gitrole list`                                                                                      | List all saved roles and mark the active one                                        |
 | `gitrole status`                                                                                    | Check whether the current repo is aligned for commit and push                       |
 | `gitrole status --short`                                                                            | Machine-friendly alignment fields for scripts and prompts                           |

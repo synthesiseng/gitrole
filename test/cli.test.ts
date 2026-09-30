@@ -89,6 +89,36 @@ async function assertPolicyCommandsRejectRoleName(
   }
 }
 
+// Extend existing Git command fixtures with the effective-identity query surface.
+// The real-Git precedence tests live in effective-identity.test.ts.
+const effectiveGitStub = `
+if (args[0] === 'var' || (args[0] === 'config' && args.includes('--show-scope'))) {
+  const { spawnSync } = await import('node:child_process');
+  const read = (key) => {
+    for (const scope of ['local', 'global']) {
+      const result = spawnSync(process.execPath, [process.argv[1], 'config', '--' + scope, '--get', key], { encoding: 'utf8' });
+      if (result.status === 0 && result.stdout.trim()) return { scope, value: result.stdout.trim() };
+    }
+  };
+  if (args[0] === 'config') {
+    const key = args.at(-1);
+    if (!key.startsWith('user.')) process.exit(1);
+    const found = read(key);
+    if (!found) process.exit(1);
+    process.stdout.write(found.scope + '\\0' + found.value + '\\0');
+    process.exit(0);
+  }
+  const name = read('user.name');
+  const email = read('user.email');
+  if (!name || !email) {
+    process.stderr.write('fatal: no email was given and auto-detection is disabled');
+    process.exit(128);
+  }
+  process.stdout.write(name.value + ' <' + email.value + '> 1700000000 +0000\\n');
+  process.exit(0);
+}
+`;
+
 test('cli help text includes the primary commands', () => {
   const result = spawnSync(process.execPath, [cliPath, '--help'], {
     encoding: 'utf8'
@@ -237,6 +267,7 @@ test('cli import current fails when the current identity is incomplete', async (
   };
 
   runGit(['config', '--global', 'user.name', 'Alex Developer'], repoDir, env);
+  runGit(['config', 'user.useConfigOnly', 'true'], repoDir, env);
 
   const result = spawnSync(
     process.execPath,
@@ -577,6 +608,7 @@ test('cli routes add and list commands through the configured storage', async ()
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[2] === '--get') {
   process.exit(1);
 }
@@ -641,6 +673,7 @@ test('cli doctor exits with code 2 when warnings are present', async () => {
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[2] === '--get') {
   process.exit(1);
 }
@@ -682,6 +715,7 @@ test('cli doctor --json emits valid JSON and exits 0 when aligned', async () => 
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Alex Developer\\n');
   process.exit(0);
@@ -788,6 +822,7 @@ test('cli doctor --json stays aligned when remote owner differs from the auth us
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Alex Developer\\n');
   process.exit(0);
@@ -892,6 +927,7 @@ test('cli doctor --json emits valid JSON and exits 2 when warnings are present',
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[2] === '--get') {
   process.exit(1);
 }
@@ -1372,6 +1408,7 @@ test('cli doctor --json includes repo policy state when .gitrole allows the effe
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Sara Loera\\n');
   process.exit(0);
@@ -1495,6 +1532,7 @@ test('cli use --local applies the role to repository-local git config', async ()
     `#!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
+${effectiveGitStub}
 appendFileSync(${JSON.stringify(gitLogPath)}, JSON.stringify(args) + "\\n");
 if (args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
   process.stdout.write('true\\n');
@@ -1607,6 +1645,7 @@ test('cli use prints a repo note only when warn-level alignment issues are found
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
   process.stdout.write('true\\n');
   process.exit(0);
@@ -1715,6 +1754,7 @@ test('cli use --local fails outside a git repository', async () => {
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
   process.stdout.write('false\\n');
   process.exit(0);
@@ -1767,6 +1807,7 @@ test('cli status exits with code 2 and prints a compact warning summary when mis
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Pat Person\\n');
   process.exit(0);
@@ -1877,6 +1918,7 @@ test('cli doctor shows the hidden global identity when a local override is activ
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Sara Personal\\n');
   process.exit(0);
@@ -1986,6 +2028,7 @@ test('cli status shows local override when repo-local identity is effective', as
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Sara Personal\\n');
   process.exit(0);
@@ -2100,6 +2143,7 @@ test('cli status --short fixture status-short-baseline keeps field order and key
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Alex Developer\\n');
   process.exit(0);
@@ -2215,6 +2259,7 @@ test('cli status --short preserves contract-safe role names like agent_bot', asy
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Acme Build Agent\\n');
   process.exit(0);
@@ -2321,6 +2366,7 @@ test('cli status --short fails clearly when stored role data contains an invalid
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Alex Developer\\n');
   process.exit(0);
@@ -2461,6 +2507,7 @@ test('cli status stays aligned when the current identity is correct and only the
     gitStubPath,
     `#!/usr/bin/env node
 const args = process.argv.slice(2);
+${effectiveGitStub}
 if (args[0] === 'config' && args[1] === '--global' && args[2] === '--get' && args[3] === 'user.name') {
   process.stdout.write('Acme Examples\\n');
   process.exit(0);
@@ -2591,6 +2638,7 @@ test('cli remote set rewrites origin to the role host alias', async () => {
     `#!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
+${effectiveGitStub}
 appendFileSync(${JSON.stringify(gitLogPath)}, JSON.stringify(args) + "\\n");
 if (args[0] === 'remote' && args[1] === 'get-url' && args[2] === 'origin') {
   process.stdout.write('git@github.com:acmedeploy/gitrole.git\\n');
