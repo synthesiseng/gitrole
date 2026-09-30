@@ -175,7 +175,7 @@ function getCommitStatus(input: {
   if (
     observedState.repository.isInsideWorkTree &&
     observedState.repository.hasCommits === false &&
-    observedState.scope.effective !== 'local'
+    !observedState.scope.hasLocalOverride
   ) {
     return 'warn';
   }
@@ -186,8 +186,10 @@ function getCommitStatus(input: {
 function commitEnvDisagrees(observedState: ObservedState): boolean {
   const authorName = observedState.commitIdentity.fullName.value;
   const authorEmail = observedState.commitIdentity.email.value;
-  const committerName = observedState.commitEnv?.committerName;
-  const committerEmail = observedState.commitEnv?.committerEmail;
+  const committerName = observedState.committerIdentity?.fullName.value ?? observedState.commitEnv?.committerName;
+  const committerEmail = observedState.committerIdentity?.email.value ?? observedState.commitEnv?.committerEmail;
+
+  if (observedState.committerIdentity && (!committerName || !committerEmail)) return true;
 
   if (committerEmail && committerEmail !== authorEmail) {
     return true;

@@ -57,7 +57,7 @@ role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overal
 
 <p><code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config. Agents set those variables often. A present <code>user.name</code> or <code>user.email</code> doesn't mean the commit is aligned, so the agent has to read gitrole instead of the config keys.</p>
 
-<p>On <code>gitrole doctor --json</code>, <code>commitIdentity</code> is the effective name and email. Each <code>source</code> is <code>local</code>, <code>global</code>, <code>env</code>, or <code>unset</code>. <code>configuredIdentity</code> is only the raw config, so an env override can leave <code>configuredIdentity</code> looking fine while <code>commitIdentity</code> is someone else.</p>
+<p>On <code>gitrole doctor --json</code>, <code>commitIdentity</code> is the effective name and email. Each <code>source</code> is <code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>env</code>, or <code>unset</code>. <code>configuredIdentity</code> is only the raw config, so an env override can leave <code>configuredIdentity</code> looking fine while <code>commitIdentity</code> is someone else.</p>
 
 <p>An env value that moves the author off the saved role is <code>commit=warn</code> and <code>overall=warning</code>. This line is <code>GIT_AUTHOR_EMAIL</code> set to an address that matches no saved role, on a global identity that otherwise matches <code>work</code>:</p>
 

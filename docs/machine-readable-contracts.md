@@ -113,7 +113,7 @@ role=work scope=local override=true commit=ok remote=ok auth=na policy=na overal
   </thead>
   <tbody>
     <tr><td><code>role</code></td><td>Saved role that matches the current commit identity</td><td>role name, or <code>no-role</code></td></tr>
-    <tr><td><code>scope</code></td><td>Where the commit identity comes from</td><td><code>global</code>, <code>local</code>, <code>mixed</code>, <code>unset</code></td></tr>
+    <tr><td><code>scope</code></td><td>Where the commit identity comes from</td><td><code>global</code>, <code>local</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>mixed</code>, <code>unset</code></td></tr>
     <tr><td><code>override</code></td><td>Whether a repo-local Git config is active</td><td><code>true</code>, <code>false</code></td></tr>
     <tr><td><code>commit</code></td><td>Commit identity check</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
     <tr><td><code>remote</code></td><td>Remote and repo alignment</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
@@ -315,7 +315,7 @@ gitrole doctor --json
   <tbody>
     <tr><td><code>role</code></td><td>Saved role that matches the current commit identity. Omitted if no role matches.</td></tr>
     <tr><td><code>overall</code></td><td><code>aligned</code> or <code>warning</code></td></tr>
-    <tr><td><code>commitIdentity</code></td><td>Effective name and email, plus where each comes from: <code>local</code>, <code>global</code>, <code>env</code>, or <code>unset</code></td></tr>
+    <tr><td><code>commitIdentity</code></td><td>Effective name and email, plus where each comes from: <code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>env</code>, or <code>unset</code></td></tr>
     <tr><td><code>configuredIdentity</code></td><td>Raw local and global Git config values. This is not the commit identity when an env var overrides it.</td></tr>
     <tr><td><code>scope</code></td><td>Aggregate view of where the commit identity comes from</td></tr>
     <tr><td><code>repository</code></td><td>Repo context, branch, and parsed remote info</td></tr>
@@ -333,9 +333,9 @@ gitrole doctor --json
   </thead>
   <tbody>
     <tr><td><code>fullName.value</code></td><td>Effective commit author name</td><td>string, or omitted when unset</td></tr>
-    <tr><td><code>fullName.source</code></td><td>Where the effective name came from</td><td><code>local</code>, <code>global</code>, <code>env</code>, <code>unset</code></td></tr>
+    <tr><td><code>fullName.source</code></td><td>Where the effective name came from</td><td><code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>env</code>, <code>unset</code></td></tr>
     <tr><td><code>email.value</code></td><td>Effective commit author email</td><td>string, or omitted when unset</td></tr>
-    <tr><td><code>email.source</code></td><td>Where the effective email came from</td><td><code>local</code>, <code>global</code>, <code>env</code>, <code>unset</code></td></tr>
+    <tr><td><code>email.source</code></td><td>Where the effective email came from</td><td><code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>env</code>, <code>unset</code></td></tr>
   </tbody>
 </table>
 
@@ -693,3 +693,11 @@ error: repo policy file .gitrole is invalid: allowedRoles invalid role name "Cli
 <h2 id="what-it-does-not-do">What this page doesn't cover</h2>
 
 <p>These commands check. They don't switch roles, rewrite remotes, or install hooks. Human-readable <code>gitrole status</code> and <code>gitrole doctor</code> text isn't a parse contract. The prompt segment glyphs are in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
+
+<h2 id="effective-identity">Effective ordinary-commit identity</h2>
+
+<p>Gitrole asks Git for <code>GIT_AUTHOR_IDENT</code> and <code>GIT_COMMITTER_IDENT</code>. Included configuration, author/committer-specific settings, worktree/system/command configuration and environment overrides participate in Git’s precedence. Role matching, <code>current</code> and <code>import current</code> use the effective author. A differing or unavailable committer warns rather than proving alignment. <code>doctor --json</code> additionally reports <code>committerIdentity</code> with the same name/email value/source shape as <code>commitIdentity</code>.</p>
+
+<p>Config includes retain their reported Git scope. <code>git</code> identifies Git-generated fallback values; <code>env</code> identifies environment input. Aggregate scope reports the underlying author configuration; environment overrides retain that convention. <code>hasLocalOverride</code> includes local and worktree configuration. The source and scope vocabularies are expanded: strict consumers accepting only the older values must update. The eight short fields, their order and exits remain unchanged.</p>
+
+<p>This is a snapshot for an ordinary commit in the checked context. A later <code>git commit --author</code> argument or changed config/environment can change identity after the check; Gitrole cannot predict it.</p>

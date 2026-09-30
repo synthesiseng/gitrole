@@ -20,6 +20,7 @@ export interface ObservedState {
   commitIdentity: DoctorResult['commitIdentity'];
   configuredIdentity: DoctorResult['configuredIdentity'];
   commitEnv: CommitEnvOverrides;
+  committerIdentity?: DoctorResult['commitIdentity'];
   scope: IdentityScopeResult;
   repository: DoctorResult['repository'];
   sshAuth?: SshAuthProbeResult;
@@ -71,10 +72,12 @@ export async function collectObservedState(
     email: diagnoseValue(localEmail, globalEmail)
   };
   const commitEnv = readCommitEnvOverrides(dependencies.env ?? process.env);
-  const commitIdentity = applyAuthorEnv(configuredCommitIdentity, commitEnv);
+  const effectiveIdentity = await dependencies.gitConfig.getEffectiveIdentity?.(dependencies.env);
+  const commitIdentity = effectiveIdentity?.author ?? applyAuthorEnv(configuredCommitIdentity, commitEnv);
 
   return {
     commitIdentity,
+    committerIdentity: effectiveIdentity?.committer,
     configuredIdentity: {
       local: {
         fullName: localName,
@@ -86,7 +89,7 @@ export async function collectObservedState(
       }
     },
     commitEnv,
-    scope: detectIdentityScope(configuredCommitIdentity),
+    scope: effectiveIdentity?.scope ?? detectIdentityScope(configuredCommitIdentity),
     repository: {
       isInsideWorkTree,
       hasCommits: isInsideWorkTree ? hasCommits : undefined,

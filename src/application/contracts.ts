@@ -15,7 +15,7 @@ export interface UseRoleResult {
 
 export interface CurrentRoleResult {
   identity: GitIdentity;
-  scope: 'global' | 'local';
+  scope: EffectiveConfigScope;
   role?: Role;
 }
 
@@ -26,16 +26,24 @@ export interface ListRolesResult {
 
 export interface ImportCurrentRoleResult {
   role: Role;
-  scope: 'global' | 'local';
+  scope: EffectiveConfigScope;
 }
 
 export interface DiagnosedValue {
   value?: string;
-  source: 'local' | 'global' | 'env' | 'unset';
+  source: IdentitySource;
 }
 
 export type UseScope = 'global' | 'local';
-export type EffectiveConfigScope = UseScope | 'mixed' | 'unset';
+export type IdentitySource = UseScope | 'system' | 'worktree' | 'command' | 'git' | 'env' | 'unset';
+export type EffectiveConfigScope = Exclude<IdentitySource, 'env'> | 'mixed';
+
+/** Git's effective ordinary-commit identities and their configured scope. */
+export interface EffectiveGitIdentity {
+  author: DoctorResult['commitIdentity'];
+  committer: DoctorResult['commitIdentity'];
+  scope: IdentityScopeResult;
+}
 
 /**
  * Describes where the effective commit identity is coming from.
@@ -89,6 +97,7 @@ export interface DoctorResult {
     fullName: DiagnosedValue;
     email: DiagnosedValue;
   };
+  committerIdentity?: DoctorResult['commitIdentity'];
   configuredIdentity: {
     local: GitIdentity;
     global: GitIdentity;
@@ -147,6 +156,7 @@ export interface RoleStore {
 }
 
 export interface GitConfig {
+  getEffectiveIdentity?(env?: NodeJS.ProcessEnv): Promise<EffectiveGitIdentity>;
   getGlobalUserName(): Promise<string | undefined>;
   getGlobalUserEmail(): Promise<string | undefined>;
   setGlobalUserName(name: string): Promise<void>;

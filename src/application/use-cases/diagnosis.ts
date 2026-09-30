@@ -45,6 +45,7 @@ export async function doctor(
     role,
     overall: getDoctorOverall({ checks }),
     commitIdentity: observedState.commitIdentity,
+    committerIdentity: observedState.committerIdentity,
     configuredIdentity: observedState.configuredIdentity,
     scope: observedState.scope,
     repository: observedState.repository,
@@ -163,7 +164,7 @@ function buildDoctorChecks(input: {
     checks.push({
       status: 'warn',
       label: 'scope',
-      message: 'effective commit identity mixes local and global Git config sources'
+      message: 'effective commit identity mixes Git config sources'
     });
   }
 
@@ -184,7 +185,7 @@ function buildDoctorChecks(input: {
       message: 'repository has no commits yet; the first push will fail until HEAD exists'
     });
 
-    if (observedState.scope.effective !== 'local') {
+    if (!observedState.scope.hasLocalOverride) {
       checks.push({
         status: 'warn',
         label: 'commit',
@@ -268,7 +269,7 @@ function buildRoleAlignmentChecks(input: {
     checks.push({
       status: 'warn',
       label: 'scope',
-      message: `selected role ${role.name} is split across local and global config sources`
+      message: `selected role ${role.name} is split across Git config sources`
     });
   } else if (observedState.scope.effective === 'local' || observedState.scope.effective === 'global') {
     checks.push({
@@ -377,6 +378,13 @@ function buildRoleAlignmentChecks(input: {
 
 function buildCommitEnvChecks(observedState: ObservedState, role?: Role): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
+  if (observedState.committerIdentity && (
+    !observedState.committerIdentity.fullName.value || !observedState.committerIdentity.email.value ||
+    observedState.committerIdentity.fullName.value !== observedState.commitIdentity.fullName.value ||
+    observedState.committerIdentity.email.value !== observedState.commitIdentity.email.value
+  )) {
+    checks.push({ status: 'warn', label: 'commit', message: 'effective committer identity is incomplete or differs from the effective author identity' });
+  }
   const configuredEmail =
     observedState.configuredIdentity.local.email ?? observedState.configuredIdentity.global.email;
   const configuredName =
