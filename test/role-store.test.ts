@@ -188,3 +188,43 @@ async function createStoreWithRawRolesFile(raw: string): Promise<FileRoleStore> 
 
   return new FileRoleStore({ configFilePath });
 }
+
+for (const field of ['fullName', 'email'] as const) {
+  for (const blank of ['', ' \t\n', '\u00a0\u2003']) {
+    test(`role store rejects blank ${field} ${JSON.stringify(blank)} without creating or replacing data`, async () => {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-role-store-blank-'));
+      const configFilePath = path.join(tempDir, 'config', 'roles.json');
+      const store = new FileRoleStore({ configFilePath });
+      const valid = { name: 'work', fullName: 'Maya Example', email: 'maya@example.test' };
+      const invalid = { ...valid, [field]: blank };
+
+      await assert.rejects(() => store.save(invalid), { name: 'InvalidRoleIdentityError' });
+      await assert.rejects(() => readFile(configFilePath), { code: 'ENOENT' });
+      await store.save(valid);
+      const before = await readFile(configFilePath, 'utf8');
+      await assert.rejects(() => store.save(invalid), { name: 'InvalidRoleIdentityError' });
+      assert.equal(await readFile(configFilePath, 'utf8'), before);
+      await assert.rejects(() => store.save({ ...invalid, name: 'new-role' }), {
+        name: 'InvalidRoleIdentityError'
+      });
+      assert.equal(await readFile(configFilePath, 'utf8'), before);
+    });
+  }
+}
+
+test('role store keeps legacy blank identities readable and removable without rewriting on read', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-role-store-legacy-blank-'));
+  const configFilePath = path.join(tempDir, 'roles.json');
+  const raw = JSON.stringify({ roles: [
+    { name: 'work', fullName: 'Maya Example', email: 'maya@example.test' },
+    { name: 'legacy', fullName: ' \t', email: '' }
+  ] });
+  await writeFile(configFilePath, raw);
+  const store = new FileRoleStore({ configFilePath });
+
+  assert.equal((await store.list()).length, 2);
+  assert.equal((await store.get('legacy'))?.fullName, '');
+  assert.equal(await readFile(configFilePath, 'utf8'), raw);
+  assert.equal(await store.remove('legacy'), true);
+  assert.deepEqual((await store.list()).map((role) => role.name), ['work']);
+});

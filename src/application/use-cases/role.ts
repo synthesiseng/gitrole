@@ -5,6 +5,7 @@ import {
   matchesIdentity,
   normalizeRole,
   parseStoredRoleName,
+  validateRoleIdentity,
   validateRoleName,
   type Role
 } from '../../domain/role.js';
@@ -95,6 +96,8 @@ export async function useRole(
   if (!role) {
     throw new ProfileNotFoundError(roleName);
   }
+
+  validateRoleIdentity(role);
 
   if (scope === 'local') {
     if (!dependencies.repository || !(await dependencies.repository.isInsideWorkTree())) {

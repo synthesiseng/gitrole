@@ -41,6 +41,28 @@ export class ReservedRoleNameError extends InvalidRoleNameError {
   }
 }
 
+/** Reports a required identity field that cannot be applied safely. */
+export class InvalidRoleIdentityError extends Error {
+  constructor(field: 'full name' | 'email') {
+    super(`role ${field} must not be empty or whitespace-only`);
+    this.name = 'InvalidRoleIdentityError';
+  }
+}
+
+/** Lists blank required identity fields, including whitespace-only values. */
+export function getBlankRoleIdentityFields(role: Pick<Role, 'fullName' | 'email'>): Array<'full name' | 'email'> {
+  const fields: Array<'full name' | 'email'> = [];
+  if (!role.fullName.trim()) fields.push('full name');
+  if (!role.email.trim()) fields.push('email');
+  return fields;
+}
+
+/** Rejects blank identities before a role is saved or applied to Git config. */
+export function validateRoleIdentity(role: Pick<Role, 'fullName' | 'email'>): void {
+  const [field] = getBlankRoleIdentityFields(role);
+  if (field) throw new InvalidRoleIdentityError(field);
+}
+
 /**
  * Returns true when `input` is the unmatched-role sentinel.
  */
@@ -97,16 +119,19 @@ function normalizeRoleFields(input: Role, name: string): Role {
  * Normalizes persisted role input so comparisons and storage stay stable.
  *
  * Trims all string fields and removes empty optional values. The name must
- * be valid for a new or updated saved role.
+ * be valid for a new or updated saved role. Required identity fields must be nonblank.
  */
 export function normalizeRole(input: Role): Role {
-  return normalizeRoleFields(input, validateRoleName(input.name));
+  const role = normalizeRoleFields(input, validateRoleName(input.name));
+  validateRoleIdentity(role);
+  return role;
 }
 
 /**
  * Normalizes a role read from disk, including a legacy reserved name.
  *
- * Does not rename or drop the role. Creation paths keep using {@link normalizeRole}.
+ * Does not rename or drop the role, including legacy blank identities that doctor
+ * must diagnose. Creation paths keep using {@link normalizeRole}.
  */
 export function normalizeStoredRole(input: Role): Role {
   return normalizeRoleFields(input, parseStoredRoleName(input.name));

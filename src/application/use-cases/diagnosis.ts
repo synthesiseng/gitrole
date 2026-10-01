@@ -1,7 +1,7 @@
 /*
  * Implements repository diagnosis and post-switch alignment checks.
  */
-import { isReservedRoleName, type Role } from '../../domain/role.js';
+import { getBlankRoleIdentityFields, isReservedRoleName, type Role } from '../../domain/role.js';
 import { findMatchingRole, findPinnedRole, buildPushAlignmentChecks } from '../alignment.js';
 import {
   getDoctorOverall,
@@ -146,6 +146,17 @@ function buildDoctorChecks(input: {
   }
 
   checks.push(...buildReservedRoleNameChecks(input.roles));
+
+  for (const role of input.roles) {
+    const fields = getBlankRoleIdentityFields(role);
+    if (fields.length > 0) {
+      checks.push({
+        status: 'warn',
+        label: 'role',
+        message: `saved role "${role.name}" has empty or whitespace-only ${fields.join(' and ')}; replace it with gitrole add or remove it with gitrole remove`
+      });
+    }
+  }
 
   if (
     !observedState.commitIdentity.fullName.value ||

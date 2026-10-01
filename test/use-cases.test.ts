@@ -2661,3 +2661,60 @@ test('doctor flags a stored no-role role that is not the active identity', async
     true
   );
 });
+
+for (const field of ['fullName', 'email'] as const) {
+  for (const blank of ['', ' \t\r\n', '\u00a0\u2003']) {
+    test(`add-role rejects blank ${field} ${JSON.stringify(blank)} before saving`, async () => {
+      const role = { name: 'work', fullName: 'Maya Example', email: 'maya@example.test' };
+      const { dependencies } = createDependencies(role);
+      let saves = 0;
+      dependencies.roleStore.save = async () => { saves += 1; };
+
+      await assert.rejects(() => addRole(dependencies, { ...role, [field]: blank }), {
+        name: 'InvalidRoleIdentityError'
+      });
+      assert.equal(saves, 0);
+    });
+
+    for (const scope of ['global', 'local'] as const) {
+      test(`use-role rejects blank ${field} ${JSON.stringify(blank)} at ${scope} before effects`, async () => {
+        const role = {
+          name: 'legacy', fullName: 'Maya Example', email: 'maya@example.test',
+          sshKeyPath: '/fixture/key', [field]: blank
+        };
+        const { dependencies, calls } = createDependencies(role);
+        const repository = createDoctorDependencies(role).repository;
+        repository.setLocalUserName = async (value) => { calls.localNames.push(value); };
+        repository.setLocalUserEmail = async (value) => { calls.localEmails.push(value); };
+
+        await assert.rejects(() => useRole({ ...dependencies, repository }, role.name, { scope }), {
+          name: 'InvalidRoleIdentityError'
+        });
+        assert.deepEqual(calls, { names: [], emails: [], localNames: [], localEmails: [], ssh: [] });
+      });
+    }
+  }
+}
+
+test('doctor flags every saved blank identity while the active role is healthy', async () => {
+  const valid = { name: 'work', fullName: 'Maya Example', email: 'maya@example.test' };
+  const invalid = [
+    { ...valid, name: 'empty-name', fullName: '' },
+    { ...valid, name: 'blank-name', fullName: ' \t\u00a0' },
+    { ...valid, name: 'empty-email', email: '' },
+    { ...valid, name: 'blank-email', email: ' \n\u2003' },
+    { ...valid, name: 'both-blank', fullName: ' ', email: '' }
+  ];
+  const result = await doctor(createDoctorDependencies(valid, { roles: [valid, ...invalid] }));
+
+  assert.equal(result.role?.name, 'work');
+  assert.equal(result.overall, 'warning');
+  const warnings = result.checks.filter((check) => check.label === 'role' && check.status === 'warn');
+  assert.equal(warnings.length, invalid.length);
+  for (const role of invalid) {
+    const warning = warnings.find((check) => check.message.includes(`"${role.name}"`));
+    assert.ok(warning, `missing warning for ${role.name}`);
+    if (!role.fullName.trim()) assert.match(warning.message, /full name/);
+    if (!role.email.trim()) assert.match(warning.message, /email/);
+  }
+});
