@@ -89,9 +89,29 @@ or prove App permissions, OIDC, tap protection or installed CLI/helper pairing.
 
 The suite characterizes inherited risks rather than approving them: failed npm
 lookups are treated as absence, curl has five attempts without a request timeout,
-and the rewriter can downgrade a newer formula or replace matching version text
-outside its primary fields. Green fixtures do not make those behaviors safe
-recovery policy. Consequential changes need an owner decision.
+and the rewriter can replace matching version text outside its primary fields.
+Green fixtures do not make those behaviors safe recovery policy. Consequential changes need an owner decision.
+
+## Homebrew version-order policy
+
+Normal release retries compare stable `X.Y.Z` versions numerically, so `0.10.4`
+advances `0.9.1`. Prerelease releases and tags are excluded from the tap job;
+the formula helper also skips prerelease candidates. No npm `latest` lookup is
+required for this rule.
+
+An older candidate leaves the formula unchanged and succeeds with an explicit
+job summary, for example `tap already at 0.10.5, skipped 0.10.4`. An equal version
+is a no-op only when its registry URL and checksum identify the same artifact;
+a conflicting checksum or inconsistent formula URL/version fails before writing.
+A newer stable version updates normally. Exact repeated retries create no extra
+formula commit or push. Intentional rollback has no bypass in this workflow.
+
+Tap pushes remain ordinary non-force pushes. A concurrent remote update rejects
+a stale push and fails the job; retry from a fresh checkout only after inspecting
+the competing change. There is no automatic rebase or reconciliation. Historical
+release reruns use their tagged workflow/helper and do not acquire this guard
+from a later merge. These local fixtures do not establish live protection or
+installed-binary qualification.
 
 ## Proposed recovery of an already published version
 
