@@ -25,7 +25,8 @@
     "prepack": "npm run build",
     "test": "npm run build:test && node --test dist-test/test/*.test.js",
     "test:e2e": "npm run build && npm run build:test && node --test dist-test/test/e2e/*.test.js",
-    "test:release": "npm test && npm run test:e2e"
+    "test:release": "npm test && npm run test:e2e && npm run test:release-workflow",
+    "test:release-workflow": "node --test test/release/*.test.mjs"
   },
   "keywords": [
     "git",
