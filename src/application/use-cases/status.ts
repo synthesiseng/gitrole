@@ -107,6 +107,15 @@ function formatPushAuth(
   },
   httpsAuth?: HttpsAuthDescription
 ): string | undefined {
+  if (observedState.repository.push) {
+    const push = observedState.repository.push;
+    if (push.targets.length === 1 && push.targets[0].remote.protocol === 'https' && httpsAuth) return formatHttpsPushAuth(httpsAuth);
+    if (push.message || !push.targets.length) return push.message ?? 'push destination unverified';
+    return push.targets.map(({ remote, sshAuth, message }) =>
+      sshAuth?.ok && sshAuth.githubUser ? `${sshAuth.githubUser} via ${remote.host}` :
+      `${remote.name} ${remote.url} (${message ?? sshAuth?.message ?? 'authentication unverified'})`
+    ).join('; ');
+  }
   if (observedState.sshAuth?.githubUser) {
     return `${observedState.sshAuth.githubUser} via ${observedState.sshAuth.host}`;
   }

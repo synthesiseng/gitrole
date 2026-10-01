@@ -25,19 +25,19 @@ export const httpsPinAligned = {
 export const httpsNoIdentityPin = {
   id: 'https-no-identity-pin',
   line: 'role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning',
-  doctorAuth: 'origin uses HTTPS and no identity pin is configured'
+  doctorAuth: 'push destination uses HTTPS and no identity pin is configured'
 } as const;
 
 export const freshRepoNoLocalRole = {
   id: 'fresh-repo-no-local-role',
-  line: 'role=work scope=global override=false commit=warn remote=warn auth=ok policy=na overall=warning',
+  line: 'role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning',
   doctorCommit: 'no local role before the first commit; the next commit will use the global identity'
 } as const;
 
 export const httpsPinMismatch = {
   id: 'https-pin-mismatch',
   line: 'role=personal scope=local override=true commit=ok remote=ok auth=warn policy=warn overall=warning',
-  doctorAuth: 'origin uses HTTPS; github user thisyearearth does not match pin alex-dev'
+  doctorAuth: 'push destination uses HTTPS; github user thisyearearth does not match pin alex-dev'
 } as const;
 
 export const sshAuthMismatch = {

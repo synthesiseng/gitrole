@@ -205,7 +205,7 @@ test('e2e https-no-identity-pin: HTTPS without an identity pin warns', async () 
 
   const doctorText = runCli(workspace, ['doctor']);
   assert.equal(doctorText.status, 2, doctorText.stderr);
-  assert.match(doctorText.stdout, /warn auth\s+origin uses HTTPS and no identity pin is configured/);
+  assert.match(doctorText.stdout, /warn auth\s+push destination uses HTTPS and no identity pin is configured/);
 });
 
 test('e2e https-pin-mismatch: HTTPS pin with the wrong github user warns', async () => {
@@ -260,7 +260,7 @@ test('e2e https-pin-mismatch: HTTPS pin with the wrong github user warns', async
   assert.equal(doctorText.status, 2, doctorText.stderr);
   assert.match(
     doctorText.stdout,
-    /warn auth\s+origin uses HTTPS; github user thisyearearth does not match pin alex-dev/
+    /warn auth\s+push destination uses HTTPS; github user thisyearearth does not match pin alex-dev/
   );
 });
 
@@ -427,7 +427,7 @@ test('e2e status-short-policy-ok: short line reports policy=ok when the pin allo
   assert.equal(statusResult.stdout.trim(), statusShortPolicyOk.line, statusShortPolicyOk.id);
 });
 
-test('e2e status --short warns when origin is missing', async () => {
+test('e2e status --short warns when no default push destination exists', async () => {
   const workspace = await createHermeticWorkspace();
 
   await initRepo(workspace);
@@ -449,7 +449,7 @@ test('e2e status --short warns when origin is missing', async () => {
   assert.equal(statusResult.status, 2);
   assert.equal(
     statusResult.stdout.trim(),
-    'role=work scope=global override=false commit=ok remote=warn auth=na policy=na overall=warning'
+    'role=work scope=global override=false commit=ok remote=warn auth=warn policy=na overall=warning'
   );
 });
 
@@ -518,10 +518,10 @@ test('e2e fresh repo with a local role keeps commit=ok', async () => {
   setOrigin(workspace, 'git@github.com-acme-dev:acme-corp/service.git');
 
   const statusResult = runCli(workspace, ['status', '--short']);
-  assert.equal(statusResult.status, 2, statusResult.stderr);
+  assert.equal(statusResult.status, 0, statusResult.stderr);
   assert.equal(
     statusResult.stdout.trim(),
-    'role=work scope=local override=true commit=ok remote=warn auth=ok policy=na overall=warning'
+    'role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned'
   );
 
   const doctorResult = runCli(workspace, ['doctor', '--json']);
@@ -694,7 +694,7 @@ test('e2e optional pre-commit hook only runs status --short and exits non-zero o
     encoding: 'utf8',
     env: {
       ...workspace.env,
-      PATH: `${binDir}:${process.env.PATH ?? ''}`
+      PATH: `${binDir}:${workspace.env.PATH ?? ''}`
     }
   });
   assert.notEqual(warned.status, 0);
@@ -710,7 +710,7 @@ test('e2e optional pre-commit hook only runs status --short and exits non-zero o
     encoding: 'utf8',
     env: {
       ...workspace.env,
-      PATH: `${binDir}:${process.env.PATH ?? ''}`
+      PATH: `${binDir}:${workspace.env.PATH ?? ''}`
     }
   });
   assert.equal(aligned.status, 0, aligned.stderr);

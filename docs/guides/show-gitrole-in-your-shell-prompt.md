@@ -91,7 +91,7 @@ role=work scope=local override=true commit=ok remote=ok auth=na policy=na overal
 
 <p>Each prompt runs <code>gitrole status --short --offline</code> and never the networked <code>status --short</code>. There is no cache, so the next prompt sees a role switch or an env override without a refresh flag.</p>
 
-<p>Offline status still reads local git config, author and committer env vars, whether the repo has commits, <code>origin</code> (protocol, host, and the HTTPS pin check), the saved roles file, and <code>.gitrole</code>. It doesn't open SSH and it doesn't call GitHub. <code>gitrole status</code> and <code>gitrole status --short</code> without <code>--offline</code> still probe SSH remotes. Use those when you want the network check. The prompt snippets don't.</p>
+<p>Offline status still reads local git config, author and committer env vars, whether the repo has commits, every default push destination (protocol, host, and HTTPS pin checks), the saved roles file, and <code>.gitrole</code>. It doesn't open SSH and it doesn't call GitHub. <code>gitrole status</code> and <code>gitrole status --short</code> without <code>--offline</code> inspect supported SSH transports for every default push destination. Use those when you want the network check. The prompt snippets don't.</p>
 
 <h2 id="other-shells">Other shells</h2>
 

@@ -67,19 +67,19 @@ gitrole status --short --offline
 role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned
 ```
 
-<p>HTTPS origin whose pin allows the effective role, and that role has a <code>githubUser</code>. <code>auth=na</code> and <code>overall=aligned</code> together. Exit <code>0</code>. <code>auth=na</code> here means SSH verification doesn't apply, not that a probe passed:</p>
+<p>HTTPS-only push destination whose pin allows the effective role, and that role has a <code>githubUser</code>. <code>auth=na</code> and <code>overall=aligned</code> together. Exit <code>0</code>. <code>auth=na</code> here means SSH verification doesn't apply, not that a probe passed:</p>
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=na policy=ok overall=aligned
 ```
 
-<p>HTTPS origin with no pin. Since 0.8.0 this is <code>auth=warn</code> and <code>overall=warning</code>, exit <code>2</code>. gitrole can't tell which GitHub user the push will use:</p>
+<p>HTTPS-only push destination with no pin. Since 0.8.0 this is <code>auth=warn</code> and <code>overall=warning</code>, exit <code>2</code>. gitrole can't tell which GitHub user the push will use:</p>
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
 ```
 
-<p>HTTPS origin whose pin doesn't allow the effective role. <code>auth=warn</code> and <code>policy=warn</code>. Exit <code>2</code>:</p>
+<p>HTTPS-only push destination whose pin doesn't allow the effective role. <code>auth=warn</code> and <code>policy=warn</code>. Exit <code>2</code>:</p>
 
 ```text
 role=personal scope=local override=true commit=ok remote=ok auth=warn policy=warn overall=warning
@@ -90,6 +90,11 @@ role=personal scope=local override=true commit=ok remote=ok auth=warn policy=war
 ```text
 role=client-acme scope=local override=true commit=ok remote=ok auth=ok policy=warn overall=warning
 ```
+
+<h3>Default push observation</h3>
+
+<p><code>remote</code> and <code>auth</code> cover the destination of a plain <code>git push</code>, not the fetch origin. Selection follows branch <code>pushRemote</code>, <code>remote.pushDefault</code>, branch remote, sole remote, then origin. Git resolves every URL with <code>git remote get-url --push --all</code>, including configured rewrites. Every endpoint is checked; an unverified endpoint warns. Mixed SSH/HTTPS warns online; offline retains HTTPS pin checks and invokes no SSH.</p>
+<p>Online standard OpenSSH inspection includes URL user/port and receive-pack context. Custom Git SSH commands, alternate diagnostic binaries, incomplete configuration, context differences or interactive authentication remain unverified. Inspection may execute configured <code>Match exec</code> commands or DNS lookups. These checks do not prove branch/refspec readiness, remote permission or push success, and do not predict future explicit push arguments.</p>
 
 <h3 id="status-short-offline"><code>--offline</code></h3>
 
@@ -116,8 +121,8 @@ role=work scope=local override=true commit=ok remote=ok auth=na policy=na overal
     <tr><td><code>scope</code></td><td>Where the commit identity comes from</td><td><code>global</code>, <code>local</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>mixed</code>, <code>unset</code></td></tr>
     <tr><td><code>override</code></td><td>Whether a repo-local Git config is active</td><td><code>true</code>, <code>false</code></td></tr>
     <tr><td><code>commit</code></td><td>Commit identity check</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
-    <tr><td><code>remote</code></td><td>Remote and repo alignment</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
-    <tr><td><code>auth</code></td><td>SSH <code>githubUser</code> probe, or the HTTPS pin check</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
+    <tr><td><code>remote</code></td><td>All default push destinations against role host expectations</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
+    <tr><td><code>auth</code></td><td>Every supported SSH push account, or HTTPS-only pin checks; mixed online destinations warn</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
     <tr><td><code>policy</code></td><td><code>.gitrole</code> against the effective role</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
     <tr><td><code>overall</code></td><td>Summary</td><td><code>aligned</code>, <code>warning</code></td></tr>
   </tbody>
@@ -129,7 +134,7 @@ role=work scope=local override=true commit=ok remote=ok auth=na policy=na overal
   </thead>
   <tbody>
     <tr><td><code>remote</code></td><td>Not inside a Git repo</td></tr>
-    <tr><td><code>auth</code></td><td>Not inside a Git repo, no <code>origin</code>, HTTPS whose pin allows the active role and that role has a <code>githubUser</code>, or <code>--offline</code> when the live SSH probe is skipped</td></tr>
+    <tr><td><code>auth</code></td><td>Not inside a Git repo, HTTPS whose pin allows the active role and that role has a <code>githubUser</code>, or <code>--offline</code> when the live SSH probe is skipped</td></tr>
     <tr><td><code>policy</code></td><td>No <code>.gitrole</code> file</td></tr>
   </tbody>
 </table>
@@ -211,7 +216,7 @@ gitrole doctor --json
 
 <h3 id="doctor-json-example">Example</h3>
 
-<p>This is stdout from one local run. The saved role <code>work</code> matches the repo-local name and email, <code>origin</code> is <code>git@github.com-work:acme/service.git</code>, the SSH probe returned <code>acme-dev</code>, and there is no <code>.gitrole</code> file, so <code>repoPolicy</code> is omitted. <code>repository.topLevelPath</code> is that repo's absolute path. Yours will differ. Exit <code>0</code>.</p>
+<p>This illustrative subset shows the single-endpoint JSON shape; additive push/fetch metadata is described below. The saved role <code>work</code> matches the repo-local name and email, <code>origin</code> is <code>git@github.com-work:acme/service.git</code>, the SSH probe returned <code>acme-dev</code>, and there is no <code>.gitrole</code> file, so <code>repoPolicy</code> is omitted. <code>repository.topLevelPath</code> is that repo's absolute path. Yours will differ. Exit <code>0</code>.</p>
 
 ```json
 {
@@ -276,7 +281,7 @@ gitrole doctor --json
     {
       "status": "info",
       "label": "remote",
-      "message": "origin uses ssh at git@github.com-work:acme/service.git"
+      "message": "default push remote origin uses ssh at git@github.com-work:acme/service.git"
     },
     {
       "status": "ok",
@@ -302,7 +307,7 @@ gitrole doctor --json
 }
 ```
 
-<p>HTTPS auth is <code>info</code>, with message <code>origin uses HTTPS; SSH auth verification does not apply</code>, only when a repo pin allows the active role and that role has a <code>githubUser</code>. No pin, or a pin that doesn't allow the active role, is <code>warn</code> and exit <code>2</code>. <code>sshAuth</code> is omitted when no SSH probe runs.</p>
+<p>HTTPS auth is <code>info</code>, with message <code>push destination uses HTTPS; SSH auth verification does not apply</code>, only when a repo pin allows the active role and that role has a <code>githubUser</code>. No pin, or a pin that doesn't allow the active role, is <code>warn</code> and exit <code>2</code>. <code>sshAuth</code> is omitted when no SSH probe runs.</p>
 
 <h3 id="doctor-json-fields">Fields</h3>
 
@@ -319,7 +324,7 @@ gitrole doctor --json
     <tr><td><code>configuredIdentity</code></td><td>Raw local and global Git config values. This is not the commit identity when an env var overrides it.</td></tr>
     <tr><td><code>scope</code></td><td>Aggregate view of where the commit identity comes from</td></tr>
     <tr><td><code>repository</code></td><td>Repo context, branch, and parsed remote info</td></tr>
-    <tr><td><code>sshAuth</code></td><td>SSH probe result. Omitted if no SSH probe was run, including HTTPS origins.</td></tr>
+    <tr><td><code>sshAuth</code></td><td>SSH probe result. Omitted if no SSH probe was run, including HTTPS-only push destinations.</td></tr>
     <tr><td><code>repoPolicy</code></td><td><code>.gitrole</code> policy evaluation. Omitted if no policy file exists.</td></tr>
     <tr><td><code>checks</code></td><td>Ordered list of individual check results</td></tr>
   </tbody>
@@ -377,7 +382,9 @@ gitrole doctor --json
     <tr><td><code>topLevelPath</code></td><td>Absolute path to the repo root. Omitted outside a Git repo.</td></tr>
     <tr><td><code>currentBranch</code></td><td>Current branch name, when available</td></tr>
     <tr><td><code>upstreamBranch</code></td><td>Configured upstream branch, when available</td></tr>
-    <tr><td><code>remote</code></td><td>Parsed <code>origin</code> remote info. Omitted when <code>origin</code> is not configured.</td></tr>
+    <tr><td><code>fetchRemote</code></td><td>Parsed fetch origin, independent of push qualification.</td></tr>
+    <tr><td><code>push</code></td><td>Selected <code>remoteName</code>, optional resolution <code>message</code> and all <code>targets</code>. Each target contains parsed <code>remote</code>, optional <code>sshAuth</code> and unverified <code>message</code>. Singular top-level <code>sshAuth</code> is populated only for one endpoint.</td></tr>
+    <tr><td><code>remote</code></td><td>First effective default push endpoint. Omitted when no destination can be resolved.</td></tr>
   </tbody>
 </table>
 
@@ -388,10 +395,13 @@ gitrole doctor --json
     <tr><th>Field</th><th>Meaning</th><th>Values</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>name</code></td><td>Remote name</td><td>currently <code>origin</code></td></tr>
+    <tr><td><code>name</code></td><td>Remote name</td><td>selected default push remote</td></tr>
     <tr><td><code>url</code></td><td>Raw remote URL</td><td>string</td></tr>
     <tr><td><code>protocol</code></td><td>Parsed remote protocol</td><td><code>ssh</code>, <code>https</code>, <code>unknown</code></td></tr>
     <tr><td><code>host</code></td><td>Parsed remote host</td><td>string when parseable</td></tr>
+    <tr><td><code>user</code></td><td>Explicit SSH URL user, when present</td><td>string</td></tr>
+    <tr><td><code>port</code></td><td>Explicit supported SSH URL port, when present</td><td>integer 1–65535</td></tr>
+    <tr><td><code>path</code></td><td>SSH repository path as interpreted by Git</td><td>string</td></tr>
     <tr><td><code>owner</code></td><td>Parsed repository owner or org</td><td>string when parseable</td></tr>
     <tr><td><code>repository</code></td><td>Parsed repository name</td><td>string when parseable</td></tr>
   </tbody>
@@ -449,21 +459,21 @@ gitrole doctor --json
 {
   "status": "info",
   "label": "auth",
-  "message": "origin uses HTTPS; SSH auth verification does not apply"
+  "message": "push destination uses HTTPS; SSH auth verification does not apply"
 }
 ```
 
-<p>No pin is <code>warn</code>. With no <code>githubUser</code> on the active role the message is <code>origin uses HTTPS and no identity pin is configured</code>:</p>
+<p>No pin is <code>warn</code>. With no <code>githubUser</code> on the active role the message is <code>push destination uses HTTPS and no identity pin is configured</code>:</p>
 
 ```json
 {
   "status": "warn",
   "label": "auth",
-  "message": "origin uses HTTPS and no identity pin is configured"
+  "message": "push destination uses HTTPS and no identity pin is configured"
 }
 ```
 
-<p>With a <code>githubUser</code> but no allowing <code>.gitrole</code>, the message is <code>origin uses HTTPS and no repo pin is configured</code>.</p>
+<p>With a <code>githubUser</code> but no allowing <code>.gitrole</code>, the message is <code>push destination uses HTTPS and no repo pin is configured</code>.</p>
 
 <p>A pin that doesn't allow the active role is <code>warn</code>. When both GitHub users are known and differ:</p>
 
@@ -471,11 +481,11 @@ gitrole doctor --json
 {
   "status": "warn",
   "label": "auth",
-  "message": "origin uses HTTPS; github user thisyearearth does not match pin alex-dev"
+  "message": "push destination uses HTTPS; github user thisyearearth does not match pin alex-dev"
 }
 ```
 
-<p>Otherwise the message is <code>origin uses HTTPS; active identity does not match pinned role &lt;defaultRole&gt;</code>.</p>
+<p>Otherwise the message is <code>push destination uses HTTPS; active identity does not match pinned role &lt;defaultRole&gt;</code>.</p>
 
 <p>Exit <code>0</code> with <code>overall</code> <code>aligned</code> on HTTPS requires the pin to allow the active role, that role to have a <code>githubUser</code>, and no other <code>warn</code> check.</p>
 

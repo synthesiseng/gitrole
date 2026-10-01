@@ -355,9 +355,14 @@ Policy:
   status warns only on actionable mismatches.
   Observed context alone does not degrade the overall result.
   policy is ok, warn, or na. na means no .gitrole file is present.
-  HTTPS origins report auth=na only when a repo pin allows the active role and that role has a githubUser.
+  HTTPS-only push destinations report auth=na only when a repo pin allows the active role and that role has a githubUser.
   No pin or a github user mismatch is auth=warn.
   SSH githubUser checks apply only to SSH remotes, and only without --offline.
+  Every default push URL is checked; mixed SSH/HTTPS warns online.
+  Custom SSH commands, alternate diagnostic binaries, partial or interactive contexts remain unverified.
+  Online OpenSSH inspection may run configured Match exec commands or DNS lookups.
+  Destination/account checks do not prove refspec readiness, push permission or push success.
+  Explicit future push arguments are outside this observation.
 
 Examples:
   $ gitrole status
@@ -389,14 +394,14 @@ Shell prompt:
 Checks:
   - effective git identity
   - repository context and branch
-  - origin remote configuration
-  - SSH auth alignment for SSH remotes
+  - every effective default push URL (fetch origin is separate context)
+  - account alignment for supported SSH push transports
 
 Policy:
   gitrole warns on violated expectations, not assumptions.
   githubUser checks SSH auth. githubHost checks the remote host.
   Remote owner/repository is context, not a warning by default.
-  HTTPS origins record auth as info only when a repo pin allows the active role and that role has a githubUser.
+  HTTPS-only push destinations record auth as info only when a repo pin allows the active role and that role has a githubUser.
   No pin or a github user mismatch warns.
 
 Example:

@@ -38,7 +38,7 @@ gitrole doctor --json
 
 If the role expects a GitHub host alias, the remote needs to point at that alias too.
 
-When `doctor` shows that the repo host does not match the role, rewrite `origin`:
+Inspect `gitrole doctor --json` and its `repository.push.targets` before changing a remote. Gitrole observes every default push URL; an explicit push URL or another selected remote can differ from origin's fetch URL. `gitrole remote set` rewrites origin's fetch URL only. When the effective push destination uses that URL and its host does not match the role, rewrite `origin`:
 
 ```bash
 gitrole remote set work

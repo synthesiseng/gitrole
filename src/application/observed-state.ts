@@ -48,7 +48,7 @@ export async function collectObservedState(
     topLevelPath,
     currentBranch,
     upstreamBranch,
-    remote
+    fetchRemote
   ] = await Promise.all([
     dependencies.gitConfig.getGlobalUserName(),
     dependencies.gitConfig.getGlobalUserEmail(),
@@ -63,10 +63,22 @@ export async function collectObservedState(
   ]);
 
   const probeSsh = options.probeSsh !== false;
-  const sshAuth =
-    probeSsh && remote?.protocol === 'ssh' && remote.host
-      ? await dependencies.sshAuthProbe.probeGithubUser(remote.host)
-      : undefined;
+  const destination = isInsideWorkTree && dependencies.repository.getPushDestination
+    ? await dependencies.repository.getPushDestination(dependencies.env)
+    : { targets: [], transport: { supported: false }, message: 'default push destination could not be observed' };
+  const targets = await Promise.all(destination.targets.map(async (remote) => {
+    if (!probeSsh) return { remote };
+    if (remote.protocol === 'https') return { remote };
+    if (remote.protocol !== 'ssh' || !remote.host) return { remote, message: 'push transport is unsupported; authentication is unverified' };
+    if (!destination.transport.supported) return { remote, message: destination.transport.message ?? 'SSH transport is unverified' };
+    const sshAuth = await dependencies.sshAuthProbe.probeGithubUser(remote.host, {
+      user: remote.user, port: remote.port, path: remote.path, env: dependencies.env
+    });
+    return { remote, sshAuth };
+  }));
+  const remote = targets[0]?.remote;
+  // Legacy singular result is present only for a singular SSH push target.
+  const sshAuth = targets.length === 1 ? targets[0].sshAuth : undefined;
   const configuredCommitIdentity = {
     fullName: diagnoseValue(localName, globalName),
     email: diagnoseValue(localEmail, globalEmail)
@@ -96,7 +108,9 @@ export async function collectObservedState(
       topLevelPath,
       currentBranch,
       upstreamBranch,
-      remote
+      remote,
+      fetchRemote,
+      push: { remoteName: destination.remoteName, message: destination.message, targets }
     },
     sshAuth
   };
