@@ -6,22 +6,31 @@ summary: Point Claude Code, Codex, or Cursor at the gitrole skill shipped in the
 order: 4
 ---
 
-<p>Coding agents commit fast, and they often commit as the wrong person. The gitrole skill makes Claude Code, Codex, or Cursor check the repository's identity before every commit and stop if anything is off.</p>
+<p>The packaged gitrole skill instructs an agent to check the repository's effective identity and stop on warnings. It supplies instructions, not an enforced Git permission boundary.</p>
 
 <h2 id="quick-start">Quick start</h2>
 
-<p>You need <code>gitrole</code> on <code>PATH</code> (<code>brew install synthesiseng/tap/gitrole</code>, or <code>npm install -g gitrole</code>). The skill file ships in the npm package. This quick start uses a global npm install and symlinks that folder into the two personal directories that cover Claude Code, Codex, and Cursor. A symlink keeps the skill on the package when you upgrade, instead of copying a stale file.</p>
+<p>You need <code>gitrole</code> on <code>PATH</code> (<code>brew install synthesiseng/tap/gitrole</code>, or <code>npm install -g gitrole</code>). The skill file ships in the npm package. This quick start uses a global npm install and symlinks that folder into the two example personal skill directories. A symlink keeps the skill on the package when you upgrade, instead of copying a stale file.</p>
 
 ```bash
 GITROLE_SKILL="$(npm root -g)/gitrole/skills/gitrole"
-mkdir -p ~/.claude/skills ~/.agents/skills
-ln -sfn "$GITROLE_SKILL" ~/.claude/skills/gitrole
-ln -sfn "$GITROLE_SKILL" ~/.agents/skills/gitrole
+if [ -f "$GITROLE_SKILL/SKILL.md" ]; then
+  mkdir -p ~/.claude/skills ~/.agents/skills
+  for GITROLE_SKILL_LINK in ~/.claude/skills/gitrole ~/.agents/skills/gitrole; do
+    if [ -e "$GITROLE_SKILL_LINK" ] || [ -L "$GITROLE_SKILL_LINK" ]; then
+      printf 'Review existing skill path: %s\n' "$GITROLE_SKILL_LINK"
+    else
+      ln -s "$GITROLE_SKILL" "$GITROLE_SKILL_LINK"
+    fi
+  done
+else
+  printf '%s\n' 'Skill file not found; check the package or checkout path.'
+fi
 ```
 
-<p>Claude Code loads <code>~/.claude/skills/gitrole</code> and you invoke it with <code>/gitrole</code>. Codex loads <code>~/.agents/skills/gitrole</code> and you mention it with <code>$gitrole</code>. Cursor loads both of those directories, so the same two links are enough, and you invoke it with <code>/gitrole</code>. A commit or a push also matches the skill description, so the agent can load it without a slash command. You can stop here if the skill shows up in the tool.</p>
+<p>Confirm that your agent has loaded the skill using that tool's current skill setup instructions. These paths are examples of common skill locations; loading and automatic invocation depend on your agent and version.</p>
 
-<p>The Homebrew formula installs the <code>gitrole</code> and <code>gitrole-prompt</code> binaries. It doesn't document a skill path under the Homebrew prefix, so this page doesn't invent one. Use the npm path above, a project <code>node_modules/gitrole/skills/gitrole</code>, or <code>skills/gitrole</code> in a checkout.</p>
+<p>Homebrew users can set <code>GITROLE_SKILL</code> to <code>/absolute/path/to/gitrole/skills/gitrole</code> in a source checkout instead. The npm example requires the npm package to be installed. No supported Homebrew asset path is documented here.</p>
 
 <h2 id="what-the-agent-runs">How the agent reads the check</h2>
 
@@ -38,7 +47,7 @@ gitrole status --short
     <tr><th>Result</th><th>Action</th></tr>
   </thead>
   <tbody>
-    <tr><td>Exit <code>0</code> and <code>overall=aligned</code></td><td>The repo is aligned. The agent may commit or push.</td></tr>
+    <tr><td>Exit <code>0</code> and <code>overall=aligned</code></td><td>Identity checks are aligned. Proceed only within existing user authorization; this does not prove push permission or success.</td></tr>
     <tr><td>Exit <code>2</code> or <code>overall=warning</code></td><td>Stop. Do not commit or push.</td></tr>
     <tr><td><code>commit</code>, <code>remote</code>, <code>auth</code>, or <code>policy</code> is <code>warn</code></td><td>Stop. Do not commit or push.</td></tr>
     <tr><td>Exit <code>1</code></td><td>Stop. The error is on stderr and stdout is empty. Do not commit or push.</td></tr>
@@ -77,7 +86,7 @@ role=work scope=global override=false commit=warn remote=ok auth=ok policy=na ov
 
 <p>These are <code>overall=warning</code> and exit <code>2</code>. The agent stops and doesn't commit.</p>
 
-<p><strong>HTTPS-only push destination with no <code>.gitrole</code> pin.</strong> <code>auth=warn</code> because gitrole can't tell which GitHub user an HTTPS push will use unless a pin allows the active role and that role has a <code>githubUser</code>. <code>auth=na</code> on HTTPS is only that pinned case. Anything else warns, including a clean commit identity:</p>
+<p><strong>HTTPS-only push destination with no <code>.gitrole</code> pin.</strong> <code>auth=warn</code> because the local HTTPS check requires an allowing pin and a saved <code>githubUser</code>. Even then the pin does not verify or select HTTPS credentials. <code>auth=na</code> on HTTPS is only that pinned case. Anything else warns, including a clean commit identity:</p>
 
 ```text
 role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
@@ -105,12 +114,23 @@ gitrole doctor --json
 
 <p>The skill doesn't install a git hook, switch roles, or block git. It checks, and the agent decides to stop. Scripted preflight without a skill is in <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.</p>
 
-<p>The package also ships <code>hooks/pre-commit</code>, which only runs <code>gitrole status --short</code>. Copy it yourself when you want git to run the same check:</p>
+<p>For an npm installation, the package also ships <code>hooks/pre-commit</code>, which only runs <code>gitrole status --short</code>. Copy it yourself when you want git to run the same check:</p>
 
 ```bash
-cp "$(npm root -g)/gitrole/hooks/pre-commit" .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+GITROLE_HOOK="$(npm root -g)/gitrole/hooks/pre-commit"
+HOOK_PATH="$(git rev-parse --git-path hooks/pre-commit)"
+if [ -e "$HOOK_PATH" ] || [ -L "$HOOK_PATH" ]; then
+  printf '%s\n' 'An existing hook needs review; no file copied.'
+elif [ ! -f "$GITROLE_HOOK" ]; then
+  printf '%s\n' 'Hook file not found; check the package or checkout path.'
+else
+  cp "$GITROLE_HOOK" "$HOOK_PATH" && chmod +x "$HOOK_PATH"
+fi
 ```
+
+<p>Review the resolved <code>HOOK_PATH</code> before choosing this optional setup. Git can use <code>core.hooksPath</code>, and linked worktrees can share a hook directory. An existing file, directory, or symlink is left for review. If you use a custom hook directory, ensure it exists before copying.</p>
+
+<p>Homebrew users can use <code>skills/gitrole</code> and <code>hooks/pre-commit</code> from an absolute source-checkout path. The npm paths below require an actual npm installation; no supported Homebrew asset path is documented. See <a href="{{ '/guides/install-and-update-gitrole/' | url }}">Install and update</a>.</p>
 
 <h2 id="where-the-skill-lives">Where the skill lives</h2>
 
@@ -125,13 +145,24 @@ chmod +x .git/hooks/pre-commit
   </tbody>
 </table>
 
-<p>Project install, for one repository, uses the same two directories the tools read from the working tree:</p>
+<p>For a project dependency, run this from the project root. The skill must exist in that project's <code>node_modules</code> before links are created:</p>
 
 ```bash
-GITROLE_SKILL="$(npm root -g)/gitrole/skills/gitrole"
-mkdir -p .claude/skills .agents/skills
-ln -sfn "$GITROLE_SKILL" .claude/skills/gitrole
-ln -sfn "$GITROLE_SKILL" .agents/skills/gitrole
+GITROLE_SKILL="$(pwd)/node_modules/gitrole/skills/gitrole"
+if [ -f "$GITROLE_SKILL/SKILL.md" ]; then
+  mkdir -p .claude/skills .agents/skills
+  for GITROLE_SKILL_LINK in .claude/skills/gitrole .agents/skills/gitrole; do
+    if [ -e "$GITROLE_SKILL_LINK" ] || [ -L "$GITROLE_SKILL_LINK" ]; then
+      printf 'Review existing skill path: %s\n' "$GITROLE_SKILL_LINK"
+    else
+      ln -s "$GITROLE_SKILL" "$GITROLE_SKILL_LINK"
+    fi
+  done
+else
+  printf '%s\n' 'Skill file not found; check the project installation path.'
+fi
 ```
 
-<p>Claude Code reads <code>.claude/skills/</code> in the project and parent directories up to the repository root, and <code>~/.claude/skills/</code> for every project. Codex reads <code>.agents/skills/</code> from the working directory up to the repository root, and <code>~/.agents/skills/</code> for every project. Cursor reads <code>.agents/skills/</code>, <code>.cursor/skills/</code>, <code>~/.agents/skills/</code>, and <code>~/.cursor/skills/</code>, and for compatibility it also reads <code>.claude/skills/</code>, <code>.codex/skills/</code>, <code>~/.claude/skills/</code>, and <code>~/.codex/skills/</code>. The two links in the quick start are enough for all three tools because of that overlap.</p>
+<p>For a global npm package, set <code>GITROLE_SKILL</code> to <code>$(npm root -g)/gitrole/skills/gitrole</code> instead. For checkout assets, use the absolute checkout path. Existing links are left in place; review them before changing their targets.</p>
+
+<p>Configure your agent to load this skill according to its current documentation, then confirm it runs the check. The links above place the skill in common project directories; they do not prove that every agent or version has loaded it. Review any existing links before replacing them.</p>

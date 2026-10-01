@@ -7,41 +7,19 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
 
 <p>You usually need one command: save an identity, switch this repo to it, or check it before you commit. This page is that lookup. The walkthrough is <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>.</p>
 
-<h2 id="quick-start">Quick start</h2>
-
-<p>Save a role, apply it only in this repository, and check. If <code>gitrole status</code> looks aligned, you can stop.</p>
-
-```bash
-gitrole add work --name "Alex Developer" --email "alex@work.example"
-gitrole use work --local
-gitrole status
-```
-
-<p><code>use --local</code> writes the name and email in this repo, so your other repositories stay on the global identity. <code>gitrole doctor</code> is the longer explanation when a check is wrong.</p>
-
-<h2 id="how-to-read-a-check">How to read a check</h2>
-
-<p><code>gitrole current</code> answers which saved role matches the commit identity. <code>gitrole status</code> answers whether the repo looks ready to commit and push. <code>gitrole status --short</code> is that same check on one line. Read <code>overall</code> by name. It is the eighth field. <code>overall=aligned</code> exits <code>0</code>. <code>overall=warning</code> exits <code>2</code> and still prints the line. Exit <code>1</code> is a failure, with the error on stderr and nothing on stdout.</p>
-
-<p>Add <code>--offline</code> when you don't want the live SSH probe, which is what a shell prompt needs. <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}"><code>gitrole-prompt</code></a> turns <code>gitrole status --short --offline</code> into a prompt segment. <code>gitrole:work ✓</code> means commit and policy are ok and auth was not checked. Field names and exit codes are in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.</p>
-
-<h2 id="surprises">Surprises</h2>
-
-<p>Installing gitrole doesn't turn on shell completion. You add the script yourself. Optional shell tab completion for these commands and for saved role names is documented in <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">Enable shell tab completion</a>.</p>
-
-<p><code>gitrole import current</code> saves the name and email Git is already using. It doesn't switch the repo, and it doesn't copy an SSH key. <code>gitrole pin</code> writes a new <code>.gitrole</code> file and refuses to overwrite one that already exists, so a second pin can't silently widen the allowed roles.</p>
+<p>For installation and a first run, use <a href="{{ '/guides/install-and-update-gitrole/' | url }}">Install and update</a> and <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">the first-use guide</a>. For output fields, provenance and exit codes, use <a href="{{ '/machine-readable-contracts/' | url }}">Machine-readable contracts</a>.</p>
 
 <h2 id="command-list">Command list</h2>
 
 <dl class="command-list">
   <dt><code>gitrole add &lt;name&gt; --name "..." --email "..." [--ssh ...] [--github-user ...] [--github-host ...]</code></dt>
-  <dd>Create or update a saved role profile.</dd>
+  <dd>Create or replace a saved role profile; include all optional fields you intend to keep.</dd>
 
   <dt><code>gitrole import current --name &lt;role&gt;</code></dt>
-  <dd>Save the effective current commit identity as a named role. <code>--name &lt;role&gt;</code> is required. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.</dd>
+  <dd>Save Git’s effective current author name and email as a named role. <code>--name &lt;role&gt;</code> is required. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.</dd>
 
   <dt><code>gitrole use &lt;name&gt; [--global | --local]</code></dt>
-  <dd>Apply a saved role globally or only in the current repository.</dd>
+  <dd>Apply a saved role globally (the default) or only in the current repository with <code>--local</code>. A saved SSH key may be loaded with <code>ssh-add</code>.</dd>
 
   <dt><code>gitrole pin &lt;role&gt;</code></dt>
   <dd>Create a strict repo-local <code>.gitrole</code> policy for one role.</dd>
@@ -59,10 +37,10 @@ gitrole status
   <dd>List all saved roles and mark the active one when there is a match.</dd>
 
   <dt><code>gitrole status</code></dt>
-  <dd>Check whether the current repository is aligned for commit and push.</dd>
+  <dd>Check current author/committer identity, policy, and every resolved default push destination. Alignment does not prove push success.</dd>
 
   <dt><code>gitrole status --short</code></dt>
-  <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to skip the live SSH probe.</dd>
+  <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to <code>status</code> to invoke no SSH commands, including configuration inspection. <code>doctor</code> does not accept that flag. Local HTTPS pin checks still apply.</dd>
 
   <dt><code>gitrole doctor</code></dt>
   <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail.</dd>
@@ -71,7 +49,7 @@ gitrole status
   <dd>Return the full diagnosis as structured JSON.</dd>
 
   <dt><code>gitrole remote set &lt;name&gt;</code></dt>
-  <dd>Rewrite <code>origin</code> to the GitHub SSH host alias configured for the saved role.</dd>
+  <dd>Rewrite origin’s fetch URL to the saved GitHub SSH host alias, preserving its owner/repository. It does not change a separate push URL or another selected push remote.</dd>
 
   <dt><code>gitrole remove &lt;name&gt;</code></dt>
   <dd>Remove a saved role profile.</dd>
@@ -80,3 +58,5 @@ gitrole status
 <h2 id="what-it-does-not-do">What these commands don't do</h2>
 
 <p>None of them switch your GitHub browser session, store an HTTPS token, or install a hook for you. The optional check-only hook is a file you copy yourself. It runs <code>gitrole status --short</code>.</p>
+
+<p>Optional <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">shell tab completion</a> completes commands and saved role names; installation does not enable it automatically.</p>

@@ -10,7 +10,7 @@ order: 5
 
 <h2 id="when-to-use-this">Quick start</h2>
 
-<p>The path below is a global npm install on zsh. bash and fish are further down. <code>brew install synthesiseng/tap/gitrole</code> puts <code>gitrole</code> and <code>gitrole-prompt</code> on <code>PATH</code>. The Homebrew formula doesn't install the completion scripts into your shell, and this page doesn't document a Homebrew prefix path for them. If you installed with Homebrew, use the npm paths below or a checkout of this repository.</p>
+<p>The path below is a global npm install on zsh. bash and fish are further down. <code>brew install synthesiseng/tap/gitrole</code> puts <code>gitrole</code> and <code>gitrole-prompt</code> on <code>PATH</code>. The Homebrew formula doesn't install the completion scripts into your shell, and this page doesn't document a Homebrew prefix path for them. If you installed with Homebrew, use the checkout instructions below with an absolute path to <a href="https://github.com/synthesiseng/gitrole">this source repository</a>. The npm paths apply only when the npm package is actually installed. You do not need a second CLI installation.</p>
 
 <p>Add the completions directory to <code>fpath</code> before <code>compinit</code>. zsh only loads <code>_gitrole</code> from <code>fpath</code> during <code>compinit</code>, so sourcing the file doesn't register completion. If your startup file already runs <code>compinit</code>, put the <code>fpath</code> line above that call.</p>
 
@@ -21,7 +21,7 @@ autoload -Uz compinit
 compinit
 ```
 
-<p>Open a new shell. Press Tab at the end of <code>gitrole </code> (with the trailing space). zsh should list subcommands such as <code>add</code>, <code>use</code>, and <code>status</code>. You can stop there. bash, fish, and the other install locations are below.</p>
+<p>The zsh interactive capture was intermittent during verification, so this setup is provided without a completed interactive qualification. Open a new shell. Press Tab at the end of <code>gitrole </code> (with the trailing space). zsh should list subcommands such as <code>add</code>, <code>use</code>, and <code>status</code>. You can stop there. bash, fish, and the other install locations are below.</p>
 
 <h2 id="zsh">zsh</h2>
 
@@ -39,7 +39,7 @@ compinit
 <p>Repository checkout, from the repo root:</p>
 
 ```zsh
-completions="$(pwd)/completions"
+completions="/absolute/path/to/gitrole/completions"
 fpath=("$completions" $fpath)
 autoload -Uz compinit
 compinit
@@ -64,12 +64,14 @@ source "$(pwd)/node_modules/gitrole/completions/gitrole.bash"
 <p>Repository checkout, from the repo root:</p>
 
 ```bash
-source "$(pwd)/completions/gitrole.bash"
+source "/absolute/path/to/gitrole/completions/gitrole.bash"
 ```
 
 <p>Open a new shell and press Tab after <code>gitrole </code>. bash lists the same subcommands.</p>
 
 <h2 id="fish">fish</h2>
+
+<p>Fish was unavailable during verification. These instructions describe the supplied script; interactive behavior remains unverified.</p>
 
 <p>fish loads completions from files in <code>~/.config/fish/completions/</code>. A symlink keeps the script on the installed package when the package updates.</p>
 
@@ -91,7 +93,7 @@ ln -sf (pwd)/node_modules/gitrole/completions/gitrole.fish ~/.config/fish/comple
 
 ```fish
 mkdir -p ~/.config/fish/completions
-ln -sf (pwd)/completions/gitrole.fish ~/.config/fish/completions/gitrole.fish
+ln -sf /absolute/path/to/gitrole/completions/gitrole.fish ~/.config/fish/completions/gitrole.fish
 ```
 
 <p>Open a new fish shell and press Tab after <code>gitrole </code>. fish lists the same subcommands. For a machine-wide install, symlink <code>gitrole.fish</code> into a directory on <code>$fish_complete_path</code>. <code>echo $fish_complete_path</code> prints that list on your machine.</p>

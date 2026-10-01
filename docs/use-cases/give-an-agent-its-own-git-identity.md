@@ -2,91 +2,56 @@
 layout: layouts/base.njk
 title: Give an agent its own Git identity
 eyebrow: Use case
-summary: Create a dedicated Git identity role, SSH key, and GitHub host alias for an agent so automated commits and pushes stay separate from human identities.
+summary: Save and apply an agent identity whose account, SSH key, and host alias have already been configured.
 order: 3
 ---
 
-<h2 id="when-to-use-this">When to use this</h2>
+Use a dedicated role when automated commits should carry a distinct author identity. Gitrole saves that identity and its expected SSH account; it does not create accounts, keys, or SSH host aliases.
 
-Use this page when you want an agent to work with its own Git identity instead of acting as your personal or work account.
+<h2 id="prerequisites">Prepare the identity outside gitrole</h2>
 
-If the agent should reuse an existing work, personal, or client role instead, use <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a> instead of this page.
+Before following the SSH example, you need an existing account with the intended repository access, an SSH key registered to that account, and an SSH host alias configured to select that key. Confirm the intended name/email and the agent's authorization to commit or push. Those setup steps are outside this guide.
 
-This is useful when you want:
+If the agent should reuse an existing role, read <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">the existing-role preflight guide</a> instead. For HTTPS, follow <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">the first-use guide</a>; pins do not select or verify credentials.
 
-- automated commits to be clearly separate from human commits
-- a dedicated GitHub account for an agent
-- a repeatable repository setup for automation
-- to avoid mixing your own account with machine-driven work
+<h2 id="create-the-agent-role">Save the prepared identity</h2>
 
-<h2 id="how-it-works">How it works</h2>
-
-A dedicated agent role gives the automation its own:
-
-- commit name
-- commit email
-- SSH key
-- GitHub account
-- GitHub SSH host alias
-
-That means the repository can clearly distinguish:
-
-- human-authored work
-- agent-authored work
-
-<h2 id="create-the-agent-role">Create the agent role</h2>
-
-Start by creating a role for the agent:
+Replace all example values with your existing setup:
 
 ```bash
 gitrole add agent \
-  --name "Acme Build Agent" \
-  --email "build-agent@acme.example" \
+  --name "Example Build Agent" \
+  --email "build-agent@work.example" \
   --ssh ~/.ssh/id_ed25519_agent \
-  --github-user acme-build-agent \
-  --github-host github.com-acme-build-agent
+  --github-user example-build-agent \
+  --github-host github.com-build-agent
 ```
 
-<h2 id="switch-the-repo-to-the-agent-role">Switch the repo to the agent role</h2>
+`--github-user` and `--github-host` save expectations for checks. They do not by themselves select an account. `use` may load the saved key with `ssh-add`; the effective SSH context and remote destination still matter.
 
-Use the role locally when this repository should use the agent identity:
+<h2 id="switch-the-repo-to-the-agent-role">Apply locally and inspect destinations</h2>
 
 ```bash
 gitrole use agent --local
+gitrole doctor --json
 ```
 
-If the remote should also use the agent's SSH host alias, update it too:
+Inspect the effective author and committer, `repository.push.remoteName`, and every `repository.push.targets` entry. If origin's fetch URL supplies the effective push destination and needs the prepared host alias, you can use:
 
 ```bash
 gitrole remote set agent
 ```
 
-<h2 id="check-that-it-worked">Check that it worked</h2>
+This rewrites origin's fetch URL only. A different selected remote or explicit push URL requires reviewing the corresponding Git configuration.
 
-Run:
-
-```bash
-gitrole status
-```
-
-Use `status` for the fast daily check.
-
-If something looks wrong, run:
+<h2 id="check-that-it-worked">Check and stop on warnings</h2>
 
 ```bash
-gitrole doctor
+gitrole status --short
 ```
 
-Use `doctor` when you need the full explanation for the repository, remote, or SSH auth setup.
+Exit `0` and `overall=aligned` indicate current identity alignment. Exit `2`, any `warn` field, or exit `1` means stop and diagnose. Online SSH inspection may execute configured `Match exec` commands or DNS lookups; custom, interactive, or incomplete contexts remain unverified.
 
-<h2 id="why-this-is-useful">Why this is useful</h2>
+A role name is not proof of authorship and does not grant repository access. A check does not prove refspec readiness, authorization, or push success. Changed environment/configuration and future explicit author/push arguments fall outside its snapshot.
 
-This setup makes automation easier to reason about:
-
-- agent commits are visibly separate from human commits
-- SSH pushes use the agent account instead of your personal account
-- repository-local overrides keep the agent identity contained to the repositories that need it
-
-That gives you a cleaner boundary between human work and machine-driven work.
-
-If those repositories also need an explicit preferred-role policy, add <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">repo-local identity policy with .gitrole</a> after the agent setup is working.
+Continue with <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">the packaged agent instructions</a> and, if needed, <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">repo-local policy</a>.

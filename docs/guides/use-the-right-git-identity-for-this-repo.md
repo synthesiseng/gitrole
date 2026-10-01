@@ -2,176 +2,97 @@
 layout: layouts/base.njk
 title: Use the right Git identity for this repo
 eyebrow: Guide
-summary: Save a Git identity role, switch a repository to it, and verify that commits and SSH pushes use the expected account.
+summary: Save a role, apply it locally, and understand the first identity check.
 order: 1
 ---
 
-<h2 id="what-this-guide-does">What this guide does</h2>
+Start with <a href="{{ '/guides/install-and-update-gitrole/' | url }}">Install and update gitrole</a> if `gitrole` is not installed. Run the following commands inside the repository you want to configure. Replace the example name and email with yours.
 
-Use this guide if you are new to <code>gitrole</code> and want one clear setup flow for a repository.
-
-If the repository also needs an explicit policy for which roles are preferred or allowed, continue with <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">Use repo-local identity policy with .gitrole</a> after this setup works.
-
-By the end, you will know how to:
-
-- save a role
-- switch this repository to that role
-- check whether the repo is aligned
-- fix the remote if pushes still use the wrong GitHub account
-
-<h2 id="current-vs-status">Current vs status</h2>
-
-These two commands answer different questions:
-
-- <code>gitrole current</code> = "which saved role am I here?"
-- <code>gitrole status</code> = "does this repo look right for commit and push?"
-
-Use <code>current</code> when you want to know which role matches the active commit identity.
-Use <code>status</code> when you want the broader repo-alignment check.
-
-<h2 id="step-1-save-a-role">Step 1: Save a role</h2>
-
-Start by saving the identity you want to use in this repository.
-
-Minimum version:
+<h2 id="step-1-save-a-role">1. Save a role</h2>
 
 ```bash
-gitrole add work \
-  --name "Work Name" \
-  --email "you@work.example"
+gitrole add work --name "Alex Developer" --email "alex@work.example"
 ```
 
-If this identity also has its own SSH key and GitHub account, use the fuller version instead:
+`add` saves a named profile. It does not change this repository's Git configuration. If Git already uses the author you want, you can <a href="{{ '/guides/import-the-current-git-identity/' | url }}">import the current Git identity</a> instead.
 
-```bash
-gitrole add work \
-  --name "Work Name" \
-  --email "you@work.example" \
-  --ssh ~/.ssh/id_work \
-  --github-user your-work-user \
-  --github-host github.com-work
-```
-
-What those extra flags mean:
-
-- <code>--ssh</code> points to the SSH key for that identity
-- <code>--github-user</code> is the GitHub user you expect SSH auth to resolve to
-- <code>--github-host</code> is the SSH host alias you expect the repo remote to use
-
-If Git is already using the identity you want, you can save it without retyping the name and email. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.
-
-<h2 id="step-2-switch-this-repo">Step 2: Switch this repo to that role</h2>
-
-Use <code>--local</code> when you want this repository to use that role without changing the rest of your machine:
+<h2 id="step-2-switch-this-repo">2. Apply the role to this repository</h2>
 
 ```bash
 gitrole use work --local
 ```
 
-Example output:
+The success output is:
 
 ```text
 switched to work
   scope local
-  name  Work Name
-  email you@work.example
+  commit Alex Developer <alex@work.example>
 ```
 
-That means the repository now uses the selected role for its local Git identity.
+An additional repo note may ask you to run `gitrole status`. Local scope writes this repository's `user.name` and `user.email`. Environment overrides or higher-precedence Git settings can still change the effective author or committer; the next check reads what Git actually resolves.
 
-<h2 id="step-3-check-the-repo">Step 3: Check the repo</h2>
-
-Run:
+<h2 id="step-3-check-the-repo">3. Check the result</h2>
 
 ```bash
-gitrole status
+gitrole current
+gitrole status --short --offline
 ```
 
-This is the fast daily check.
+`current` shows the saved role matching Git's effective author. The status line checks the author and committer, default push destinations, and repo policy. `--offline` runs no SSH commands, including configuration inspection.
 
-Clean example:
+A common first-use result in an HTTPS repository with no `.gitrole` policy is:
 
 ```text
-work  Work Name <you@work.example>  local override  aligned
-last non-merge commit  Work Name <you@work.example> - fix login form
+role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
 ```
 
-That tells you:
+This exits `2`. The role was applied successfully; `auth=warn` means the HTTPS identity expectation still needs attention. Offline mode retains that local HTTPS check.
 
-- this repository is using the <code>work</code> role
-- the role is applied locally in this repo
-- the repo currently looks aligned
-- the most recent non-merge commit was also authored with that identity
+<h2 id="https">4. Decide the HTTPS identity policy</h2>
 
-<h2 id="if-status-shows-warning">If status shows warning</h2>
+Gitrole does not inspect or manage HTTPS credentials. If this repository should use `work`, save the expected GitHub username and pin the role:
 
-Run:
+```bash
+gitrole add work --name "Alex Developer" --email "alex@work.example" --github-user alex-work
+gitrole pin work
+gitrole status --short --offline
+```
+
+Use your actual username. `add` replaces the saved profile, so include any SSH or host fields you intend to keep. `pin` creates a strict `.gitrole` policy and refuses to overwrite an existing one. Review an existing policy instead of rerunning `pin`.
+
+For the HTTPS destination above, with a matching role and no other warning, the result becomes:
+
+```text
+role=work scope=local override=true commit=ok remote=ok auth=na policy=ok overall=aligned
+```
+
+This exits `0`. Here `auth=na` means the matching pin allows the role and its saved GitHub username is present. It **does not verify your HTTPS account, credentials, repository access, or push success**. Decide whether to share `.gitrole` with your team before committing it.
+
+<h2 id="ssh">If you use SSH</h2>
+
+An SSH key, GitHub account, and host alias must already be configured outside gitrole. To save those expectations, include `--ssh`, `--github-user`, and `--github-host` in `gitrole add`; see <a href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/' | url }}">Fix pushes using the wrong GitHub account</a>.
+
+Run `gitrole status` or `gitrole doctor` for an online check of supported SSH authentication. Online configuration inspection may execute configured `Match exec` commands or DNS lookups. Custom wrappers, interactive authentication, and incomplete SSH contexts remain unverified and warn.
+
+<h2 id="if-status-shows-warning">If a warning remains</h2>
 
 ```bash
 gitrole doctor
 ```
 
-Use <code>doctor</code> when you want the full explanation for the repo, remote, and SSH auth state.
+Read the warning labels, then use <a href="{{ '/guides/troubleshoot-identity-warnings/' | url }}">Troubleshoot identity warnings</a>. Inspect `repository.push.remoteName` and every `repository.push.targets` entry in `gitrole doctor --json` before changing remotes. The selected push remote or an explicit push URL can differ from origin's fetch URL. `gitrole remote set work` changes origin's fetch URL only; use it only when that URL supplies the effective push destination you intend to change.
 
-A common first-time case looks like this:
+<h2 id="why-status-can-still-mention-the-old-identity">An older author in the history line</h2>
 
-- the commit identity was switched correctly
-- the remote still points at the old SSH host alias
-- SSH auth still resolves to the old GitHub account
+The last non-merge commit describes existing history. Applying a role does not rewrite it. Check the current `commit` identity separately.
 
-In that case, update the remote:
+<h2 id="when-to-use-local-vs-global">Local and global scope</h2>
 
-```bash
-gitrole remote set work
-```
+Use `gitrole use work --local` for this repository. `gitrole use work --global` changes your global Git identity; `use work` defaults to global scope. Local/worktree settings and environment overrides may still take precedence.
 
-That rewrites <code>origin</code> to the GitHub host alias configured for the role.
+<h2 id="next">Daily use and reference</h2>
 
-Then run the checks again:
+Run `gitrole status` before work that needs an identity check and `gitrole doctor` to explain warnings. An aligned result is a snapshot; future `--author`, explicit push arguments, or changed configuration/environment require reconsidering the check. It does not prove refspec readiness or authorize a commit or push.
 
-```bash
-gitrole status
-gitrole doctor
-```
-
-If you want the full wrong-account walkthrough, use <a href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/' | url }}">Fix pushes using the wrong GitHub account</a>.
-
-<h2 id="why-status-can-still-mention-the-old-identity">Why status can still mention the old identity</h2>
-
-Sometimes the repository is configured correctly now, but <code>status</code> still mentions the previous identity in the last commit line.
-
-That usually means:
-
-- the repo is using the new role now
-- the most recent non-merge commit in history was created before you switched
-
-That is normal. Make your next commit with the new identity, then run <code>gitrole status</code> again.
-
-<h2 id="when-to-use-local-vs-global">When to use local vs global</h2>
-
-Use local scope for repositories that should stay isolated:
-
-```bash
-gitrole use work --local
-```
-
-Use global scope only when you want to change your machine-wide default identity:
-
-```bash
-gitrole use work
-```
-
-If you work across personal, work, client, or open-source repositories, <code>--local</code> is usually the safer default.
-
-<h2 id="simple-mental-model">Simple mental model</h2>
-
-Think of <code>gitrole</code> as four small checks in order:
-
-1. save a role
-2. switch this repo to it
-3. run <code>gitrole status</code>
-4. if something looks wrong, run <code>gitrole doctor</code> and possibly <code>gitrole remote set &lt;role&gt;</code>
-
-That is the basic workflow for a new user.
-
-If the repository also needs an explicit policy for which roles are preferred or allowed, continue with <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">Use repo-local identity policy with .gitrole</a> after this setup works.
+Continue with <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">repo-local identity policy</a>, <a href="{{ '/commands/' | url }}">Commands</a>, or <a href="{{ '/machine-readable-contracts/' | url }}">Machine-readable contracts</a>.
