@@ -28,6 +28,13 @@
   * `gitrole status` and the prompt segment still run for that legacy role. Prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.10.6](https://github.com/synthesiseng/gitrole/compare/v0.10.5...v0.10.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* **prompt:** avoid readonly zsh status parameter ([#94](https://github.com/synthesiseng/gitrole/issues/94)) ([bfe7449](https://github.com/synthesiseng/gitrole/commit/bfe7449fee362da8995afe69b08df8d324d76ad0))
+
 ## [0.10.5](https://github.com/synthesiseng/gitrole/compare/v0.10.4...v0.10.5) (2026-10-01)
 
 
