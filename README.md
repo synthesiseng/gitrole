@@ -94,7 +94,7 @@ Run `gitrole doctor` to identify a warning, then use [Troubleshoot identity warn
 - [Import the current Git identity](https://docs.gitrole.dev/guides/import-the-current-git-identity/): save the effective author Git already uses.
 - [Use repo-local identity policy](https://docs.gitrole.dev/guides/use-repo-local-identity-policy-with-gitrole/): choose default and allowed roles.
 - [Fix pushes using the wrong account](https://docs.gitrole.dev/use-cases/fix-pushes-using-the-wrong-github-account/): inspect the actual selected push destinations before changing origin.
-- [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/): offline checks require 0.9.0 or newer. The source examples in `examples/prompt/` include zsh/Oh My Zsh snippets with a known read-only `status` variable error; use the existing helper or Bash example. Fish and full Starship rendering are not qualified by this documentation pass.
+- [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/): offline checks require 0.9.0 or newer. Current source examples are in `examples/prompt/`. Fish and full Starship rendering are not qualified by this documentation pass.
 - [Enable shell completion](https://docs.gitrole.dev/guides/enable-shell-tab-completion/): load optional scripts from npm or a checkout.
 - [Verify identity before an agent commits](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/): use the packaged skill or an optional check-only hook within an authorized workflow.
 
