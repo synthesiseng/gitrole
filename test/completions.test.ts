@@ -330,17 +330,24 @@ const zshBehavior = commandAvailable('zsh') && commandAvailable('python3') ? tes
 zshBehavior('zsh completion offers commands, flags, and saved role names', async () => {
   const { env } = await createRealCliEnv();
   const script = String.raw`
-import os, pty, select, json, sys
+import atexit, os, pty, select, json, re, sys
 
 cases = json.loads(sys.argv[1])
 pid, fd = pty.fork()
 if pid == 0:
     os.execvp("zsh", ["zsh", "-f"])
 
+def cleanup():
+    os.kill(pid, 9)
+    os.waitpid(pid, 0)
+    os.close(fd)
+
+atexit.register(cleanup)
+
 def write(data):
     os.write(fd, data.encode())
 
-def wait_for(token, seconds=8):
+def wait_for_ready(seconds=8):
     buf = b""
     import time
     deadline = time.time() + seconds
@@ -352,9 +359,10 @@ def wait_for(token, seconds=8):
         if not chunk:
             break
         buf += chunk
-        if token.encode() in buf:
+        # Match executed output and the following prompt, never echoed setup input.
+        if re.search(rb"(?:^|\n)COMPINIT_DONE\nGITROLE_READY> $", buf.replace(b"\r", b"")):
             return buf
-    raise SystemExit("timed out waiting for " + token)
+    raise SystemExit("timed out waiting for completion setup and prompt")
 
 def read_until_quiet(seconds=4):
     import time
@@ -377,15 +385,15 @@ def read_until_quiet(seconds=4):
         return buf
     raise SystemExit("timed out waiting for completion output")
 
-write("unset zle_bracketed_paste\nPS1='P> '\nRPS1=''\nunsetopt promptsp\n")
+write("unset zle_bracketed_paste\nunsetopt promptsp\n")
 write("autoload -Uz compinit\n")
 write("fpath=(" + sys.argv[2] + " $fpath)\n")
 write("compinit -u\nbindkey -e\nbindkey '^I' complete-word\nsetopt nolistbeep\n")
 write("zstyle ':completion:*' menu no\n")
 write("zstyle ':completion:*:descriptions' format ''\n")
 write("zstyle ':completion:*' format ''\n")
-write("print -r -- COMPINIT_DONE\n")
-wait_for("COMPINIT_DONE")
+write("print -r -- COMPINIT_'DONE'\n")
+wait_for_ready()
 
 def drain(seconds=0.2):
     import time
@@ -406,8 +414,6 @@ for line in cases:
     results[line] = text
 
 print(json.dumps(results))
-os.kill(pid, 9)
-os.waitpid(pid, 0)
 `;
   const lines = [
     'gitrole ',
@@ -427,7 +433,8 @@ os.waitpid(pid, 0)
   ];
   const result = spawnSync('python3', ['-c', script, JSON.stringify(lines), completionsDir], {
     encoding: 'utf8',
-    env,
+    // Supply the prompt before startup so its marker cannot match echoed setup input.
+    env: { ...env, PS1: 'GITROLE_READY> ', RPS1: '' },
     timeout: 20000
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
