@@ -62,17 +62,18 @@ PS1='$(gitrole_prompt_segment)'"$PS1"
 
 The function adds a space only when it prints a segment. It preserves the status exit code before formatting, accepting `0` and `2` as valid results.
 
-<h2 id="zsh">zsh and Oh My Zsh limitation</h2>
+<h2 id="zsh">zsh and Oh My Zsh setup</h2>
 
-Do **not** copy the supplied `examples/prompt/zsh.zsh` or `oh-my-zsh.zsh` functions into your startup file. Both declare and assign `status`, a read-only zsh variable. In a repository they fail and can leave the segment empty. Correcting those runtime files requires a separate code fix.
+Copy the current `examples/prompt/zsh.zsh` into `~/.zshrc`. For Oh My Zsh, use `examples/prompt/oh-my-zsh.zsh` after `source $ZSH/oh-my-zsh.sh`. Both use `status_code` to capture the command exit; zsh’s `status` parameter is read-only. Replace older copies that assign `status`.
 
-Use the existing helper directly in zsh as a safe local-check alternative:
+Both snippet functions and their prompt expansion are checked in native zsh for repeated local checks, warnings, command failures, and use outside a repository. Full Oh My Zsh framework and theme behavior remains unverified. A theme that rewrites `PROMPT` on every `precmd` needs `$(gitrole_prompt_segment)` inside its theme string. Review your theme before adding the prefix.
+
+To print the segment on demand:
 
 ```zsh
 gitrole-prompt
 ```
 
-This prints the segment on demand. It does not integrate it into a zsh theme; no working zsh-theme setup is claimed here.
 
 <h2 id="starship">Starship example</h2>
 
@@ -108,7 +109,7 @@ The source repository includes `examples/prompt/fish.fish`. Fish was unavailable
 | `gitrole:? ⚠` | Run `gitrole status --short --offline` separately and read stderr. Confirm `gitrole` is on `PATH`. |
 | `gitrole-prompt: command not found` | Run `command -v gitrole-prompt`, then check your installation channel/version. |
 | A role with `⚠` | Use `gitrole doctor` to explain warnings; HTTPS pins are checked even offline. |
-| Empty in zsh | Check whether you copied one of the known broken `status` functions. Use the helper directly until the separate fix is available. |
+| Empty in zsh | Replace an older function that assigns read-only `status` with the current source example using `status_code`. If a theme rewrites `PROMPT`, review its theme string. |
 | Empty outside a repository | Expected. |
 
 `gitrole-prompt` is not on `PATH` if `command -v gitrole-prompt` prints no path. The offline status command does not emit `auth=ok`.
