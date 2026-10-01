@@ -2,7 +2,7 @@
 
 A prompt that runs a live SSH check on every redraw is slow, and a checkmark is easy to read as "auth passed" when the probe never ran. These snippets print the active role from `gitrole status --short --offline` only. They need gitrole 0.9.0 or newer.
 
-Copy one file into your shell. The command and the lines below stay stable so a prompt can parse them. Setup prose on the docs site can change without moving this contract.
+Use the Bash example or run `gitrole-prompt` directly. **Do not copy the zsh or Oh My Zsh functions:** they assign zsh’s read-only `status` variable and fail inside repositories. A separate runtime fix is needed. Fish was unavailable for verification; full Starship rendering was not established. The Starship shell body and Bash cases were checked. The command and the lines below stay stable so a prompt can parse them. Setup prose on the docs site can change without moving this contract.
 
 ## Quick start
 
@@ -12,7 +12,7 @@ Every snippet calls only:
 gitrole status --short --offline
 ```
 
-That skips the live SSH `githubUser` probe. Snippets don't call `gitrole status --short` without `--offline`. There is no auth cache and no prompt memo. Each prompt runs that command.
+That invokes zero SSH commands, including configuration inspection. It retains local HTTPS pin checks, which can warn when a matching pin is absent. Snippets don't call `gitrole status --short` without `--offline`. There is no auth cache and no prompt memo. Each prompt runs that command.
 
 `gitrole-prompt --format` reads one short line from stdin and prints the segment. It doesn't run `gitrole` and it doesn't cache. Inside a git repo, `gitrole-prompt` with no arguments runs `gitrole status --short --offline` itself. Unknown flags exit `2` and print `usage: gitrole-prompt` on stderr.
 
@@ -72,10 +72,12 @@ The snippets don't switch roles, install hooks, or verify network auth. They don
 
 | File | Where it goes |
 | ---- | ------------- |
-| [starship.toml](starship.toml) | `~/.config/starship.toml` |
-| [oh-my-zsh.zsh](oh-my-zsh.zsh) | `~/.zshrc`, after Oh My Zsh is sourced |
-| [zsh.zsh](zsh.zsh) | `~/.zshrc` |
+| [starship.toml](starship.toml) | Shell body checked; full rendering unverified |
+| [oh-my-zsh.zsh](oh-my-zsh.zsh) | Known broken: read-only `status`; do not install this function |
+| [zsh.zsh](zsh.zsh) | Known broken: read-only `status`; use `gitrole-prompt` directly |
 | [bash.sh](bash.sh) | `~/.bashrc` |
-| [fish.fish](fish.fish) | `~/.config/fish/config.fish` |
+| [fish.fish](fish.fish) | Unverified here; review and test before configuring Fish |
 
 Each file calls `gitrole status --short --offline` and pipes that line to `gitrole-prompt --format`. The same setup is written up in [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/).
+
+These example files are source-checkout assets; they are not in the npm package file list. Only the helper is packaged. The qualification above applies to this documentation verification pass, not every terminal or theme.

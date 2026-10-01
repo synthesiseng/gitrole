@@ -39,7 +39,7 @@ fi
   <dt><a href="#status-short"><code>gitrole status --short</code></a></dt>
   <dd>One line. Order is <code>role scope override commit remote auth policy overall</code>.</dd>
   <dt><a href="#doctor-json"><code>gitrole doctor --json</code></a></dt>
-  <dd>Full diagnosis as JSON. HTTPS auth is <code>info</code> only when a pin allows the role. Otherwise it is <code>warn</code>.</dd>
+  <dd>Full diagnosis as JSON. HTTPS auth is <code>info</code> only when a pin allows the role and that role has a <code>githubUser</code>. This does not verify HTTPS credentials. Otherwise it is <code>warn</code>.</dd>
   <dt><a href="#resolve-json"><code>gitrole resolve --json</code></a></dt>
   <dd>The <code>.gitrole</code> file as JSON.</dd>
   <dt><a href="#role-name-format">Role name format</a></dt>
@@ -118,7 +118,7 @@ role=work scope=local override=true commit=ok remote=ok auth=na policy=na overal
   </thead>
   <tbody>
     <tr><td><code>role</code></td><td>Saved role that matches the current commit identity</td><td>role name, or <code>no-role</code></td></tr>
-    <tr><td><code>scope</code></td><td>Where the commit identity comes from</td><td><code>global</code>, <code>local</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>mixed</code>, <code>unset</code></td></tr>
+    <tr><td><code>scope</code></td><td>Underlying configured author scope, retained under environment overrides</td><td><code>global</code>, <code>local</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>mixed</code>, <code>unset</code></td></tr>
     <tr><td><code>override</code></td><td>Whether a repo-local Git config is active</td><td><code>true</code>, <code>false</code></td></tr>
     <tr><td><code>commit</code></td><td>Commit identity check</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
     <tr><td><code>remote</code></td><td>All default push destinations against role host expectations</td><td><code>ok</code>, <code>warn</code>, <code>na</code></td></tr>
@@ -322,7 +322,7 @@ gitrole doctor --json
     <tr><td><code>overall</code></td><td><code>aligned</code> or <code>warning</code></td></tr>
     <tr><td><code>commitIdentity</code></td><td>Effective name and email, plus where each comes from: <code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>env</code>, or <code>unset</code></td></tr>
     <tr><td><code>configuredIdentity</code></td><td>Raw local and global Git config values. This is not the commit identity when an env var overrides it.</td></tr>
-    <tr><td><code>scope</code></td><td>Aggregate view of where the commit identity comes from</td></tr>
+    <tr><td><code>scope</code></td><td>Aggregate view of underlying configured author scope</td></tr>
     <tr><td><code>repository</code></td><td>Repo context, branch, and parsed remote info</td></tr>
     <tr><td><code>sshAuth</code></td><td>SSH probe result. Omitted if no SSH probe was run, including HTTPS-only push destinations.</td></tr>
     <tr><td><code>repoPolicy</code></td><td><code>.gitrole</code> policy evaluation. Omitted if no policy file exists.</td></tr>
@@ -365,8 +365,8 @@ gitrole doctor --json
     <tr><th>Field</th><th>Meaning</th><th>Values</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>effective</code></td><td>Aggregate source for the active commit identity</td><td><code>local</code>, <code>global</code>, <code>mixed</code>, <code>unset</code></td></tr>
-    <tr><td><code>hasLocalOverride</code></td><td>Whether either commit-identity field is sourced from repo-local config</td><td><code>true</code>, <code>false</code></td></tr>
+    <tr><td><code>effective</code></td><td>Underlying configured author scope, including when effective values come from the environment</td><td><code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>mixed</code>, <code>unset</code></td></tr>
+    <tr><td><code>hasLocalOverride</code></td><td>Whether underlying author configuration includes a local or worktree field</td><td><code>true</code>, <code>false</code></td></tr>
   </tbody>
 </table>
 

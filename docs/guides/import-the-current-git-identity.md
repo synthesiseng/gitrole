@@ -2,11 +2,11 @@
 layout: layouts/base.njk
 title: Import the current Git identity
 eyebrow: Guide
-summary: Save the effective current commit identity as a named role with gitrole import current --name <role> when Git is already configured.
+summary: Save the effective effective author identity as a named role with gitrole import current --name <role> when Git is already configured.
 order: 2
 ---
 
-<p>Git is already using the name and email you want, and typing them into <code>gitrole add</code> is how a typo creates a second role. Import saves that current commit identity under a name you choose. If you still need to type a new name, email, SSH key, or GitHub host, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a> and <code>gitrole add</code> instead.</p>
+<p>Use import when Git already resolves the author name and email you want. Import saves that effective author identity under a name you choose. If you still need to type a new name, email, SSH key, or GitHub host, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a> and <code>gitrole add</code> instead.</p>
 
 <h2 id="quick-start">Quick start</h2>
 
@@ -30,15 +30,17 @@ imported current identity as work
 
 <p>The first line is the role name you passed. <code>commit</code> is the name and email that were saved. <code>scope</code> says where gitrole read them.</p>
 
-<p><code>scope local</code> means at least one of <code>user.name</code> or <code>user.email</code> is set in this repository. Each field uses the repo-local value when it exists, and the global value otherwise. That's why a repo that only overrides the email still reports <code>local</code>: the commit would use that local email.</p>
+<p><code>scope</code> reports the underlying configured author scope. When both fields come from repository-local configuration it is <code>local</code>; when both come from global configuration it is <code>global</code>. A global name and local email produce <code>mixed</code>. System, worktree, command, Git-derived and unset scopes are also possible. Environment overrides affect the saved author values while scope still describes the underlying configuration.</p>
 
-<p>With no repo-local name or email, the same command reports <code>scope global</code> and saves the global identity:</p>
+<p>For example, with a global name and a repository-local email:</p>
 
 ```text
-imported current identity as maintainer-personal
-  commit Maintainer Name <maintainer@personal.example>
-  scope global
+imported current identity as work
+  commit Alex Developer <alex@work.example>
+  scope mixed
 ```
+
+<p>Import asks Git for its effective author identity, including <code>GIT_AUTHOR_NAME</code>/<code>GIT_AUTHOR_EMAIL</code>, included configuration, and author-specific settings. It does not import the committer or require that the values originate in <code>user.*</code>. Use <code>gitrole doctor --json</code> to inspect each field's source.</p>
 
 <p>Confirm with <code>gitrole current</code> or <code>gitrole list</code>. When the repository should prefer that role, continue with <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">Use repo-local identity policy with .gitrole</a>.</p>
 
@@ -66,7 +68,7 @@ error: role name "no-role" is reserved for the status and prompt sentinel when n
 error: invalid role name "client acme"; use lowercase letters, numbers, "-" or "_"
 ```
 
-<p>Both <code>user.name</code> and <code>user.email</code> have to be configured on the identity gitrole reads. If either is missing, import exits <code>1</code> and prints nothing on stdout:</p>
+<p>Git must resolve both an author name and an author email. Configuration or environment values can provide them. If the effective author is incomplete, import exits <code>1</code> and prints nothing on stdout:</p>
 
 ```text
 error: current commit identity is incomplete; user.name and user.email must both be configured
