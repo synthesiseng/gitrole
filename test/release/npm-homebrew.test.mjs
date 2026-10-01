@@ -33,7 +33,7 @@ function contract(source) {
   const brew = source.split('\n  brew-bump:\n')[1];
   assert.ok(brew);
   assert.match(brew, /needs: \[publish\]/);
-  assert.match(brew, /if: github.event_name == 'release' && github.event.action == 'published'/);
+  assert.match(brew, /if: github.event_name == 'release' && github.event.action == 'published' && github.event.release.prerelease == false && !contains\(github.event.release.tag_name, '-'\)/);
   assert.match(brew, /repositories: homebrew-tap\n          permission-contents: write/);
   assert.match(brew, /token: \$\{\{ steps.tap-token.outputs.token \}\}/);
   assert.match(brew, /ref: \$\{\{ github.event.release.tag_name \}\}/);
@@ -112,9 +112,9 @@ test('missing formula rejects without creating file', (t) => {
   assert.equal(f.run('node "$REWRITER" "$FORMULA"', { REWRITER: rewriter, FORMULA: file, PACKAGE_VERSION: '0.10.4', TARBALL_URL: url('0.10.4'), TARBALL_SHA256: targetHash }).status, 1);
   assert.equal(existsSync(file), false);
 });
-test('inherited rewriter permits older retry to downgrade newer formula; policy unresolved', () => {
-  const r = bumpFormulaText(formula('0.10.5'), args());
-  assert.ok(r.text.includes(url('0.10.4'))); assert.equal(r.changed, true);
+test('older retry preserves newer formula byte-for-byte', () => {
+  const text = formula('0.10.5');
+  assert.deepEqual(bumpFormulaText(text, args()), { text, changed: false, skipped: '0.10.5' });
 });
 test('inherited whole-text replacement also changes unrelated matching version text', () => {
   const r = bumpFormulaText(formula() + '# unrelated release 0.10.3\n', args());
@@ -176,8 +176,8 @@ function tap(t) {
   const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
   assert.ok(path.isAbsolute(realGit));
   f.stub('git', `if [ "$1" = push ]; then echo "git push" >> "$EFFECTS"; fi\nexec "${realGit}" "$@"`);
-  const update = (dir) => { const file = path.join(dir, 'Formula/gitrole.rb'); writeFileSync(file, bumpFormulaText(readFileSync(file, 'utf8'), args()).text); };
-  const push = (dir) => f.run(shell('Commit and push formula bump'), { PACKAGE_VERSION: '0.10.4' }, dir);
+  const update = (dir, version = '0.10.4') => { const file = path.join(dir, 'Formula/gitrole.rb'); writeFileSync(file, bumpFormulaText(readFileSync(file, 'utf8'), args(version)).text); };
+  const push = (dir, version = '0.10.4') => f.run(shell('Commit and push formula bump'), { PACKAGE_VERSION: version }, dir);
   return { f, remote, clone, first, initial, update, push };
 }
 test('actual formula push then fresh-clone retry produces no additional commit or push', (t) => {
@@ -238,4 +238,128 @@ test('fixture boundary rejects remote Git transport and unexpected npm operation
   const unexpectedNpm = f.run('npm install');
   assert.equal(unexpectedNpm.status, 99);
   assert.deepEqual(f.effects(), ['npm install']);
+});
+
+for (const [from, to, changes] of [
+  ['0.9.1', '0.10.4', true], ['0.10.4', '0.9.1', false],
+  ['1.99.99', '2.0.0', true], ['2.0.0', '1.99.99', false],
+  ['1.2.9', '1.2.10', true], ['1.2.10', '1.2.9', false],
+  ['9007199254740992.0.0', '9007199254740993.0.0', true],
+  ['9007199254740993.0.0', '9007199254740992.0.0', false],
+]) test(`numeric stable semver ${from} -> ${to}`, () => {
+  const text = formula(from); const result = bumpFormulaText(text, args(to));
+  assert.equal(result.changed, changes);
+  assert.equal(result.text, changes ? text.replaceAll(from, to).replace(oldHash, targetHash) : text);
+});
+
+test('equal version validates the artifact and preserves all bytes on repeated replay', () => {
+  const text = formula('0.10.4').replace(oldHash, targetHash.toUpperCase());
+  for (let i = 0; i < 3; i++) assert.deepEqual(bumpFormulaText(text, args()), { text, changed: false });
+  const interpolated = text.replace(url('0.10.4'), 'https://registry.npmjs.org/gitrole/-/gitrole-#{version}.tgz');
+  assert.deepEqual(bumpFormulaText(interpolated, args()), { text: interpolated, changed: false });
+  assert.throws(() => bumpFormulaText(formula('0.10.4'), args()), /different checksum/);
+});
+
+for (const [name, text, options] of [
+  ['conflicting literal version', formula().replace('version "0.10.3"', 'version "0.10.5"'), args()],
+  ['malformed explicit version', formula().replace('version "0.10.3"', 'version "broken"'), args()],
+  ['leading-zero current version', formula('00.10.3'), args()],
+  ['leading-zero target version', formula(), args('00.10.4')],
+  ['same version checksum conflict', formula('0.10.4'), args()],
+  ['same version URL conflict', formula('0.10.4'), { ...args(), tarballUrl: url('0.10.5') }],
+  ['invalid prerelease identifier', formula(), args('1.0.0-01')],
+]) test(`version guard rejects ${name} without file mutation`, (t) => {
+  const f = fixture(t); const file = path.join(f.dir, 'gitrole.rb'); writeFileSync(file, text);
+  const before = digest(readFileSync(file));
+  const r = f.run('node "$REWRITER" "$FORMULA"', { REWRITER: rewriter, FORMULA: file, PACKAGE_VERSION: options.version, TARBALL_URL: options.tarballUrl, TARBALL_SHA256: options.sha256 });
+  assert.equal(r.status, 1, r.stdout); assert.equal(digest(readFileSync(file)), before);
+  assert.equal(f.effects().length, 0);
+});
+
+for (const version of ['1.0.0-rc.1', '1.0.0-0', '1.0.0-alpha-beta.2']) test(`prerelease ${version} is an explicit unchanged skip`, (t) => {
+  const f = fixture(t); const file = path.join(f.dir, 'gitrole.rb'); const text = formula(); writeFileSync(file, text);
+  const summary = path.join(f.dir, 'summary');
+  const r = f.run('node "$REWRITER" "$FORMULA"', { REWRITER: rewriter, FORMULA: file, PACKAGE_VERSION: version, TARBALL_URL: url(version), TARBALL_SHA256: targetHash, GITHUB_STEP_SUMMARY: summary });
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /Skipped prerelease/);
+  assert.equal(readFileSync(file, 'utf8'), text); assert.equal(readFileSync(summary, 'utf8'), r.stdout);
+});
+
+test('repeated stale CLI retry records truthful summary without commit or push', (t) => {
+  const x = tap(t); x.update(x.first, '0.10.5'); assert.equal(x.push(x.first, '0.10.5').status, 0);
+  const accepted = x.f.git(['rev-parse', 'main'], x.remote); const retry = x.clone('stale-retry');
+  const file = path.join(retry, 'Formula/gitrole.rb'); const before = digest(readFileSync(file));
+  const summary = path.join(x.f.dir, 'summary'); const count = x.f.effects().filter((s) => s === 'git push').length;
+  for (let i = 0; i < 3; i++) {
+    const r = x.f.run('node "$REWRITER" "$FORMULA"', { REWRITER: rewriter, FORMULA: file, PACKAGE_VERSION: '0.10.4', TARBALL_URL: url('0.10.4'), TARBALL_SHA256: targetHash, GITHUB_STEP_SUMMARY: summary });
+    assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout, 'tap already at 0.10.5, skipped 0.10.4\n');
+    const push = x.push(retry); assert.equal(push.status, 0); assert.match(push.stdout, /unchanged; nothing to push/);
+    assert.doesNotMatch(push.stdout, /already matches 0.10.4/);
+    assert.equal(digest(readFileSync(file)), before); assert.equal(x.f.git(['rev-parse', 'main'], x.remote), accepted);
+  }
+  assert.equal(readFileSync(summary, 'utf8'), 'tap already at 0.10.5, skipped 0.10.4\n'.repeat(3));
+  assert.equal(x.f.effects().filter((s) => s === 'git push').length, count);
+  assert.equal(x.f.git(['rev-list', '--count', 'main'], x.remote), '2');
+});
+
+test('newer release wins race: stale prepared write rejects, fresh older retry skips', (t) => {
+  const x = tap(t); x.update(x.first); const other = x.clone('newer');
+  x.update(other, '0.10.5'); writeFileSync(path.join(other, 'sentinel'), 'newer unrelated update\n');
+  x.f.git(['add', 'sentinel'], other); // Keep unrelated competitor bytes in its own fixture commit.
+  assert.equal(x.push(other, '0.10.5').status, 0);
+  const accepted = x.f.git(['rev-parse', 'main'], x.remote);
+  const stale = x.push(x.first); assert.notEqual(stale.status, 0); assert.match(stale.stderr, /rejected/);
+  assert.equal(x.f.git(['rev-parse', 'main'], x.remote), accepted);
+  const fresh = x.clone('fresh-older'); x.update(fresh); assert.equal(x.push(fresh).status, 0);
+  assert.equal(x.f.git(['rev-parse', 'main'], x.remote), accepted);
+  assert.equal(x.f.git(['show', 'main:sentinel'], x.remote), 'newer unrelated update');
+  assert.match(x.f.git(['show', 'main:Formula/gitrole.rb'], x.remote), /gitrole-0\.10\.5\.tgz/);
+  assert.equal(x.f.git(['rev-list', '--count', 'main'], x.remote), '2');
+});
+
+for (const [name, from, to] of [
+  ['prerelease metadata', 'github.event.release.prerelease == false', 'true'],
+  ['prerelease tag', "!contains(github.event.release.tag_name, '-')", 'true'],
+]) test(`contract detector rejects removed ${name} exclusion`, () => assert.throws(() => contract(workflow.replace(from, to))));
+
+test('stale byte-preservation detector catches removed guard through actual CLI boundary', (t) => {
+  const f = fixture(t); const source = readFileSync(rewriter, 'utf8');
+  assert.equal(source.split('if (order < 0)').length, 2);
+  const mutant = path.join(f.dir, 'bump-homebrew-formula.mjs');
+  writeFileSync(mutant, source.replace('if (order < 0)', 'if (false)'));
+  const file = path.join(f.dir, 'gitrole.rb'); writeFileSync(file, formula('0.10.5'));
+  const before = digest(readFileSync(file));
+  const env = { FORMULA: file, PACKAGE_VERSION: '0.10.4', TARBALL_URL: url('0.10.4'), TARBALL_SHA256: targetHash };
+  const baseline = f.run('node "$REWRITER" "$FORMULA"', { ...env, REWRITER: rewriter });
+  assert.equal(baseline.status, 0); assert.equal(digest(readFileSync(file)), before);
+  const hostile = f.run('node "$REWRITER" "$FORMULA"', { ...env, REWRITER: mutant });
+  assert.equal(hostile.status, 0); // The mutant falsely claims a successful update.
+  assert.throws(() => assert.equal(digest(readFileSync(file)), before), assert.AssertionError);
+  assert.match(readFileSync(file, 'utf8'), /gitrole-0\.10\.4\.tgz/);
+});
+
+test('equal artifact detector catches removed checksum refusal through CLI boundary', (t) => {
+  const f = fixture(t); const source = readFileSync(rewriter, 'utf8');
+  const guard = 'if (checksumMatch[3].toLowerCase() !== sha256)';
+  assert.equal(source.split(guard).length, 2);
+  const mutant = path.join(f.dir, 'bump-homebrew-formula.mjs'); writeFileSync(mutant, source.replace(guard, 'if (false)'));
+  const file = path.join(f.dir, 'gitrole.rb'); writeFileSync(file, formula('0.10.4'));
+  const env = { FORMULA: file, PACKAGE_VERSION: '0.10.4', TARBALL_URL: url('0.10.4'), TARBALL_SHA256: targetHash };
+  assert.equal(f.run('node "$REWRITER" "$FORMULA"', { ...env, REWRITER: rewriter }).status, 1);
+  const hostile = f.run('node "$REWRITER" "$FORMULA"', { ...env, REWRITER: mutant });
+  assert.equal(hostile.status, 0);
+  assert.throws(() => assert.equal(hostile.status, 1), assert.AssertionError);
+  assert.equal(readFileSync(file, 'utf8'), formula('0.10.4'));
+});
+
+test('remote history detector catches forced stale write in disposable race fixture', (t) => {
+  const x = tap(t); x.update(x.first); const other = x.clone('competitor'); x.update(other, '0.10.5');
+  assert.equal(x.push(other, '0.10.5').status, 0); const newer = x.f.git(['rev-parse', 'main'], x.remote);
+  const normal = x.push(x.first); assert.notEqual(normal.status, 0);
+  assert.equal(x.f.git(['rev-parse', 'main'], x.remote), newer);
+  // Mutate only the extracted local shell copy; force is never used on a real remote.
+  const hostileShell = shell('Commit and push formula bump').replace('git push origin', 'git push --force origin');
+  x.f.git(['reset', '--mixed', 'HEAD~1'], x.first); // Restore the prepared older fixture commit for the mutant shell.
+  const hostile = x.f.run(hostileShell, { PACKAGE_VERSION: '0.10.4' }, x.first); assert.equal(hostile.status, 0, hostile.stderr);
+  assert.throws(() => assert.equal(x.f.git(['rev-parse', 'main'], x.remote), newer), assert.AssertionError);
+  assert.match(x.f.git(['show', 'main:Formula/gitrole.rb'], x.remote), /gitrole-0\.10\.4\.tgz/);
 });

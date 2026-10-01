@@ -148,7 +148,7 @@ jobs:
   brew-bump:
     name: Bump Homebrew formula
     needs: [publish]
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: github.event_name == 'release' && github.event.action == 'published' && github.event.release.prerelease == false && !contains(github.event.release.tag_name, '-')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -261,7 +261,7 @@ jobs:
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           if git diff --quiet -- Formula/gitrole.rb; then
-            echo "Formula/gitrole.rb already matches ${PACKAGE_VERSION}; nothing to push"
+            echo "Formula/gitrole.rb unchanged; nothing to push (see formula update result)"
             exit 0
           fi
 
