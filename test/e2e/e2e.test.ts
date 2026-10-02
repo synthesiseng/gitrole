@@ -28,6 +28,7 @@ import {
   mustSucceed,
   parseJsonOutput,
   runCli,
+  runGit,
   saveRole,
   setGlobalIdentity,
   setLocalIdentity,
@@ -907,3 +908,74 @@ test('e2e pin creates repo policy that resolve, status, and doctor all observe',
     status: 'default'
   });
 });
+
+for (const scope of ['global', 'local'] as const) {
+  test(`e2e blank identities cannot replace working roles or ${scope} Git config`, async () => {
+    const workspace = await createHermeticWorkspace();
+    // Remove inherited identity/config overrides so an ordinary commit tests the fixture config.
+    for (const key of Object.keys(workspace.env)) {
+      if (key.startsWith('GIT_')) delete workspace.env[key];
+    }
+    workspace.env.GIT_CONFIG_NOSYSTEM = '1';
+    workspace.env.GIT_CONFIG_GLOBAL = path.join(workspace.homeDir, '.gitconfig');
+    workspace.env.GIT_CONFIG_SYSTEM = '/dev/null';
+    await initRepo(workspace);
+    await saveRole(workspace, { name: 'work', fullName: 'Maya Example', email: 'maya@example.test' });
+    mustSucceed(runCli(workspace, ['use', 'work', `--${scope}`]), 'apply working role');
+    const rolesPath = path.join(workspace.configHome, 'gitrole', 'roles.json');
+    const configPath = scope === 'global'
+      ? path.join(workspace.homeDir, '.gitconfig') : path.join(workspace.repoDir, '.git', 'config');
+    const rolesBefore = await readFile(rolesPath, 'utf8');
+    const configBefore = await readFile(configPath, 'utf8');
+    const valid = { name: 'work', fullName: 'Maya Example', email: 'maya@example.test' };
+    const invalid = [
+      { ...valid, name: 'empty-name', fullName: '' },
+      { ...valid, name: 'blank-name', fullName: ' \t\u00a0' },
+      { ...valid, name: 'empty-email', email: '' },
+      { ...valid, name: 'blank-email', email: ' \n\u2003' },
+      { ...valid, name: 'both-blank', fullName: '   ', email: '' }
+    ];
+    for (const role of invalid) {
+      for (const roleName of ['work', role.name]) {
+        const result = runCli(workspace, ['add', roleName, '--name', role.fullName, '--email', role.email]);
+        assert.equal(result.status, 1, result.stderr);
+        assert.equal(result.stdout, '');
+        assert.match(result.stderr, /must not be empty or whitespace-only/);
+        assert.equal(await readFile(rolesPath, 'utf8'), rolesBefore);
+        assert.equal(await readFile(configPath, 'utf8'), configBefore);
+      }
+    }
+    // Seed pre-fix records directly: corrected add must never create them.
+    const legacyRaw = JSON.stringify({ roles: [valid, ...invalid] });
+    await writeFile(rolesPath, legacyRaw);
+    for (const role of invalid) {
+      const result = runCli(workspace, ['use', role.name, `--${scope}`]);
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /must not be empty or whitespace-only/);
+      assert.equal(await readFile(configPath, 'utf8'), configBefore);
+      assert.equal(await readFile(rolesPath, 'utf8'), legacyRaw);
+    }
+    mustSucceed(runGit(workspace, [
+      '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
+      'commit', '--allow-empty', '-m', 'identity preservation fixture'
+    ]), 'next ordinary commit after rejected operations');
+    const identity = runGit(workspace, ['log', '-1', '--format=%an <%ae>|%cn <%ce>']);
+    mustSucceed(identity, 'inspect next commit attribution');
+    assert.equal(identity.stdout.trim(), 'Maya Example <maya@example.test>|Maya Example <maya@example.test>');
+
+    const diagnosis = runCli(workspace, ['doctor', '--json']);
+    assert.equal(diagnosis.status, 2);
+    const parsed = JSON.parse(diagnosis.stdout) as {
+      role?: { name: string };
+      checks: Array<{ status: string; label: string; message: string }>;
+    };
+    assert.equal(parsed.role?.name, 'work');
+    for (const role of invalid) {
+      assert.ok(parsed.checks.some((check) => check.status === 'warn' && check.label === 'role' &&
+        check.message.includes(`"${role.name}"`)), `missing legacy warning for ${role.name}`);
+    }
+    assert.equal(await readFile(rolesPath, 'utf8'), legacyRaw);
+    assert.equal(await readFile(configPath, 'utf8'), configBefore);
+  });
+}
