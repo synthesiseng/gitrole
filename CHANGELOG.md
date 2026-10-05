@@ -22,6 +22,9 @@
 
 ### Bug Fixes
 
+* **prompt:** a directory with an invalid `.git` no longer prints a prompt warning
+  * an empty or corrupt `.git` directory, or a `.git` gitfile that does not point at a repository, stays empty, the same as any directory that is not a work tree
+  * `gitrole:? ⚠` remains a failed or unreadable status inside a real work tree
 * **roles:** `no-role` is reserved so a saved role can't collide with the status and prompt sentinel
   * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and don't write the role
   * an existing saved role named `no-role` is left in place. `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`

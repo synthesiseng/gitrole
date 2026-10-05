@@ -100,20 +100,10 @@ format_segment() {
   printf 'gitrole:%s ⚠\n' "$_role"
 }
 
+# Ask git. A .git file or directory that is not a work tree stays quiet.
 discover_git() {
-  _dir=$PWD
-
-  while :; do
-    if [ -e "$_dir/.git" ]; then
-      return 0
-    fi
-
-    if [ "$_dir" = / ]; then
-      return 1
-    fi
-
-    _dir=$(dirname "$_dir")
-  done
+  _inside=$(git rev-parse --is-inside-work-tree 2>/dev/null) || return 1
+  [ "$_inside" = true ]
 }
 
 run_offline_status() {
