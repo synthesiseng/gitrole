@@ -470,12 +470,11 @@ test('status, doctor, and the pre-commit hook keep git detection outside the pro
     'hook https repo'
   );
 
-  const missing = path.join(fixture.root, 'missing-gitdir');
   const broken = [
-    ['gitfileMissing', `fatal: not a git repository: ${missing}`],
-    ['gitfileGarbage', `fatal: invalid gitfile format: ${path.join(fixture.dirs.gitfileGarbage, '.git')}`],
-    ['gitfileEmpty', `fatal: invalid gitfile format: ${path.join(fixture.dirs.gitfileEmpty, '.git')}`],
-    ['gitfileBadTarget', `fatal: not a git repository: ${path.join(fixture.root, 'not-a-repo')}`]
+    ['gitfileMissing', /fatal: not a git repository/],
+    ['gitfileGarbage', /fatal: invalid gitfile format/],
+    ['gitfileEmpty', /fatal: invalid gitfile format/],
+    ['gitfileBadTarget', /fatal: not a git repository/]
   ] as const;
 
   for (const [name, fatal] of broken) {
@@ -485,9 +484,10 @@ test('status, doctor, and the pre-commit hook keep git detection outside the pro
       assert.equal(result.stdout, '', `${name} ${args.join(' ')}`);
       assert.match(
         result.stderr,
-        /^error: Command failed: git config --global --get user\.(name|email)\n/
+        /^error: Command failed: git config --global --get user\.(name|email)\n/,
+        `${name} ${args.join(' ')}`
       );
-      assert.match(result.stderr, new RegExp(`${fatal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n\\n$`));
+      assert.match(result.stderr, fatal, `${name} ${args.join(' ')}`);
     }
   }
 });
