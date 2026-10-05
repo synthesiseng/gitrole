@@ -230,7 +230,12 @@ export class SystemGitRepository {
       return { remoteName, targets: [], transport, message: 'push URL framing is unsupported; destination is unverified' };
     }
     const urls = (await run(['remote', 'get-url', '--push', '--all', '--', remoteName])).stdout.replace(/\n$/, '').split('\n');
-    if (urls.length !== configuredUrls.length || urls.some((url) => !url || /[\r\n\0]/.test(url))) {
+    // A rewrite base is a config key, which Git rejects when it contains a newline,
+    // and configured URLs with a newline are already rejected above. Aliasing therefore
+    // cannot split one URL into several lines. A longer get-url line count is still
+    // unsupported framing. A shorter list is pushInsteadOf rewriting only some fetch
+    // URLs: Git pushes those and does not push the other fetch URLs.
+    if (!urls.length || urls.length > configuredUrls.length || urls.some((url) => !url || /[\r\n\0]/.test(url))) {
       return { remoteName, targets: [], transport, message: 'resolved push URL framing is unsupported; destination is unverified' };
     }
     return {

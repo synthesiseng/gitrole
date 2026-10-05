@@ -22,6 +22,7 @@
 
 ### Bug Fixes
 
+* **push:** when `url.*.pushInsteadOf` rewrites only some of a remote's fetch URLs, `status` and `doctor` check those rewritten push URLs. The other fetch URLs are not push destinations. A newline in a configured push URL is still unverified.
 * **roles:** `no-role` is reserved so a saved role can't collide with the status and prompt sentinel
   * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and don't write the role
   * an existing saved role named `no-role` is left in place. `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`
