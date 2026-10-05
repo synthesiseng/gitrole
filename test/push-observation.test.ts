@@ -53,7 +53,11 @@ test('real Git resolves default remote precedence and URLs, independent of upstr
   assert.equal(result.targets[0].user, 'alice'); assert.equal(result.targets[0].port, 2222);
   assert.equal(result.targets[0].host, 'push.test');
   await f.git('config', 'branch.main.pushRemote', 'missing');
-  assert.match((await f.repository.getPushDestination(f.env)).message!, /not a configured remote/);
+  const missing = await f.repository.getPushDestination(f.env);
+  assert.equal(missing.remoteName, 'missing');
+  assert.equal(missing.message, undefined);
+  assert.deepEqual(missing.targets.map((target) => target.url), ['missing']);
+  assert.equal(missing.targets[0].protocol, 'unknown');
   await f.git('config', 'branch.main.pushRemote', '.');
   assert.match((await f.repository.getPushDestination(f.env)).message!, /local push/);
   for (const key of ['branch.main.pushRemote', 'remote.pushDefault', 'branch.main.remote']) await f.git('config', '--unset', key);
@@ -230,7 +234,7 @@ test('present empty default remote settings refuse fallback exactly as Git does'
     const destination = await f.repository.getPushDestination(f.env);
     assert.equal(destination.targets.length, 0, key);
     assert.match(destination.message!, /no configured/, key);
-    await assert.rejects(() => f.git('push', '--dry-run'), /No configured push destination/);
+    await assert.rejects(() => f.git('push', '--dry-run'), /No configured push destination|no path specified/);
     await f.git('config', '--unset', key);
   }
 });
@@ -408,7 +412,7 @@ test('a relative path push destination is the path Git pushes to', async (t) => 
   const hookPath = path.join(f.repo, '.git/hooks/pre-push');
   await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
   await chmod(hookPath, 0o755);
-  const pushed = await f.git('push', '--dry-run', 'HEAD:refs/heads/main');
+  const pushed = await f.git('push', '--dry-run');
   assert.equal(pushed.stdout.trim(), '../other-repo');
 });
 
@@ -428,7 +432,7 @@ test('an absolute path push destination is the path Git pushes to', async (t) =>
   const hookPath = path.join(f.repo, '.git/hooks/pre-push');
   await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
   await chmod(hookPath, 0o755);
-  const pushed = await f.git('push', '--dry-run', 'HEAD:refs/heads/main');
+  const pushed = await f.git('push', '--dry-run');
   assert.equal(pushed.stdout.trim(), other);
 });
 

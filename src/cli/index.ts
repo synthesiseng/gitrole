@@ -359,6 +359,7 @@ Policy:
   No pin or a github user mismatch is auth=warn.
   SSH githubUser checks apply only to SSH remotes, and only without --offline.
   Every default push URL is checked; mixed SSH/HTTPS warns online.
+  A configured destination that is a URL or path, not a remote name, is checked after Git's URL rewrites.
   Custom SSH commands, alternate diagnostic binaries, partial or interactive contexts remain unverified.
   Online OpenSSH inspection may run configured Match exec commands or DNS lookups.
   Destination/account checks do not prove refspec readiness, push permission or push success.

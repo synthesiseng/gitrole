@@ -206,10 +206,22 @@ export class SystemGitRepository {
       (branch ? await config(`branch.${branch}.remote`) : undefined) ??
       (remotes.length === 1 ? remotes[0] : remotes.includes('origin') ? 'origin' : undefined);
     if (!remoteName) return { targets: [], transport, message: 'no configured default push destination' };
-    if (!remotes.includes(remoteName)) return {
-      remoteName, targets: [], transport,
-      message: remoteName === '.' ? 'local push destination has no GitHub authentication' : 'default push destination is not a configured remote'
-    };
+    if (!remotes.includes(remoteName)) {
+      if (remoteName === '.') return {
+        remoteName, targets: [], transport,
+        message: 'local push destination has no GitHub authentication'
+      };
+      // Git pushes this token as a URL (remote.c add_url_alias), including
+      // insteadOf and pushInsteadOf. get-url refuses a name that is not
+      // configured in the repo; a command-line remote printed by remote -v
+      // applies those aliases and does not write config.
+      const url = await this.resolveDirectPushUrl(run, remoteName, remotes);
+      if (!url) return {
+        remoteName, targets: [], transport,
+        message: 'resolved push URL framing is unsupported; destination is unverified'
+      };
+      return { remoteName, targets: [parseRemoteUrl(remoteName, url)], transport };
+    }
     const receivePack = await config(`remote.${remoteName}.receivepack`);
     if (receivePack !== undefined && receivePack !== 'git-receive-pack') {
       transport.supported = false; transport.message = 'custom receive-pack context is unsupported; authentication is unverified';
@@ -241,6 +253,23 @@ export class SystemGitRepository {
     return {
       remoteName, targets: urls.map((url) => parseRemoteUrl(remoteName, url)), transport
     };
+  }
+
+  private async resolveDirectPushUrl(
+    run: (args: string[]) => Promise<ExecResult>,
+    destination: string,
+    remotes: string[]
+  ): Promise<string | undefined> {
+    if (!destination || /[\r\n\0]/.test(destination)) return undefined;
+    let probe = 'gitrole-push-probe';
+    while (remotes.includes(probe)) probe += '-x';
+    const listed = await run(['-c', `remote.${probe}.url=${destination}`, 'remote', '-v']);
+    const prefix = `${probe}\t`;
+    const lines = listed.stdout.split('\n').filter((line) => line.startsWith(prefix) && line.endsWith(' (push)'));
+    if (lines.length !== 1) return undefined;
+    const url = lines[0].slice(prefix.length, -' (push)'.length);
+    if (!url || /[\r\n\0]/.test(url)) return undefined;
+    return url;
   }
 
   private async getPushTransport(

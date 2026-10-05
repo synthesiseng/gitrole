@@ -38,7 +38,7 @@ If author and committer differ, commit alignment warns. A repository with no com
 
 <h2 id="push">Changing origin did not fix the push check</h2>
 
-Inspect `gitrole doctor --json`. Gitrole selects the default push remote and checks every URL Git resolves for it. A branch `pushRemote`, `remote.pushDefault`, or explicit `pushurl` can make the destination differ from origin's fetch URL. `gitrole remote set` changes origin's fetch URL only. Correct the intended Git configuration after reviewing those destinations; see <a href="{{ '/machine-readable-contracts/' | url }}">Machine-readable contracts</a> for selection rules and limitations.
+Inspect `gitrole doctor --json`. Gitrole selects the default push destination and checks every URL Git resolves for it. A branch `pushRemote`, `remote.pushDefault`, branch remote, explicit `pushurl`, or a URL or path used in place of a remote name can make the destination differ from origin's fetch URL. URL rewrites (`insteadOf`, `pushInsteadOf`) apply to that destination. `gitrole remote set` changes origin's fetch URL only. Correct the intended Git configuration after reviewing those destinations; see <a href="{{ '/machine-readable-contracts/' | url }}">Machine-readable contracts</a> for selection rules and limitations.
 
 <h2 id="prompt">The prompt is empty or warns</h2>
 
