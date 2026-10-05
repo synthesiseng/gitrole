@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir, chmod } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { SystemGitRepository, parseRemoteUrl } from '../src/adapters/git-repository.js';
@@ -271,6 +271,69 @@ test('a configured remote beginning with an option is queried literally', async 
   await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
   assert.equal((await f.repository.getPushDestination(f.env)).remoteName, '-push');
   assert.match((await f.git('push', '--dry-run')).stderr, /main/);
+});
+
+test('insteadOf, pushInsteadOf, and pushurl use the URL Git pushes', async (t) => {
+  const f = await fixture(t);
+  await f.git('remote', 'add', 'origin', 'https://fetch.test/acme/repo.git');
+  await f.git('remote', 'set-url', '--add', 'origin', 'https://other.test/two.git');
+  await f.git('config', 'url.ssh://mirror.test/.insteadOf', 'https://fetch.test/');
+  let destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), [
+    'ssh://mirror.test/acme/repo.git',
+    'https://other.test/two.git'
+  ]);
+  await f.git('remote', 'remove', 'origin');
+  await f.git('config', '--unset', 'url.ssh://mirror.test/.insteadOf');
+  await f.git('remote', 'add', 'origin', 'https://fetch.test/acme/repo.git');
+  await f.git('config', 'url.ssh://short.test/.insteadOf', 'https://fetch.test/');
+  await f.git('config', 'url.ssh://long.test/acme/.insteadOf', 'https://fetch.test/acme/');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['ssh://long.test/acme/repo.git']);
+  await f.git('config', 'url.git@push.test:.pushInsteadOf', 'https://fetch.test/');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['git@push.test:acme/repo.git']);
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  assert.equal(destination.targets[0].host, 'push.test');
+  await f.git('config', 'remote.origin.pushurl', 'https://fetch.test/explicit/repo.git');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['ssh://short.test/explicit/repo.git']);
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  await f.git('config', '--add', 'remote.origin.pushurl', 'git@second.test:acme/repo.git');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), [
+    'ssh://short.test/explicit/repo.git',
+    'git@second.test:acme/repo.git'
+  ]);
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(diagnosis.repository.push?.targets[0].remote.url, 'ssh://short.test/explicit/repo.git');
+  assert.equal(diagnosis.repository.push?.targets[1].remote.url, 'git@second.test:acme/repo.git');
+  assert.deepEqual(f.calls.map((call) => call.host), ['short.test', 'second.test']);
+});
+
+test('pushInsteadOf that matches only some fetch URLs is the push destination', async (t) => {
+  const f = await fixture(t);
+  const bare = path.join(f.root, 'bare.git');
+  await f.git('init', '--bare', '-q', bare);
+  await f.git('remote', 'add', 'origin', 'https://fetch.test/one.git');
+  await f.git('remote', 'set-url', '--add', 'origin', 'git@other.test:two.git');
+  await f.git('config', `url.${bare}.pushInsteadOf`, 'https://fetch.test/one.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.message, undefined);
+  assert.equal(destination.remoteName, 'origin');
+  assert.deepEqual(destination.targets.map((target) => target.url), [bare]);
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    `default push remote origin uses unknown at ${bare}`
+  );
+  assert.equal(f.calls.length, 0);
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hookPath = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
+  await chmod(hookPath, 0o755);
+  const pushed = await f.git('push', '--dry-run', 'origin', 'HEAD:refs/heads/main');
+  assert.equal(pushed.stdout.trim(), bare);
 });
 
 for (const remoteName of [' push', 'push ']) {
