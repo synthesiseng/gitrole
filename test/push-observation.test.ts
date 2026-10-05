@@ -11,6 +11,7 @@ import path from 'node:path';
 import { SystemGitRepository, parseRemoteUrl } from '../src/adapters/git-repository.js';
 import { SystemGitConfig } from '../src/adapters/git-config.js';
 import { getStatus, doctor } from '../src/application/use-cases/index.js';
+import { renderShortStatus } from '../src/interface/renderer.js';
 import type { DoctorDependencies } from '../src/application/contracts.js';
 const execFile = promisify(nodeExecFile);
 
@@ -334,6 +335,147 @@ test('pushInsteadOf that matches only some fetch URLs is the push destination', 
   await chmod(hookPath, 0o755);
   const pushed = await f.git('push', '--dry-run', 'origin', 'HEAD:refs/heads/main');
   assert.equal(pushed.stdout.trim(), bare);
+});
+
+test('an scp URL configured as the push destination is checked as that URL', async (t) => {
+  const f = await fixture(t);
+  await f.git('remote', 'add', 'gitrole-push-probe', 'git@probe.test:acme/repo.git');
+  await f.git('config', 'branch.main.pushRemote', 'git@github.com:owner/repo.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.remoteName, 'git@github.com:owner/repo.git');
+  assert.equal(destination.message, undefined);
+  assert.equal(destination.targets.length, 1);
+  assert.equal(destination.targets[0].url, 'git@github.com:owner/repo.git');
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  assert.equal(destination.targets[0].host, 'github.com');
+  assert.equal(destination.targets[0].user, 'git');
+  assert.equal(destination.targets[0].owner, 'owner');
+  assert.equal(destination.targets[0].repository, 'repo');
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    'default push remote git@github.com:owner/repo.git uses ssh at git@github.com:owner/repo.git'
+  );
+  assert.deepEqual(f.calls.map((call) => call.host), ['github.com']);
+  assert.equal((await f.git('remote')).stdout, 'gitrole-push-probe\n');
+});
+
+test('an https URL push destination keeps the HTTPS pin check', async (t) => {
+  const f = await fixture(t);
+  await f.git('config', 'branch.main.pushRemote', 'https://github.com/owner/repo.git');
+  let diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'auth')?.message,
+    'push destination uses HTTPS and no repo pin is configured'
+  );
+  assert.equal(diagnosis.repository.push?.targets[0].remote.url, 'https://github.com/owner/repo.git');
+  assert.equal(diagnosis.repository.push?.targets[0].remote.protocol, 'https');
+  assert.equal(f.calls.length, 0);
+  await f.git('config', 'branch.main.pushRemote', 'https://work.test/acme/repo.git');
+  await writeFile(path.join(f.repo, '.gitrole'), JSON.stringify({ version: 1, defaultRole: 'work', allowedRoles: ['work'] }));
+  const status = await getStatus(f.dependencies);
+  assert.equal(
+    renderShortStatus(status),
+    'role=work scope=local override=true commit=ok remote=ok auth=na policy=ok overall=aligned'
+  );
+  diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'auth')?.message,
+    'push destination uses HTTPS; SSH auth verification does not apply'
+  );
+});
+
+test('a relative path push destination is the path Git pushes to', async (t) => {
+  const f = await fixture(t);
+  const other = path.join(f.root, 'other-repo');
+  await f.git('init', '--bare', '-q', other);
+  await f.git('config', 'branch.main.pushRemote', '../other-repo');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.message, undefined);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['../other-repo']);
+  assert.equal(destination.targets[0].protocol, 'unknown');
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    'default push remote ../other-repo uses unknown at ../other-repo'
+  );
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'auth')?.message,
+    'push transport is unsupported; authentication is unverified'
+  );
+  assert.equal(f.calls.length, 0);
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hookPath = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
+  await chmod(hookPath, 0o755);
+  const pushed = await f.git('push', '--dry-run', 'HEAD:refs/heads/main');
+  assert.equal(pushed.stdout.trim(), '../other-repo');
+});
+
+test('an absolute path push destination is the path Git pushes to', async (t) => {
+  const f = await fixture(t);
+  const other = path.join(f.root, 'other repo.git');
+  await f.git('init', '--bare', '-q', other);
+  await f.git('config', 'branch.main.remote', other);
+  await f.git('remote', 'add', 'origin', 'git@work.test:acme/repo.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.remoteName, other);
+  assert.equal(destination.message, undefined);
+  assert.deepEqual(destination.targets.map((target) => target.url), [other]);
+  assert.equal(destination.targets[0].protocol, 'unknown');
+  assert.equal(f.calls.length, 0);
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hookPath = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
+  await chmod(hookPath, 0o755);
+  const pushed = await f.git('push', '--dry-run', 'HEAD:refs/heads/main');
+  assert.equal(pushed.stdout.trim(), other);
+});
+
+test('a URL push destination is rewritten with pushInsteadOf and the longest insteadOf', async (t) => {
+  const f = await fixture(t);
+  const bare = path.join(f.root, 'bare.git');
+  await f.git('init', '--bare', '-q', bare);
+  await f.git('config', `url.${bare}.pushInsteadOf`, 'https://fetch.test/acme/repo.git');
+  await f.git('config', 'url.ssh://long.test/acme/.insteadOf', 'https://fetch.test/acme/');
+  await f.git('config', 'url.ssh://short.test/.insteadOf', 'https://fetch.test/');
+  await f.git('config', 'remote.pushDefault', 'https://fetch.test/acme/repo.git');
+  let destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), [bare]);
+  assert.equal(f.calls.length, 0);
+  await f.git('config', '--unset', `url.${bare}.pushInsteadOf`);
+  f.calls.length = 0;
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['ssh://long.test/acme/repo.git']);
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  assert.equal(destination.targets[0].host, 'long.test');
+  const status = await getStatus(f.dependencies, { offline: true });
+  assert.equal(f.calls.length, 0);
+  assert.equal(status.auth, 'na');
+  assert.equal(status.remote, 'warn');
+  const diagnosis = await doctor(f.dependencies);
+  assert.deepEqual(f.calls.map((call) => call.host), ['long.test']);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    'default push remote https://fetch.test/acme/repo.git uses ssh at ssh://long.test/acme/repo.git'
+  );
+});
+
+test('a named remote push destination is unchanged by URL and path resolution', async (t) => {
+  const f = await fixture(t);
+  await f.git('remote', 'add', 'origin', 'git@work.test:acme/repo.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.remoteName, 'origin');
+  assert.equal(destination.message, undefined);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['git@work.test:acme/repo.git']);
+  assert.equal(destination.targets[0].host, 'work.test');
+  const status = await getStatus(f.dependencies, { offline: true });
+  assert.equal(
+    renderShortStatus(status),
+    'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned'
+  );
+  assert.equal(f.calls.length, 0);
+  assert.equal((await f.git('remote')).stdout, 'origin\n');
 });
 
 for (const remoteName of [' push', 'push ']) {
