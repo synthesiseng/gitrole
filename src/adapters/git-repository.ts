@@ -3,6 +3,9 @@
  */
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { GitNotInstalledError } from '../application/use-cases/index.js';
 import type { NonMergeCommit } from '../application/contracts.js';
@@ -192,7 +195,7 @@ export class SystemGitRepository {
 
   /** Resolves the current default push remote and all effective push URLs without contacting it. */
   async getPushDestination(env: NodeJS.ProcessEnv = process.env): Promise<PushDestination> {
-    const run = (args: string[]) => this.run(args, { env });
+    const run = (args: string[]) => this.run(args, { env: { ...env, LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C' } });
     const config = async (key: string): Promise<string | undefined> => {
       try { return (await run(['config', '--get', key])).stdout.replace(/\n$/, ''); }
       catch (error) { if ((error as { code?: number | string }).code === 1) return undefined; throw error; }
@@ -211,11 +214,20 @@ export class SystemGitRepository {
         remoteName, targets: [], transport,
         message: 'local push destination has no GitHub authentication'
       };
-      // Git pushes this token as a URL (remote.c add_url_alias), including
-      // insteadOf and pushInsteadOf. get-url refuses a name that is not
-      // configured in the repo; a command-line remote printed by remote -v
-      // applies those aliases and does not write config.
-      const url = await this.resolveDirectPushUrl(run, remoteName, remotes);
+      if (/[\r\n\0]/.test(remoteName)) return {
+        remoteName, targets: [], transport,
+        message: 'resolved push URL framing is unsupported; destination is unverified'
+      };
+      // Legacy .git/remotes and .git/branches entries are not listed by `remote`.
+      // Let Git distinguish these from direct tokens without inventing a URL.
+      try {
+        await run(['remote', 'get-url', '--push', '--all', '--', remoteName]);
+        return { remoteName, targets: [], transport, message: 'legacy push remote is unsupported; destination is unverified' };
+      } catch (error) {
+        const failure = error as { code?: number; stderr?: string };
+        if (failure.code !== 2 || failure.stderr !== `error: No such remote '${remoteName}'\n`) throw error;
+      }
+      const url = await this.resolveDirectPushUrl(run, remoteName, env);
       if (!url) return {
         remoteName, targets: [], transport,
         message: 'resolved push URL framing is unsupported; destination is unverified'
@@ -258,18 +270,48 @@ export class SystemGitRepository {
   private async resolveDirectPushUrl(
     run: (args: string[]) => Promise<ExecResult>,
     destination: string,
-    remotes: string[]
+    env: NodeJS.ProcessEnv
   ): Promise<string | undefined> {
-    if (!destination || /[\r\n\0]/.test(destination)) return undefined;
-    let probe = 'gitrole-push-probe';
-    while (remotes.includes(probe)) probe += '-x';
-    const listed = await run(['-c', `remote.${probe}.url=${destination}`, 'remote', '-v']);
-    const prefix = `${probe}\t`;
-    const lines = listed.stdout.split('\n').filter((line) => line.startsWith(prefix) && line.endsWith(' (push)'));
-    if (lines.length !== 1) return undefined;
-    const url = lines[0].slice(prefix.length, -' (push)'.length);
-    if (!url || /[\r\n\0]/.test(url)) return undefined;
-    return url;
+    // Evaluate includes in the original context, then replay only effective aliases.
+    // A synthetic remote in that context could activate an inactive hasconfig include.
+    let output = '';
+    try {
+      output = (await run(['config', '--null', '--get-regexp', '^url\\..*\\.(pushinsteadof|insteadof)$'])).stdout;
+    } catch (error) {
+      if ((error as { code?: number }).code !== 1) throw error;
+    }
+    const aliases: NodeJS.ProcessEnv = {};
+    const entries = output ? output.split('\0') : [''];
+    if (entries.pop() !== '') return undefined;
+    for (const [index, entry] of entries.entries()) {
+      const separator = entry.indexOf('\n');
+      const key = entry.slice(0, separator);
+      if (separator < 0 || !/^url\..*\.(pushinsteadof|insteadof)$/.test(key)) return undefined;
+      // Separate key/value environment entries preserve order, duplicates, empty
+      // values and '=' in keys without implementing any of Git's rewrite rules.
+      aliases[`GIT_CONFIG_KEY_${index}`] = key;
+      aliases[`GIT_CONFIG_VALUE_${index}`] = entry.slice(separator + 1);
+    }
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'gitrole-push-resolve-'));
+    try {
+      const globalConfig = path.join(directory, 'empty-global');
+      await writeFile(globalConfig, '', { mode: 0o600 });
+      const isolatedEnv: NodeJS.ProcessEnv = {
+        ...Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith('GIT_'))),
+        GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: globalConfig,
+        LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C'
+      };
+      await this.run(['init', '--quiet', '--bare', '--template=', directory], { env: isolatedEnv });
+      const gitDir = `--git-dir=${directory}`;
+      await this.run([gitDir, 'config', '--local', 'remote.probe.url', destination], { env: isolatedEnv });
+      const resolved = await this.run([gitDir, 'remote', 'get-url', '--push', '--all', '--', 'probe'], {
+        env: { ...isolatedEnv, ...aliases, GIT_CONFIG_COUNT: String(entries.length) }
+      });
+      const url = resolved.stdout.replace(/\n$/, '');
+      return url && !/[\r\n\0]/.test(url) ? url : undefined;
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 
   private async getPushTransport(

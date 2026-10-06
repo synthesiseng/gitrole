@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, rm, writeFile, mkdir, chmod } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile, mkdir, chmod, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { SystemGitRepository, parseRemoteUrl } from '../src/adapters/git-repository.js';
@@ -499,3 +499,170 @@ for (const remoteName of [' push', 'push ']) {
     }
   });
 }
+
+// A real default push to disposable local repositories is the destination oracle.
+async function localPushOracle(f: Awaited<ReturnType<typeof fixture>>): Promise<string> {
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hook = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hook, '#!/bin/sh\nprintf \'%s\\n\' "$2"\n');
+  await chmod(hook, 0o755);
+  return (await f.git('push', '--dry-run')).stdout.replace(/\n$/, '');
+}
+
+test('direct resolution preserves inactive and active hasconfig includes without config writes', async (t) => {
+  const f = await fixture(t);
+  const actual = path.join(f.root, 'actual.git');
+  const rewritten = path.join(f.root, 'rewritten.git');
+  for (const target of [actual, rewritten]) await f.git('init', '--bare', '-q', target);
+  const included = path.join(f.root, 'conditional.config');
+  await f.git('config', '--file', included, `url.${rewritten}.pushInsteadOf`, actual);
+  await f.git('config', `includeIf.hasconfig:remote.*.url:${actual}.path`, included);
+  await f.git('config', 'branch.main.pushRemote', actual);
+  for (const active of [false, true]) {
+    if (active) await f.git('remote', 'add', 'included-trigger', actual);
+    const before = await readFile(path.join(f.repo, '.git/config'), 'utf8');
+    const expected = await localPushOracle(f);
+    assert.equal(expected, active ? rewritten : actual);
+    const destination = await f.repository.getPushDestination(f.env);
+    assert.deepEqual(destination.targets.map((target) => target.url), [expected]);
+    const status = await getStatus(f.dependencies, { offline: true });
+    assert.equal(status.remote, 'warn');
+    assert.equal(f.calls.length, 0);
+    assert.equal(await readFile(path.join(f.repo, '.git/config'), 'utf8'), before);
+  }
+});
+
+for (const directory of ['remotes', 'branches']) {
+  test(`legacy .git/${directory} destinations stay unverified instead of checking a token rewrite`, async (t) => {
+    const f = await fixture(t);
+    const actual = path.join(f.root, 'actual.git');
+    const decoy = path.join(f.root, 'decoy.git');
+    for (const target of [actual, decoy]) await f.git('init', '--bare', '-q', target);
+    await mkdir(path.join(f.repo, '.git', directory), { recursive: true });
+    await writeFile(path.join(f.repo, '.git', directory, 'legacy'), directory === 'remotes'
+      ? `URL: ${actual}\nPush: refs/heads/main:refs/heads/main\n` : `${actual}#main\n`);
+    await f.git('config', 'branch.main.pushRemote', 'legacy');
+    await f.git('config', `url.${decoy}.insteadOf`, 'legacy');
+    assert.equal((await f.git('remote')).stdout, '');
+    assert.equal((await f.git('remote', 'get-url', '--push', '--all', 'legacy')).stdout.trim(), actual);
+    assert.equal(await localPushOracle(f), actual);
+    const destination = await f.repository.getPushDestination(f.env);
+    assert.deepEqual(destination.targets, []);
+    assert.match(destination.message!, /legacy.*unverified/);
+    await getStatus(f.dependencies, { offline: true });
+    assert.equal(f.calls.length, 0);
+  });
+}
+
+for (const kind of ['insteadof', 'pushinsteadof']) {
+  test(`direct ${kind} keeps Git's first-base tie order and does not chain aliases`, async (t) => {
+    const f = await fixture(t);
+    const actual = path.join(f.root, 'actual.git');
+    const decoy = path.join(f.root, 'decoy.git');
+    for (const target of [actual, decoy]) await f.git('init', '--bare', '-q', target);
+    await f.git('config', `url.${actual}.${kind}`, 'nonmatching:');
+    await f.git('config', `url.${decoy}.${kind}`, 'alias:repo');
+    await f.git('config', '--add', `url.${actual}.${kind}`, 'alias:repo');
+    await f.git('config', `url.${decoy}.insteadOf`, actual);
+    await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+    assert.equal(await localPushOracle(f), actual);
+    assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [actual]);
+  });
+}
+
+test('direct tokens preserve tabs and option-like values, reject newlines and propagate Git errors', async (t) => {
+  const f = await fixture(t);
+  for (const token of ['-option=repo', 'tab\tpath', 'path (push)']) {
+    await f.git('config', 'branch.main.pushRemote', token);
+    assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [token]);
+  }
+  await f.git('config', 'branch.main.pushRemote', 'path\nother');
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets, []);
+  await f.git('config', 'branch.main.pushRemote', 'direct:repo');
+  const failure = Object.assign(new Error('unrelated get-url failure'), { code: 2, stderr: 'error: unrelated\n' });
+  const repository = new SystemGitRepository({ exec: async (file, args, options) => {
+    if (args[0] === 'remote' && args[1] === 'get-url') throw failure;
+    return execFile(file, args, { cwd: f.repo, env: options?.env ?? f.env });
+  } });
+  await assert.rejects(() => repository.getPushDestination(f.env), (error) => error === failure);
+});
+
+for (const failAt of ['none', 'init', 'config', 'remote']) {
+  test(`direct aliases are resolved by Git in private scratch with cleanup: ${failAt}`, async (t) => {
+    const f = await fixture(t);
+    const target = path.join(f.root, 'actual.git');
+    await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+    await f.git('config', `url.${target}.pushInsteadOf`, 'alias:repo');
+    f.env.GIT_DIR = path.join(f.repo, '.git');
+    const before = await readFile(path.join(f.repo, '.git/config'));
+    const directories = new Set<string>();
+    const scratchCommands: string[] = [];
+    const failure = Object.assign(new Error(`scratch ${failAt} failed`), { code: 37 });
+    const repository = new SystemGitRepository({ exec: async (file, args, options) => {
+      assert.equal(file, 'git', 'resolution must not execute SSH or another transport');
+      const directory = args[0] === 'init' ? args.at(-1) : args[0].startsWith('--git-dir=') ? args[0].slice(10) : undefined;
+      if (directory) {
+        directories.add(directory);
+        assert.equal((await stat(directory)).mode & 0o777, 0o700);
+        assert.equal(options?.env.GIT_DIR, undefined);
+        const command = args[0] === 'init' ? 'init' : args.includes('remote') ? 'remote' : 'config';
+        if (command !== 'remote') assert.equal(options?.env.GIT_CONFIG_COUNT, undefined);
+        scratchCommands.push(command);
+        if (command === failAt) throw failure;
+      }
+      return execFile(file, args, { cwd: f.repo, env: options?.env ?? f.env });
+    } });
+    if (failAt === 'none') {
+      const results = await Promise.all([repository.getPushDestination(f.env), repository.getPushDestination(f.env)]);
+      for (const result of results) assert.deepEqual(result.targets.map((remote) => remote.url), [target]);
+      assert.equal(directories.size, 2, 'concurrent observations own distinct scratch directories');
+      assert.equal(scratchCommands.filter((command) => command === 'remote').length, 2);
+    } else {
+      await assert.rejects(() => repository.getPushDestination(f.env), (error) => error === failure);
+      assert.equal(directories.size, 1);
+    }
+    for (const directory of directories) await assert.rejects(stat(directory), { code: 'ENOENT' });
+    assert.deepEqual(await readFile(path.join(f.repo, '.git/config')), before);
+  });
+}
+
+test('direct alias snapshot preserves global, local, and command-scope duplicates and empty values', async (t) => {
+  const f = await fixture(t);
+  const actual = path.join(f.root, 'actual.git');
+  const decoy = path.join(f.root, 'decoy.git');
+  for (const target of [actual, decoy]) await f.git('init', '--bare', '-q', target);
+  await f.git('config', '--global', `url.${actual}.pushInsteadOf`, 'unmatched:');
+  await f.git('config', `url.${decoy}.pushInsteadOf`, 'alias:repo');
+  f.env.GIT_CONFIG_COUNT = '2';
+  f.env.GIT_CONFIG_KEY_0 = `url.${actual}.pushInsteadOf`;
+  f.env.GIT_CONFIG_VALUE_0 = 'alias:repo';
+  f.env.GIT_CONFIG_KEY_1 = `url.${actual}.pushInsteadOf`;
+  f.env.GIT_CONFIG_VALUE_1 = 'alias:repo';
+  await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+  const before = await readFile(path.join(f.repo, '.git/config'));
+  const globalBefore = await readFile(f.env.GIT_CONFIG_GLOBAL!);
+  const oracle = await localPushOracle(f);
+  assert.equal(oracle, actual, 'first global base wins even when its matching values appear later');
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [oracle]);
+  assert.deepEqual(await readFile(path.join(f.repo, '.git/config')), before);
+  assert.deepEqual(await readFile(f.env.GIT_CONFIG_GLOBAL!), globalBefore);
+  // Empty prefixes are real Git values, not absent configuration.
+  f.env.GIT_CONFIG_COUNT = '1';
+  f.env.GIT_CONFIG_KEY_0 = `url.${f.root}/.pushInsteadOf`;
+  f.env.GIT_CONFIG_VALUE_0 = '';
+  await f.git('config', 'branch.main.pushRemote', 'actual.git');
+  assert.equal(await localPushOracle(f), actual);
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [actual]);
+});
+
+
+test('direct alias snapshot preserves equals, quotes, backslashes and Unicode in rewrite bases', async (t) => {
+  const f = await fixture(t);
+  const actual = path.join(f.root, 'actual=“quoted”\\target.git');
+  await f.git('init', '--bare', '-q', actual);
+  await f.git('config', `url.${actual}.pushInsteadOf`, 'alias:repo');
+  await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+  const oracle = await localPushOracle(f);
+  assert.equal(oracle, actual);
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [oracle]);
+});
