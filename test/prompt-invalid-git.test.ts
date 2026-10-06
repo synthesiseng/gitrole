@@ -107,6 +107,8 @@ async function makeFixture(): Promise<Fixture> {
   }
 
   await writeFile(env.GIT_CONFIG_GLOBAL as string, '');
+  // A clean config alone still allows Git to infer identity from the OS account.
+  git(env, ['config', '--global', 'user.useConfigOnly', 'true']);
   git(env, ['config', '--global', 'protocol.file.allow', 'always']);
 
   const aligned = path.join(root, 'aligned');
@@ -490,4 +492,36 @@ test('status, doctor, and the pre-commit hook keep git detection outside the pro
       assert.match(result.stderr, fatal, `${name} ${args.join(' ')}`);
     }
   }
+});
+
+for (const configScope of ['local', 'global']) {
+  test(`prompt warns on malformed ${configScope} config in a real work tree`, async (t) => {
+    const fixture = await makeFixture();
+    t.after(() => rm(fixture.root, { recursive: true, force: true }));
+    const configPath = configScope === 'local'
+      ? path.join(fixture.dirs.aligned, '.git/config') : fixture.env.GIT_CONFIG_GLOBAL as string;
+    const original = await readFile(configPath, 'utf8');
+    await writeFile(configPath, `${original}\n[broken\n`);
+    for (let i = 0; i < 2; i++) {
+      const result = runHelper(fixture, fixture.dirs.aligned);
+      assertResult(result, { status: 0, stdout: 'gitrole:? ⚠\n', stderr: '' }, configScope);
+      assert.equal(await calls(fixture), '', 'do not run status when discovery failed');
+    }
+    await writeFile(configPath, original);
+    assertResult(runHelper(fixture, fixture.dirs.aligned),
+      { status: 0, stdout: alignedSegment, stderr: '' }, 'recovery');
+  });
+}
+
+test('prompt warns when Git is missing and explicit formatting still needs no Git', async (t) => {
+  const fixture = await makeFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const env = { ...fixture.env, PATH: path.join(fixture.root, 'bin') };
+  const result = spawnSync(scriptPath, [], { cwd: fixture.dirs.aligned, env, encoding: 'utf8' });
+  assertResult(result, { status: 0, stdout: 'gitrole:? ⚠\n', stderr: '' }, 'missing Git');
+  assert.equal(await calls(fixture), '');
+  const formatted = spawnSync(scriptPath, ['--format'], {
+    cwd: fixture.dirs.aligned, env, input: alignedShort, encoding: 'utf8'
+  });
+  assertResult(formatted, { status: 0, stdout: alignedSegment, stderr: '' }, 'explicit format');
 });
