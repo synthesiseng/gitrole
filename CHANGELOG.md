@@ -22,9 +22,8 @@
 
 ### Bug Fixes
 
-* **prompt:** a directory with an invalid `.git` no longer prints a prompt warning
-  * an empty or corrupt `.git` directory, or a `.git` gitfile that does not point at a repository, stays empty, the same as any directory that is not a work tree
-  * `gitrole:? ⚠` reports unexpected Git discovery errors (including broken configuration or missing Git) and failed or unreadable status inside a real work tree
+* **push:** when `url.*.pushInsteadOf` rewrites only some of a remote's fetch URLs, `status` and `doctor` check those rewritten push URLs. The other fetch URLs are not push destinations. A newline in a configured push URL is still unverified.
+* **push:** a default push destination that is not a remote name is checked as the URL or path Git pushes to. That includes an scp-style SSH URL, an HTTPS URL, and a relative or absolute local path, after `insteadOf` and `pushInsteadOf`. Resolution preserves conditional include behavior; legacy `.git/remotes` and `.git/branches` destinations remain unverified. `status --short` field order is unchanged. `.` is still a local push with no GitHub authentication.
 * **roles:** `no-role` is reserved so a saved role can't collide with the status and prompt sentinel
   * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and don't write the role
   * an existing saved role named `no-role` is left in place. `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`

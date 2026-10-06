@@ -3,6 +3,9 @@
  */
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { GitNotInstalledError } from '../application/use-cases/index.js';
 import type { NonMergeCommit } from '../application/contracts.js';
@@ -192,7 +195,7 @@ export class SystemGitRepository {
 
   /** Resolves the current default push remote and all effective push URLs without contacting it. */
   async getPushDestination(env: NodeJS.ProcessEnv = process.env): Promise<PushDestination> {
-    const run = (args: string[]) => this.run(args, { env });
+    const run = (args: string[]) => this.run(args, { env: { ...env, LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C' } });
     const config = async (key: string): Promise<string | undefined> => {
       try { return (await run(['config', '--get', key])).stdout.replace(/\n$/, ''); }
       catch (error) { if ((error as { code?: number | string }).code === 1) return undefined; throw error; }
@@ -206,10 +209,31 @@ export class SystemGitRepository {
       (branch ? await config(`branch.${branch}.remote`) : undefined) ??
       (remotes.length === 1 ? remotes[0] : remotes.includes('origin') ? 'origin' : undefined);
     if (!remoteName) return { targets: [], transport, message: 'no configured default push destination' };
-    if (!remotes.includes(remoteName)) return {
-      remoteName, targets: [], transport,
-      message: remoteName === '.' ? 'local push destination has no GitHub authentication' : 'default push destination is not a configured remote'
-    };
+    if (!remotes.includes(remoteName)) {
+      if (remoteName === '.') return {
+        remoteName, targets: [], transport,
+        message: 'local push destination has no GitHub authentication'
+      };
+      if (/[\r\n\0]/.test(remoteName)) return {
+        remoteName, targets: [], transport,
+        message: 'resolved push URL framing is unsupported; destination is unverified'
+      };
+      // Legacy .git/remotes and .git/branches entries are not listed by `remote`.
+      // Let Git distinguish these from direct tokens without inventing a URL.
+      try {
+        await run(['remote', 'get-url', '--push', '--all', '--', remoteName]);
+        return { remoteName, targets: [], transport, message: 'legacy push remote is unsupported; destination is unverified' };
+      } catch (error) {
+        const failure = error as { code?: number; stderr?: string };
+        if (failure.code !== 2 || failure.stderr !== `error: No such remote '${remoteName}'\n`) throw error;
+      }
+      const url = await this.resolveDirectPushUrl(run, remoteName, env);
+      if (!url) return {
+        remoteName, targets: [], transport,
+        message: 'resolved push URL framing is unsupported; destination is unverified'
+      };
+      return { remoteName, targets: [parseRemoteUrl(remoteName, url)], transport };
+    }
     const receivePack = await config(`remote.${remoteName}.receivepack`);
     if (receivePack !== undefined && receivePack !== 'git-receive-pack') {
       transport.supported = false; transport.message = 'custom receive-pack context is unsupported; authentication is unverified';
@@ -230,12 +254,64 @@ export class SystemGitRepository {
       return { remoteName, targets: [], transport, message: 'push URL framing is unsupported; destination is unverified' };
     }
     const urls = (await run(['remote', 'get-url', '--push', '--all', '--', remoteName])).stdout.replace(/\n$/, '').split('\n');
-    if (urls.length !== configuredUrls.length || urls.some((url) => !url || /[\r\n\0]/.test(url))) {
+    // A rewrite base is a config key, which Git rejects when it contains a newline,
+    // and configured URLs with a newline are already rejected above. Aliasing therefore
+    // cannot split one URL into several lines. A longer get-url line count is still
+    // unsupported framing. A shorter list is pushInsteadOf rewriting only some fetch
+    // URLs: Git pushes those and does not push the other fetch URLs.
+    if (!urls.length || urls.length > configuredUrls.length || urls.some((url) => !url || /[\r\n\0]/.test(url))) {
       return { remoteName, targets: [], transport, message: 'resolved push URL framing is unsupported; destination is unverified' };
     }
     return {
       remoteName, targets: urls.map((url) => parseRemoteUrl(remoteName, url)), transport
     };
+  }
+
+  private async resolveDirectPushUrl(
+    run: (args: string[]) => Promise<ExecResult>,
+    destination: string,
+    env: NodeJS.ProcessEnv
+  ): Promise<string | undefined> {
+    // Evaluate includes in the original context, then replay only effective aliases.
+    // A synthetic remote in that context could activate an inactive hasconfig include.
+    let output = '';
+    try {
+      output = (await run(['config', '--null', '--get-regexp', '^url\\..*\\.(pushinsteadof|insteadof)$'])).stdout;
+    } catch (error) {
+      if ((error as { code?: number }).code !== 1) throw error;
+    }
+    const aliases: NodeJS.ProcessEnv = {};
+    const entries = output ? output.split('\0') : [''];
+    if (entries.pop() !== '') return undefined;
+    for (const [index, entry] of entries.entries()) {
+      const separator = entry.indexOf('\n');
+      const key = entry.slice(0, separator);
+      if (separator < 0 || !/^url\..*\.(pushinsteadof|insteadof)$/.test(key)) return undefined;
+      // Separate key/value environment entries preserve order, duplicates, empty
+      // values and '=' in keys without implementing any of Git's rewrite rules.
+      aliases[`GIT_CONFIG_KEY_${index}`] = key;
+      aliases[`GIT_CONFIG_VALUE_${index}`] = entry.slice(separator + 1);
+    }
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'gitrole-push-resolve-'));
+    try {
+      const globalConfig = path.join(directory, 'empty-global');
+      await writeFile(globalConfig, '', { mode: 0o600 });
+      const isolatedEnv: NodeJS.ProcessEnv = {
+        ...Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith('GIT_'))),
+        GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: globalConfig,
+        LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C'
+      };
+      await this.run(['init', '--quiet', '--bare', '--template=', directory], { env: isolatedEnv });
+      const gitDir = `--git-dir=${directory}`;
+      await this.run([gitDir, 'config', '--local', 'remote.probe.url', destination], { env: isolatedEnv });
+      const resolved = await this.run([gitDir, 'remote', 'get-url', '--push', '--all', '--', 'probe'], {
+        env: { ...isolatedEnv, ...aliases, GIT_CONFIG_COUNT: String(entries.length) }
+      });
+      const url = resolved.stdout.replace(/\n$/, '');
+      return url && !/[\r\n\0]/.test(url) ? url : undefined;
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 
   private async getPushTransport(

@@ -5,12 +5,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile, mkdir, chmod, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { SystemGitRepository, parseRemoteUrl } from '../src/adapters/git-repository.js';
 import { SystemGitConfig } from '../src/adapters/git-config.js';
 import { getStatus, doctor } from '../src/application/use-cases/index.js';
+import { renderShortStatus } from '../src/interface/renderer.js';
 import type { DoctorDependencies } from '../src/application/contracts.js';
 const execFile = promisify(nodeExecFile);
 
@@ -52,7 +53,11 @@ test('real Git resolves default remote precedence and URLs, independent of upstr
   assert.equal(result.targets[0].user, 'alice'); assert.equal(result.targets[0].port, 2222);
   assert.equal(result.targets[0].host, 'push.test');
   await f.git('config', 'branch.main.pushRemote', 'missing');
-  assert.match((await f.repository.getPushDestination(f.env)).message!, /not a configured remote/);
+  const missing = await f.repository.getPushDestination(f.env);
+  assert.equal(missing.remoteName, 'missing');
+  assert.equal(missing.message, undefined);
+  assert.deepEqual(missing.targets.map((target) => target.url), ['missing']);
+  assert.equal(missing.targets[0].protocol, 'unknown');
   await f.git('config', 'branch.main.pushRemote', '.');
   assert.match((await f.repository.getPushDestination(f.env)).message!, /local push/);
   for (const key of ['branch.main.pushRemote', 'remote.pushDefault', 'branch.main.remote']) await f.git('config', '--unset', key);
@@ -229,7 +234,7 @@ test('present empty default remote settings refuse fallback exactly as Git does'
     const destination = await f.repository.getPushDestination(f.env);
     assert.equal(destination.targets.length, 0, key);
     assert.match(destination.message!, /no configured/, key);
-    await assert.rejects(() => f.git('push', '--dry-run'), /No configured push destination/);
+    await assert.rejects(() => f.git('push', '--dry-run'), /No configured push destination|no path specified/);
     await f.git('config', '--unset', key);
   }
 });
@@ -273,6 +278,210 @@ test('a configured remote beginning with an option is queried literally', async 
   assert.match((await f.git('push', '--dry-run')).stderr, /main/);
 });
 
+test('insteadOf, pushInsteadOf, and pushurl use the URL Git pushes', async (t) => {
+  const f = await fixture(t);
+  await f.git('remote', 'add', 'origin', 'https://fetch.test/acme/repo.git');
+  await f.git('remote', 'set-url', '--add', 'origin', 'https://other.test/two.git');
+  await f.git('config', 'url.ssh://mirror.test/.insteadOf', 'https://fetch.test/');
+  let destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), [
+    'ssh://mirror.test/acme/repo.git',
+    'https://other.test/two.git'
+  ]);
+  await f.git('remote', 'remove', 'origin');
+  await f.git('config', '--unset', 'url.ssh://mirror.test/.insteadOf');
+  await f.git('remote', 'add', 'origin', 'https://fetch.test/acme/repo.git');
+  await f.git('config', 'url.ssh://short.test/.insteadOf', 'https://fetch.test/');
+  await f.git('config', 'url.ssh://long.test/acme/.insteadOf', 'https://fetch.test/acme/');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['ssh://long.test/acme/repo.git']);
+  await f.git('config', 'url.git@push.test:.pushInsteadOf', 'https://fetch.test/');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['git@push.test:acme/repo.git']);
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  assert.equal(destination.targets[0].host, 'push.test');
+  await f.git('config', 'remote.origin.pushurl', 'https://fetch.test/explicit/repo.git');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['ssh://short.test/explicit/repo.git']);
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  await f.git('config', '--add', 'remote.origin.pushurl', 'git@second.test:acme/repo.git');
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), [
+    'ssh://short.test/explicit/repo.git',
+    'git@second.test:acme/repo.git'
+  ]);
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(diagnosis.repository.push?.targets[0].remote.url, 'ssh://short.test/explicit/repo.git');
+  assert.equal(diagnosis.repository.push?.targets[1].remote.url, 'git@second.test:acme/repo.git');
+  assert.deepEqual(f.calls.map((call) => call.host), ['short.test', 'second.test']);
+});
+
+test('pushInsteadOf that matches only some fetch URLs is the push destination', async (t) => {
+  const f = await fixture(t);
+  const bare = path.join(f.root, 'bare.git');
+  await f.git('init', '--bare', '-q', bare);
+  await f.git('remote', 'add', 'origin', 'https://fetch.test/one.git');
+  await f.git('remote', 'set-url', '--add', 'origin', 'git@other.test:two.git');
+  await f.git('config', `url.${bare}.pushInsteadOf`, 'https://fetch.test/one.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.message, undefined);
+  assert.equal(destination.remoteName, 'origin');
+  assert.deepEqual(destination.targets.map((target) => target.url), [bare]);
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    `default push remote origin uses unknown at ${bare}`
+  );
+  assert.equal(f.calls.length, 0);
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hookPath = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
+  await chmod(hookPath, 0o755);
+  const pushed = await f.git('push', '--dry-run', 'origin', 'HEAD:refs/heads/main');
+  assert.equal(pushed.stdout.trim(), bare);
+});
+
+test('an scp URL configured as the push destination is checked as that URL', async (t) => {
+  const f = await fixture(t);
+  await f.git('remote', 'add', 'gitrole-push-probe', 'git@probe.test:acme/repo.git');
+  await f.git('config', 'branch.main.pushRemote', 'git@github.com:owner/repo.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.remoteName, 'git@github.com:owner/repo.git');
+  assert.equal(destination.message, undefined);
+  assert.equal(destination.targets.length, 1);
+  assert.equal(destination.targets[0].url, 'git@github.com:owner/repo.git');
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  assert.equal(destination.targets[0].host, 'github.com');
+  assert.equal(destination.targets[0].user, 'git');
+  assert.equal(destination.targets[0].owner, 'owner');
+  assert.equal(destination.targets[0].repository, 'repo');
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    'default push remote git@github.com:owner/repo.git uses ssh at git@github.com:owner/repo.git'
+  );
+  assert.deepEqual(f.calls.map((call) => call.host), ['github.com']);
+  assert.equal((await f.git('remote')).stdout, 'gitrole-push-probe\n');
+});
+
+test('an https URL push destination keeps the HTTPS pin check', async (t) => {
+  const f = await fixture(t);
+  await f.git('config', 'branch.main.pushRemote', 'https://github.com/owner/repo.git');
+  let diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'auth')?.message,
+    'push destination uses HTTPS and no repo pin is configured'
+  );
+  assert.equal(diagnosis.repository.push?.targets[0].remote.url, 'https://github.com/owner/repo.git');
+  assert.equal(diagnosis.repository.push?.targets[0].remote.protocol, 'https');
+  assert.equal(f.calls.length, 0);
+  await f.git('config', 'branch.main.pushRemote', 'https://work.test/acme/repo.git');
+  await writeFile(path.join(f.repo, '.gitrole'), JSON.stringify({ version: 1, defaultRole: 'work', allowedRoles: ['work'] }));
+  const status = await getStatus(f.dependencies);
+  assert.equal(
+    renderShortStatus(status),
+    'role=work scope=local override=true commit=ok remote=ok auth=na policy=ok overall=aligned'
+  );
+  diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'auth')?.message,
+    'push destination uses HTTPS; SSH auth verification does not apply'
+  );
+});
+
+test('a relative path push destination is the path Git pushes to', async (t) => {
+  const f = await fixture(t);
+  const other = path.join(f.root, 'other-repo');
+  await f.git('init', '--bare', '-q', other);
+  await f.git('config', 'branch.main.pushRemote', '../other-repo');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.message, undefined);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['../other-repo']);
+  assert.equal(destination.targets[0].protocol, 'unknown');
+  const diagnosis = await doctor(f.dependencies);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    'default push remote ../other-repo uses unknown at ../other-repo'
+  );
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'auth')?.message,
+    'push transport is unsupported; authentication is unverified'
+  );
+  assert.equal(f.calls.length, 0);
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hookPath = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
+  await chmod(hookPath, 0o755);
+  const pushed = await f.git('push', '--dry-run');
+  assert.equal(pushed.stdout.trim(), '../other-repo');
+});
+
+test('an absolute path push destination is the path Git pushes to', async (t) => {
+  const f = await fixture(t);
+  const other = path.join(f.root, 'other repo.git');
+  await f.git('init', '--bare', '-q', other);
+  await f.git('config', 'branch.main.remote', other);
+  await f.git('remote', 'add', 'origin', 'git@work.test:acme/repo.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.remoteName, other);
+  assert.equal(destination.message, undefined);
+  assert.deepEqual(destination.targets.map((target) => target.url), [other]);
+  assert.equal(destination.targets[0].protocol, 'unknown');
+  assert.equal(f.calls.length, 0);
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hookPath = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hookPath, '#!/bin/sh\nprintf \'%s\\n\' "$2"\nexit 0\n');
+  await chmod(hookPath, 0o755);
+  const pushed = await f.git('push', '--dry-run');
+  assert.equal(pushed.stdout.trim(), other);
+});
+
+test('a URL push destination is rewritten with pushInsteadOf and the longest insteadOf', async (t) => {
+  const f = await fixture(t);
+  const bare = path.join(f.root, 'bare.git');
+  await f.git('init', '--bare', '-q', bare);
+  await f.git('config', `url.${bare}.pushInsteadOf`, 'https://fetch.test/acme/repo.git');
+  await f.git('config', 'url.ssh://long.test/acme/.insteadOf', 'https://fetch.test/acme/');
+  await f.git('config', 'url.ssh://short.test/.insteadOf', 'https://fetch.test/');
+  await f.git('config', 'remote.pushDefault', 'https://fetch.test/acme/repo.git');
+  let destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), [bare]);
+  assert.equal(f.calls.length, 0);
+  await f.git('config', '--unset', `url.${bare}.pushInsteadOf`);
+  f.calls.length = 0;
+  destination = await f.repository.getPushDestination(f.env);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['ssh://long.test/acme/repo.git']);
+  assert.equal(destination.targets[0].protocol, 'ssh');
+  assert.equal(destination.targets[0].host, 'long.test');
+  const status = await getStatus(f.dependencies, { offline: true });
+  assert.equal(f.calls.length, 0);
+  assert.equal(status.auth, 'na');
+  assert.equal(status.remote, 'warn');
+  const diagnosis = await doctor(f.dependencies);
+  assert.deepEqual(f.calls.map((call) => call.host), ['long.test']);
+  assert.equal(
+    diagnosis.checks.find((check) => check.label === 'remote' && check.status === 'info')?.message,
+    'default push remote https://fetch.test/acme/repo.git uses ssh at ssh://long.test/acme/repo.git'
+  );
+});
+
+test('a named remote push destination is unchanged by URL and path resolution', async (t) => {
+  const f = await fixture(t);
+  await f.git('remote', 'add', 'origin', 'git@work.test:acme/repo.git');
+  const destination = await f.repository.getPushDestination(f.env);
+  assert.equal(destination.remoteName, 'origin');
+  assert.equal(destination.message, undefined);
+  assert.deepEqual(destination.targets.map((target) => target.url), ['git@work.test:acme/repo.git']);
+  assert.equal(destination.targets[0].host, 'work.test');
+  const status = await getStatus(f.dependencies, { offline: true });
+  assert.equal(
+    renderShortStatus(status),
+    'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned'
+  );
+  assert.equal(f.calls.length, 0);
+  assert.equal((await f.git('remote')).stdout, 'origin\n');
+});
+
 for (const remoteName of [' push', 'push ']) {
   test(`real Git preserves remote name whitespace: ${JSON.stringify(remoteName)}`, async (t) => {
     const f = await fixture(t);
@@ -290,3 +499,170 @@ for (const remoteName of [' push', 'push ']) {
     }
   });
 }
+
+// A real default push to disposable local repositories is the destination oracle.
+async function localPushOracle(f: Awaited<ReturnType<typeof fixture>>): Promise<string> {
+  await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
+  const hook = path.join(f.repo, '.git/hooks/pre-push');
+  await writeFile(hook, '#!/bin/sh\nprintf \'%s\\n\' "$2"\n');
+  await chmod(hook, 0o755);
+  return (await f.git('push', '--dry-run')).stdout.replace(/\n$/, '');
+}
+
+test('direct resolution preserves inactive and active hasconfig includes without config writes', async (t) => {
+  const f = await fixture(t);
+  const actual = path.join(f.root, 'actual.git');
+  const rewritten = path.join(f.root, 'rewritten.git');
+  for (const target of [actual, rewritten]) await f.git('init', '--bare', '-q', target);
+  const included = path.join(f.root, 'conditional.config');
+  await f.git('config', '--file', included, `url.${rewritten}.pushInsteadOf`, actual);
+  await f.git('config', `includeIf.hasconfig:remote.*.url:${actual}.path`, included);
+  await f.git('config', 'branch.main.pushRemote', actual);
+  for (const active of [false, true]) {
+    if (active) await f.git('remote', 'add', 'included-trigger', actual);
+    const before = await readFile(path.join(f.repo, '.git/config'), 'utf8');
+    const expected = await localPushOracle(f);
+    assert.equal(expected, active ? rewritten : actual);
+    const destination = await f.repository.getPushDestination(f.env);
+    assert.deepEqual(destination.targets.map((target) => target.url), [expected]);
+    const status = await getStatus(f.dependencies, { offline: true });
+    assert.equal(status.remote, 'warn');
+    assert.equal(f.calls.length, 0);
+    assert.equal(await readFile(path.join(f.repo, '.git/config'), 'utf8'), before);
+  }
+});
+
+for (const directory of ['remotes', 'branches']) {
+  test(`legacy .git/${directory} destinations stay unverified instead of checking a token rewrite`, async (t) => {
+    const f = await fixture(t);
+    const actual = path.join(f.root, 'actual.git');
+    const decoy = path.join(f.root, 'decoy.git');
+    for (const target of [actual, decoy]) await f.git('init', '--bare', '-q', target);
+    await mkdir(path.join(f.repo, '.git', directory), { recursive: true });
+    await writeFile(path.join(f.repo, '.git', directory, 'legacy'), directory === 'remotes'
+      ? `URL: ${actual}\nPush: refs/heads/main:refs/heads/main\n` : `${actual}#main\n`);
+    await f.git('config', 'branch.main.pushRemote', 'legacy');
+    await f.git('config', `url.${decoy}.insteadOf`, 'legacy');
+    assert.equal((await f.git('remote')).stdout, '');
+    assert.equal((await f.git('remote', 'get-url', '--push', '--all', 'legacy')).stdout.trim(), actual);
+    assert.equal(await localPushOracle(f), actual);
+    const destination = await f.repository.getPushDestination(f.env);
+    assert.deepEqual(destination.targets, []);
+    assert.match(destination.message!, /legacy.*unverified/);
+    await getStatus(f.dependencies, { offline: true });
+    assert.equal(f.calls.length, 0);
+  });
+}
+
+for (const kind of ['insteadof', 'pushinsteadof']) {
+  test(`direct ${kind} keeps Git's first-base tie order and does not chain aliases`, async (t) => {
+    const f = await fixture(t);
+    const actual = path.join(f.root, 'actual.git');
+    const decoy = path.join(f.root, 'decoy.git');
+    for (const target of [actual, decoy]) await f.git('init', '--bare', '-q', target);
+    await f.git('config', `url.${actual}.${kind}`, 'nonmatching:');
+    await f.git('config', `url.${decoy}.${kind}`, 'alias:repo');
+    await f.git('config', '--add', `url.${actual}.${kind}`, 'alias:repo');
+    await f.git('config', `url.${decoy}.insteadOf`, actual);
+    await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+    assert.equal(await localPushOracle(f), actual);
+    assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [actual]);
+  });
+}
+
+test('direct tokens preserve tabs and option-like values, reject newlines and propagate Git errors', async (t) => {
+  const f = await fixture(t);
+  for (const token of ['-option=repo', 'tab\tpath', 'path (push)']) {
+    await f.git('config', 'branch.main.pushRemote', token);
+    assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [token]);
+  }
+  await f.git('config', 'branch.main.pushRemote', 'path\nother');
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets, []);
+  await f.git('config', 'branch.main.pushRemote', 'direct:repo');
+  const failure = Object.assign(new Error('unrelated get-url failure'), { code: 2, stderr: 'error: unrelated\n' });
+  const repository = new SystemGitRepository({ exec: async (file, args, options) => {
+    if (args[0] === 'remote' && args[1] === 'get-url') throw failure;
+    return execFile(file, args, { cwd: f.repo, env: options?.env ?? f.env });
+  } });
+  await assert.rejects(() => repository.getPushDestination(f.env), (error) => error === failure);
+});
+
+for (const failAt of ['none', 'init', 'config', 'remote']) {
+  test(`direct aliases are resolved by Git in private scratch with cleanup: ${failAt}`, async (t) => {
+    const f = await fixture(t);
+    const target = path.join(f.root, 'actual.git');
+    await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+    await f.git('config', `url.${target}.pushInsteadOf`, 'alias:repo');
+    f.env.GIT_DIR = path.join(f.repo, '.git');
+    const before = await readFile(path.join(f.repo, '.git/config'));
+    const directories = new Set<string>();
+    const scratchCommands: string[] = [];
+    const failure = Object.assign(new Error(`scratch ${failAt} failed`), { code: 37 });
+    const repository = new SystemGitRepository({ exec: async (file, args, options) => {
+      assert.equal(file, 'git', 'resolution must not execute SSH or another transport');
+      const directory = args[0] === 'init' ? args.at(-1) : args[0].startsWith('--git-dir=') ? args[0].slice(10) : undefined;
+      if (directory) {
+        directories.add(directory);
+        assert.equal((await stat(directory)).mode & 0o777, 0o700);
+        assert.equal(options?.env.GIT_DIR, undefined);
+        const command = args[0] === 'init' ? 'init' : args.includes('remote') ? 'remote' : 'config';
+        if (command !== 'remote') assert.equal(options?.env.GIT_CONFIG_COUNT, undefined);
+        scratchCommands.push(command);
+        if (command === failAt) throw failure;
+      }
+      return execFile(file, args, { cwd: f.repo, env: options?.env ?? f.env });
+    } });
+    if (failAt === 'none') {
+      const results = await Promise.all([repository.getPushDestination(f.env), repository.getPushDestination(f.env)]);
+      for (const result of results) assert.deepEqual(result.targets.map((remote) => remote.url), [target]);
+      assert.equal(directories.size, 2, 'concurrent observations own distinct scratch directories');
+      assert.equal(scratchCommands.filter((command) => command === 'remote').length, 2);
+    } else {
+      await assert.rejects(() => repository.getPushDestination(f.env), (error) => error === failure);
+      assert.equal(directories.size, 1);
+    }
+    for (const directory of directories) await assert.rejects(stat(directory), { code: 'ENOENT' });
+    assert.deepEqual(await readFile(path.join(f.repo, '.git/config')), before);
+  });
+}
+
+test('direct alias snapshot preserves global, local, and command-scope duplicates and empty values', async (t) => {
+  const f = await fixture(t);
+  const actual = path.join(f.root, 'actual.git');
+  const decoy = path.join(f.root, 'decoy.git');
+  for (const target of [actual, decoy]) await f.git('init', '--bare', '-q', target);
+  await f.git('config', '--global', `url.${actual}.pushInsteadOf`, 'unmatched:');
+  await f.git('config', `url.${decoy}.pushInsteadOf`, 'alias:repo');
+  f.env.GIT_CONFIG_COUNT = '2';
+  f.env.GIT_CONFIG_KEY_0 = `url.${actual}.pushInsteadOf`;
+  f.env.GIT_CONFIG_VALUE_0 = 'alias:repo';
+  f.env.GIT_CONFIG_KEY_1 = `url.${actual}.pushInsteadOf`;
+  f.env.GIT_CONFIG_VALUE_1 = 'alias:repo';
+  await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+  const before = await readFile(path.join(f.repo, '.git/config'));
+  const globalBefore = await readFile(f.env.GIT_CONFIG_GLOBAL!);
+  const oracle = await localPushOracle(f);
+  assert.equal(oracle, actual, 'first global base wins even when its matching values appear later');
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [oracle]);
+  assert.deepEqual(await readFile(path.join(f.repo, '.git/config')), before);
+  assert.deepEqual(await readFile(f.env.GIT_CONFIG_GLOBAL!), globalBefore);
+  // Empty prefixes are real Git values, not absent configuration.
+  f.env.GIT_CONFIG_COUNT = '1';
+  f.env.GIT_CONFIG_KEY_0 = `url.${f.root}/.pushInsteadOf`;
+  f.env.GIT_CONFIG_VALUE_0 = '';
+  await f.git('config', 'branch.main.pushRemote', 'actual.git');
+  assert.equal(await localPushOracle(f), actual);
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [actual]);
+});
+
+
+test('direct alias snapshot preserves equals, quotes, backslashes and Unicode in rewrite bases', async (t) => {
+  const f = await fixture(t);
+  const actual = path.join(f.root, 'actual=“quoted”\\target.git');
+  await f.git('init', '--bare', '-q', actual);
+  await f.git('config', `url.${actual}.pushInsteadOf`, 'alias:repo');
+  await f.git('config', 'branch.main.pushRemote', 'alias:repo');
+  const oracle = await localPushOracle(f);
+  assert.equal(oracle, actual);
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((target) => target.url), [oracle]);
+});
