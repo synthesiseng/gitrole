@@ -106,11 +106,11 @@ The source repository includes `examples/prompt/fish.fish`. Fish was unavailable
 
 | What you see | Next check |
 | --- | --- |
-| `gitrole:? ⚠` | Run `gitrole status --short --offline` separately and read stderr. Confirm `gitrole` is on `PATH`. |
+| `gitrole:? ⚠` | Git discovery failed (for example, broken Git configuration or missing `git`), or status inside a real work tree failed: the status line was unreadable, the command failed, or `gitrole` is not on `PATH`. Run `gitrole status --short --offline` separately and read stderr. |
 | `gitrole-prompt: command not found` | Run `command -v gitrole-prompt`, then check your installation channel/version. |
 | A role with `⚠` | Use `gitrole doctor` to explain warnings; HTTPS pins are checked even offline. |
 | Empty in zsh | Replace an older function that assigns read-only `status` with the current source example using `status_code`. If a theme rewrites `PROMPT`, review its theme string. |
-| Empty outside a repository | Expected. |
+| Empty outside a repository | Expected. An empty or corrupt `.git` directory, or a `.git` file that does not point at a repository, is not a work tree. The segment stays empty and does not warn. |
 
 `gitrole-prompt` is not on `PATH` if `command -v gitrole-prompt` prints no path. The offline status command does not emit `auth=ok`.
 
