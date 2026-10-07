@@ -69,6 +69,9 @@ export function parseRemoteUrl(name: string, url: string): RemoteInfo {
     } catch { return { name, url, protocol: 'unknown' }; }
   }
 
+  // Git selects an explicit remote helper before considering SCP-style SSH.
+  if (/^[A-Za-z0-9][A-Za-z0-9+.-]*::/.test(url)) return { name, url, protocol: 'unknown' };
+
   const sshScpMatch = /^(?:([^@/:]+)@)?([^/:]+):(.+)$/i.exec(url);
   if (sshScpMatch && !url.includes('://') && !/^[A-Za-z]:[\\/]/.test(url)) {
     const [, user, host, path] = sshScpMatch;
