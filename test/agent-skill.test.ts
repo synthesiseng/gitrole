@@ -44,3 +44,18 @@ test('agent skill is packaged and tells agents to stop on warning', async () => 
   assert.match(skill, /not branch readiness, push permission or successful push/);
   assert.match(skill, /every Git-resolved push URL/);
 });
+
+test('agent guidance uses status as the gate and keeps doctor history diagnostics separate', async () => {
+  const skill = await readFile(skillPath, 'utf8');
+  const guide = await readFile(path.join(repoRoot, 'docs/guides/verify-git-identity-before-an-agent-commits.md'), 'utf8');
+  const automation = await readFile(path.join(repoRoot, 'docs/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation.md'), 'utf8');
+  for (const document of [skill, guide, automation]) {
+    const text = document.replace(/<[^>]+>/g, '').replace(/`/g, '');
+    assert.match(text, /status --short[^.]*precommit gate/i);
+    assert.match(text, /doctor[^.]*not[^.]*substitute/i);
+    assert.match(text, /no commits|no history|missing.history/i);
+    assert.match(text, /Do not[^.]*status warning/i);
+  }
+  assert.doesNotMatch(skill, /Run the chosen command|Prefer the first command/);
+  assert.doesNotMatch(automation, /status --short<\/code> or <code>gitrole doctor --json/);
+});

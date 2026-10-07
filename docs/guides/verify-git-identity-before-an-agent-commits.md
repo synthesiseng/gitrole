@@ -34,7 +34,7 @@ fi
 
 <h2 id="what-the-agent-runs">How the agent reads the check</h2>
 
-<p>The skill's preferred command is:</p>
+<p>Use <code>gitrole status --short</code> as the precommit gate, including before the first commit:</p>
 
 ```bash
 gitrole status --short
@@ -102,13 +102,15 @@ role=work scope=global override=false commit=warn remote=ok auth=ok policy=na ov
 
 <h2 id="full-diagnosis">Full diagnosis</h2>
 
-<p>When the agent needs the reason, not only the line:</p>
+<p>Use doctor for broader diagnosis when a check needs explanation. Doctor is not a substitute for the precommit gate:</p>
 
 ```bash
 gitrole doctor --json
 ```
 
-<p>Stop on exit <code>2</code>, on <code>overall</code> <code>warning</code>, or when any <code>checks[].status</code> is <code>warn</code>. <code>info</code> is not a warning. Exit <code>1</code> prints no JSON. Don't parse <code>checks[].message</code>. Field names are in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.</p>
+<p>Doctor also checks history. A fresh repository with an explicit local role and an allowing HTTPS pin can have aligned status while doctor exits <code>2</code> with only a <code>history</code> warning because it has no commits. Run the status gate before the separately authorized first commit; do not create a commit just to silence doctor. If doctor was run first, use status for the precommit decision. Other diagnostic warnings or errors require investigation; a clean status does not dismiss them.</p>
+
+<p>Do not bypass any status warning. Status exit <code>1</code> or <code>2</code> still stops the agent. Doctor warnings remain warnings; do not filter checks to turn the diagnosis into a pass. <code>info</code> is not a warning. Doctor exit <code>1</code> prints no JSON. Don't parse <code>checks[].message</code>. Field names are in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.</p>
 
 <h2 id="what-it-does-not-do">What it doesn't do</h2>
 
