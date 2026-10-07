@@ -30,6 +30,15 @@
   * `gitrole status` and the prompt segment still run for that legacy role. Prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.10.9](https://github.com/synthesiseng/gitrole/compare/v0.10.8...v0.10.9) (2026-10-07)
+
+
+### Bug Fixes
+
+* **prompt:** distinguish invalid metadata from discovery failures ([#103](https://github.com/synthesiseng/gitrole/issues/103)) ([d734ab1](https://github.com/synthesiseng/gitrole/commit/d734ab18619101d8ceb80aa6c4120136dc5c8fa2))
+* **push:** resolve default destinations with Git ([#104](https://github.com/synthesiseng/gitrole/issues/104)) ([fb5a853](https://github.com/synthesiseng/gitrole/commit/fb5a85392aa997bd2e9d734768a0db234765ceee))
+* **push:** resolve literal-dot destinations before classification ([#106](https://github.com/synthesiseng/gitrole/issues/106)) ([5191fa5](https://github.com/synthesiseng/gitrole/commit/5191fa554473963bf5220240164b596b905764ee))
+
 ## [0.10.8](https://github.com/synthesiseng/gitrole/compare/v0.10.7...v0.10.8) (2026-10-02)
 
 
