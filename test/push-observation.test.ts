@@ -509,6 +509,85 @@ async function localPushOracle(f: Awaited<ReturnType<typeof fixture>>): Promise<
   return (await f.git('push', '--dry-run')).stdout.replace(/\n$/, '');
 }
 
+for (const key of ['branch.main.pushRemote', 'remote.pushDefault', 'branch.main.remote']) {
+  test(`literal-dot destination stays local without a matching rewrite: ${key}`, async (t) => {
+    const f = await fixture(t);
+    f.env.GIT_ALLOW_PROTOCOL = 'file';
+    await f.git('config', key, '.');
+    await f.git('config', `url.${f.root}/unused.git.pushInsteadOf`, 'unmatched:');
+    assert.equal(await localPushOracle(f), '.');
+    const destination = await f.repository.getPushDestination(f.env);
+    assert.equal(destination.remoteName, '.');
+    assert.deepEqual(destination.targets, []);
+    assert.equal(destination.message, 'local push destination has no GitHub authentication');
+  });
+
+  for (const rewrite of ['insteadOf', 'pushInsteadOf']) {
+    test(`literal-dot destination follows Git's ${rewrite} rewrite: ${key}`, async (t) => {
+      const f = await fixture(t);
+      f.env.GIT_ALLOW_PROTOCOL = 'file';
+      const target = path.join(f.root, 'rewritten.git');
+      await f.git('init', '--bare', '-q', target);
+      await f.git('config', key, '.');
+      await f.git('config', `url.${target}.${rewrite}`, '.');
+      const before = await readFile(path.join(f.repo, '.git/config'));
+      const oracle = await localPushOracle(f);
+      assert.equal(oracle, target);
+      const destination = await f.repository.getPushDestination(f.env);
+      assert.equal(destination.remoteName, '.');
+      assert.deepEqual(destination.targets.map((remote) => remote.url), [oracle]);
+      assert.equal(destination.message, undefined);
+      assert.deepEqual(await readFile(path.join(f.repo, '.git/config')), before);
+      assert.equal((await f.git('--git-dir=' + target, 'for-each-ref')).stdout, '', 'dry-run must not create remote refs');
+    });
+  }
+}
+
+for (const protocol of ['ssh', 'https']) {
+  test(`literal-dot rewrite reaches ${protocol} identity checks without network access`, async (t) => {
+    const f = await fixture(t);
+    f.env.GIT_ALLOW_PROTOCOL = 'file';
+    const target = protocol === 'ssh' ? 'git@personal.test:acme/repo.git' : 'https://personal.test/acme/repo.git';
+    await f.git('config', 'branch.main.pushRemote', '.');
+    await f.git('config', `url.${target}.pushInsteadOf`, '.');
+    const diagnosis = await doctor(f.dependencies);
+    assert.equal(diagnosis.repository.push?.targets[0]?.remote.url, target);
+    assert.equal(diagnosis.repository.push?.targets[0]?.remote.protocol, protocol);
+    assert.equal(diagnosis.overall, 'warning');
+    assert.ok(diagnosis.checks.some((check) => check.label === 'auth' && check.status === 'warn'));
+    assert.deepEqual(f.calls.map((call) => call.host), protocol === 'ssh' ? ['personal.test'] : []);
+    f.calls.length = 0;
+    const offline = await getStatus(f.dependencies, { offline: true });
+    assert.equal(offline.auth, protocol === 'ssh' ? 'na' : 'warn');
+    assert.equal(offline.remote, 'warn');
+    assert.deepEqual(f.calls, []);
+  });
+}
+
+test('literal-dot named remote uses its configured push URL', async (t) => {
+  const f = await fixture(t);
+  f.env.GIT_ALLOW_PROTOCOL = 'file';
+  const target = path.join(f.root, 'named.git');
+  await f.git('init', '--bare', '-q', target);
+  await f.git('config', 'remote...url', path.join(f.root, 'unused.git'));
+  await f.git('config', 'remote...pushurl', target);
+  await f.git('config', 'branch.main.pushRemote', '.');
+  await f.git('config', `url.${f.root}/decoy.git.pushInsteadOf`, '.');
+  assert.equal(await localPushOracle(f), target);
+  assert.deepEqual((await f.repository.getPushDestination(f.env)).targets.map((remote) => remote.url), [target]);
+});
+
+test('literal-dot destination propagates Git rewrite inspection errors', async (t) => {
+  const f = await fixture(t);
+  await f.git('config', 'branch.main.pushRemote', '.');
+  const failure = Object.assign(new Error('rewrite inspection failed'), { code: 37 });
+  const repository = new SystemGitRepository({ exec: async (file, args, options) => {
+    if (args.includes('--get-regexp')) throw failure;
+    return execFile(file, args, { cwd: f.repo, env: options?.env ?? f.env });
+  } });
+  await assert.rejects(() => repository.getPushDestination(f.env), (error) => error === failure);
+});
+
 test('direct resolution preserves inactive and active hasconfig includes without config writes', async (t) => {
   const f = await fixture(t);
   const actual = path.join(f.root, 'actual.git');

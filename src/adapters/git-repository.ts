@@ -210,10 +210,6 @@ export class SystemGitRepository {
       (remotes.length === 1 ? remotes[0] : remotes.includes('origin') ? 'origin' : undefined);
     if (!remoteName) return { targets: [], transport, message: 'no configured default push destination' };
     if (!remotes.includes(remoteName)) {
-      if (remoteName === '.') return {
-        remoteName, targets: [], transport,
-        message: 'local push destination has no GitHub authentication'
-      };
       if (/[\r\n\0]/.test(remoteName)) return {
         remoteName, targets: [], transport,
         message: 'resolved push URL framing is unsupported; destination is unverified'
@@ -231,6 +227,11 @@ export class SystemGitRepository {
       if (!url) return {
         remoteName, targets: [], transport,
         message: 'resolved push URL framing is unsupported; destination is unverified'
+      };
+      // A literal dot is local only if Git's URL rewrites leave it unchanged.
+      if (remoteName === '.' && url === '.') return {
+        remoteName, targets: [], transport,
+        message: 'local push destination has no GitHub authentication'
       };
       return { remoteName, targets: [parseRemoteUrl(remoteName, url)], transport };
     }
