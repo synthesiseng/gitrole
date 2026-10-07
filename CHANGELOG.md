@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-* **remote:** treat explicit remote-helper destinations as unsupported instead of SSH, so status and doctor warn online and offline without executing helpers.
+* **remote:** treat explicit remote-helper destinations as unsupported instead of SSH, so status warns online and offline while doctor warns online, without executing helpers.
 
 ### Push identity correctness
 
