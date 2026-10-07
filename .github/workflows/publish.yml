@@ -207,17 +207,36 @@ jobs:
           tmp="$(mktemp)"
           trap 'rm -f "$tmp"' EXIT
 
-          for attempt in 1 2 3 4 5; do
-            if curl -fsSL -o "$tmp" "$url"; then
+          deadline=$((SECONDS + 600))
+          attempt=0
+          downloaded=false
+          curl_exit=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            remaining=$((deadline - SECONDS))
+            if [ "$remaining" -le 0 ]; then
               break
             fi
-            if [ "$attempt" -eq 5 ]; then
-              echo "npm tarball is not available at ${url}." >&2
-              echo "brew-bump runs only after publish succeeds, including when that version was already on npm. The registry did not serve the tarball." >&2
-              exit 1
+            request_timeout=$((remaining < 30 ? remaining : 30))
+            connect_timeout=$((request_timeout < 10 ? request_timeout : 10))
+            attempt=$((attempt + 1))
+            if curl -fsSL --connect-timeout "$connect_timeout" --max-time "$request_timeout" -o "$tmp" "$url"; then
+              downloaded=true
+              break
+            else
+              curl_exit=$?
             fi
-            sleep $((attempt * 5))
+            remaining=$((deadline - SECONDS))
+            if [ "$remaining" -le 0 ]; then
+              break
+            fi
+            sleep "$((remaining < 10 ? remaining : 10))"
           done
+
+          if [ "$downloaded" != true ]; then
+            echo "npm tarball is not available at ${url} after the 600-second retry budget (${attempt} attempts; last curl exit ${curl_exit})." >&2
+            echo "npm publication succeeded or already existed; Homebrew was not updated. Inspect the registry and this run before retrying the failed job." >&2
+            exit 1
+          fi
 
           if ! gzip -t "$tmp"; then
             echo "Download from ${url} is not a gzip tarball." >&2

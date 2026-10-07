@@ -88,9 +88,31 @@ The fixture scheduler and source-contract checks do not execute GitHub Actions
 or prove App permissions, OIDC, tap protection or installed CLI/helper pairing.
 
 The suite characterizes inherited risks rather than approving them: failed npm
-lookups are treated as absence, curl has five attempts without a request timeout,
-and the rewriter can replace matching version text outside its primary fields.
+lookups are treated as absence, and the rewriter can replace matching version
+text outside its primary fields.
 Green fixtures do not make those behaviors safe recovery policy. Consequential changes need an owner decision.
+
+## npm tarball propagation
+
+The Homebrew job waits for the version-specific npm tarball within a 600-second
+network retry budget. Each curl request has a 10-second connection limit and a
+30-second transfer limit, both reduced when less time remains. Failed requests
+wait up to 10 seconds before retrying, also limited by the remaining budget.
+This bounds network waiting, not the entire job or local gzip/hash processing.
+
+All curl failures remain retryable within that budget. Exhaustion fails the
+step with the URL, attempt count and last curl exit code; it emits no artifact
+outputs and does not update Homebrew. A successful response must still pass the
+existing gzip and checksum checks. Invalid gzip fails immediately. Temporary
+download bytes are removed on success or failure.
+
+The local shell fixtures simulate elapsed time and transport results to check
+budget arithmetic, delayed availability and output boundaries. They do not prove
+live registry propagation or GitHub Actions execution. If npm succeeded but the
+download failed, inspect the registry and failed run before a separately approved
+job-only retry. Retrying an old run uses its original workflow, not this change;
+normal dispatch still does not update Homebrew. This change does not alter npm
+lookup failure classification or republish from the Homebrew job.
 
 ## Homebrew version-order policy
 
