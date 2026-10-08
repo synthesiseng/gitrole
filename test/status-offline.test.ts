@@ -250,6 +250,8 @@ test('status --short --offline does not run SSH and reports auth=na', async () =
   );
 
   const offline = runStatus(workspace.repo, ['--short', '--offline'], workspace.env);
+  const humanOffline = runStatus(workspace.repo, ['--offline'], workspace.env);
+  assert.match(humanOffline.stdout, /SSH authentication skipped \(--offline\); local checks only/);
   const markerAfterOffline = await readFile(workspace.sshMarker, 'utf8').catch(
     (error: NodeJS.ErrnoException) => {
       assert.equal(error.code, 'ENOENT');

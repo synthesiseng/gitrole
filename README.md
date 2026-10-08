@@ -85,6 +85,8 @@ Gitrole asks Git for the effective author and committer, including environment o
 
 Push checks cover the selected default remote and **every** Git-resolved push URL. HTTPS-only matching pins can yield `auth=na`; absent or mismatched pins warn, including offline. Mixed SSH/HTTPS warns online. Custom, interactive, or incomplete SSH contexts remain unverified. Online inspection may execute configured `Match exec` commands or DNS lookups.
 
+For an unverified SSH account, read the specific reason and any manual-check guidance. `gitrole doctor --json` retains all reported reasons; a separate SSH greeting does not verify the push context. See [SSH warnings](https://docs.gitrole.dev/guides/troubleshoot-identity-warnings/#ssh-unverified).
+
 A result is a snapshot. It cannot predict future explicit author/push arguments or changed configuration/environment, and it does not prove refspec readiness, push authorization, or push success.
 
 ## Troubleshoot and continue

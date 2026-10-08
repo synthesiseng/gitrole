@@ -1,6 +1,7 @@
 /*
  * Renders human-readable CLI output for saved roles, status, and diagnosis results.
  */
+import { summarizeSshMessage } from '../application/alignment.js';
 import os from 'node:os';
 
 import chalk from 'chalk';
@@ -197,6 +198,13 @@ export function renderShortStatus(result: StatusResult): string {
 }
 
 export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
+  const probeMessages = [result.sshAuth, ...(result.repository.push?.targets.map((target) => target.sshAuth) ?? [])]
+    .flatMap((probe) => probe?.message ? [probe.message] : []);
+  const summarizeCheck = (message: string): string => {
+    const probeMessage = probeMessages.find((candidate) => message.startsWith(candidate));
+    return probeMessage ? summarizeSshMessage(probeMessage) + message.slice(probeMessage.length) : message;
+  };
+
   const lines = [
     chalk.bold(title),
     formatDetail('role', result.role?.name ?? chalk.yellow('no matching role')),
@@ -214,7 +222,7 @@ export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
   const expectedPushAuth = formatPushAuth(result.role?.githubUser, result.role?.githubHost);
 
   if (expectedPushAuth) {
-    lines.push(formatDetail('push', expectedPushAuth));
+    lines.push(formatDetail('expected', expectedPushAuth));
   }
 
   if (result.repository.isInsideWorkTree) {
@@ -261,7 +269,7 @@ export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
   if (result.sshAuth?.githubUser) {
     lines.push(formatDetail('auth', `${result.sshAuth.githubUser} via ${result.sshAuth.host}`));
   } else if (result.sshAuth?.message) {
-    lines.push(formatDetail('auth', chalk.yellow(result.sshAuth.message)));
+    lines.push(formatDetail('auth', chalk.yellow(summarizeSshMessage(result.sshAuth.message))));
   }
 
   if (result.repoPolicy) {
@@ -281,7 +289,7 @@ export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
             ? chalk.yellow('warn')
             : chalk.blue('info');
 
-      return `  ${status} ${check.label.padEnd(6, ' ')} ${check.message}`;
+      return `  ${status} ${check.label.padEnd(6, ' ')} ${summarizeCheck(check.message)}`;
     })
   );
 

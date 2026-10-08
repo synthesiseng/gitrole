@@ -30,6 +30,18 @@ Do not switch roles or widen policy just to clear a warning. Choose the identity
 
 This is expected without an allowing pin and a saved GitHub username. Read <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>, including its HTTPS step. The check remains active offline. A matching pin can yield `auth=na`; it does not prove which account an HTTPS credential helper will use. Mixed SSH/HTTPS destinations warn online.
 
+<h2 id="ssh-unverified">SSH account unverified</h2>
+
+An unverified account is a limit of the check, not proof that your key is missing or your account is wrong. Read the reason in `status` or `doctor`. When more than one reason applies, human output points to `gitrole doctor --json`; the existing message fields contain the full list. `expected` in doctor is the saved account, not an observed login.
+
+- **Git can ask for your key passphrase.** Gitrole checks without asking, so it may have different keys available. This does not mean your key necessarily needs a prompt or that your agent or keychain is empty. Do not change SSH settings just to clear the warning.
+- **The push and check use different settings.** Review command-dependent SSH rules with whoever maintains the setup. A separate successful SSH connection does not establish the push account.
+- **A custom command or unsupported transport is selected.** Review the selected push URL and any `GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand` override. Gitrole does not execute or bypass unsupported transports to identify an account.
+- **The connection check failed.** Read the SSH error. A refusal alone does not distinguish unavailable credentials from connection or server problems. Review the intended host before changing keys or permissions.
+- **Authentication was skipped.** `status --offline` performs local checks only; it does not attempt SSH authentication. Offline `auth=na` is not a failed connection.
+
+For a supported SSH endpoint, the diagnostic may show a manual connection command. It preserves the endpoint's SSH user, host alias and explicit port. See the <a href="{{ '/use-cases/fix-pushes-using-the-wrong-github-account/#manual-check' | url }}">manual-check explanation</a> before running it. Online status and doctor can themselves connect and run configured SSH commands or change SSH state; use offline status when those effects are not acceptable.
+
 <h2 id="scope">The role or scope differs from your Git config</h2>
 
 `current` and `import current` use Git's effective author. `doctor --json` reports the effective author as `commitIdentity` and the committer as `committerIdentity`. Their field sources can be `env`, while `scope` still describes underlying configured author scope. A global name and local email yield `mixed`, not `local`.

@@ -50,7 +50,7 @@ export class SystemSshAuthProbe {
     if (context) {
       // Git uses its standard ssh transport here; an independent diagnostic binary cannot prove it.
       if (this.binaryPath !== 'ssh') {
-        return { ok: false, host, message: 'diagnostic SSH binary differs from Git transport; authentication is unverified' };
+        return { ok: false, host, message: 'diagnostic SSH binary differs from Git transport; authentication is unverified. Review the diagnostic override with the setup owner; a separate SSH check cannot verify this transport.' };
       }
       if ((context.port !== undefined && (!Number.isInteger(context.port) || context.port < 1 || context.port > 65535)) ||
           !context.path || /[\r\n\0]/.test(context.path) || host.startsWith('-') || context.user?.startsWith('-')) {
@@ -74,10 +74,25 @@ export class SystemSshAuthProbe {
         if (!complete || !noninteractive ||
           JSON.stringify([...expected]) !== JSON.stringify([...actual]) ||
           !['none', undefined].includes(expected.get('remotecommand')?.[0])) {
-          return { ok: false, host, message: 'SSH receive-pack and handshake contexts differ or are unsupported; authentication is unverified' };
+          const reasons: string[] = [];
+          if (!complete) reasons.push('OpenSSH did not report all settings needed to compare the push and connection check. Review the existing OpenSSH setup.');
+          if (expected.has('batchmode') && !noninteractive) reasons.push('Git can ask for your key passphrase during push; Gitrole checks without asking, so it may see different keys. Do not change settings just to clear this warning.');
+          if (!['none', undefined].includes(expected.get('remotecommand')?.[0])) reasons.push('A configured remote command prevents this comparison. Review whether that command is intentional; Gitrole will not bypass it.');
+          // Describe independent differences without repeating a reason already explained above.
+          const differentKeys = new Set([...expected.keys(), ...actual.keys()].filter((key) =>
+            JSON.stringify(expected.get(key)) !== JSON.stringify(actual.get(key))));
+          if (!noninteractive) differentKeys.delete('batchmode');
+          if (!['none', undefined].includes(expected.get('remotecommand')?.[0])) differentKeys.delete('remotecommand');
+          if (!complete) for (const key of required) {
+            if (!expected.has(key) || !actual.has(key)) differentKeys.delete(key);
+          }
+          if (differentKeys.size) reasons.push("Git's push command and the connection check use different SSH settings. Review command-dependent SSH rules with the setup owner.");
+          // A probe-owned message envelope keeps reason lists distinct from raw connection errors.
+          return { ok: false, host, message: `SSH account unverified:\n${reasons.map((reason) => `- ${reason}`).join('\n')}\n\n${manualCheck(host, context)}` };
+
         }
       } catch {
-        return { ok: false, host, message: 'effective OpenSSH context could not be inspected; authentication is unverified' };
+        return { ok: false, host, message: 'SSH account unverified: OpenSSH settings could not be inspected. Review the SSH configuration for errors before retrying; no account was confirmed.' };
       }
     }
     try {
@@ -85,7 +100,8 @@ export class SystemSshAuthProbe {
         '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `git@${host}`
       ], options);
 
-      return mapProbeOutput(host, `${result.stdout}\n${result.stderr}`);
+      const parsed = mapProbeOutput(host, `${result.stdout}\n${result.stderr}`);
+      return parsed.ok ? parsed : { ...parsed, message: failedCheck(parsed.message, host, context) };
     } catch (error) {
       const execError = error as NodeJS.ErrnoException & {
         stdout?: string;
@@ -96,7 +112,7 @@ export class SystemSshAuthProbe {
         return {
           ok: false,
           host,
-          message: 'ssh is not installed or not available on PATH'
+          message: 'ssh is not installed or not available on PATH. Review your OpenSSH installation and PATH before retrying.'
         };
       }
 
@@ -110,7 +126,7 @@ export class SystemSshAuthProbe {
       return {
         ok: false,
         host,
-        message: normalizeMessage(execError.message || output)
+        message: failedCheck(output.trim() || execError.message, host, context)
       };
     }
   }
@@ -150,4 +166,17 @@ function parseSshConfiguration(output: string): Map<string, string[]> {
     values.set(key, [...(values.get(key) ?? []), value]);
   }
   return new Map([...values].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+// Advice only: never run this command. Preserve SSH alias/user/port and quote every argument.
+function manualCheck(host: string, context?: SshProbeContext): string {
+  const destination = context ? (context.user ? `${context.user}@${host}` : host) : `git@${host}`;
+  if (/[\x00-\x1f\x7f]/.test(destination)) return 'Review this endpoint with the setup owner; it cannot be safely shown as a shell command.';
+  const quote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+  const port = context?.port !== undefined ? ` -p ${quote(String(context.port))}` : '';
+  return `Manual connection check:\n  ssh -T${port} -- ${quote(destination)}\nThis may ask for your key passphrase and run configured SSH commands or change SSH state. Existing settings may still disable prompts. A greeting does not verify Git's push context or change Gitrole's verdict.`;
+}
+
+function failedCheck(detail: string | undefined, host: string, context?: SshProbeContext): string {
+  return `SSH account unverified: the connection check failed or returned no recognized account. This does not tell us whether credentials are unavailable or the connection or server failed. Review the SSH error with the setup owner. Detail: ${normalizeMessage(detail ?? '')} ${manualCheck(host, context)}`;
 }
