@@ -1,7 +1,7 @@
 /** Local qualification of the shipped publish shell and formula retry boundaries. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -63,7 +63,23 @@ function fixture(t) {
   }
   stub('npm', 'echo "npm $*" >> "$EFFECTS"\ncase "$1" in\n view) exit "${LOOKUP_EXIT:-0}";;\n publish) exit "${PUBLISH_EXIT:-0}";;\n *) exit 99;;\nesac');
   // Intercept the inspected npm/curl invocations; these doubles are not a network sandbox.
-  stub('curl', 'echo "curl $*" >> "$EFFECTS"\nn=0; [ ! -f "$COUNT" ] || n=$(cat "$COUNT"); n=$((n+1)); echo "$n" > "$COUNT"\n[ "$n" -gt "${CURL_FAILURES:-0}" ] || exit 22\n[ "$#" -eq 4 ] && [ "$1" = -fsSL ] && [ "$2" = -o ] || exit 98\ncp "$PAYLOAD" "$3"');
+  stub('curl', `echo "curl $*" >> "$EFFECTS"
+n=0; [ ! -f "$COUNT" ] || n=$(cat "$COUNT"); n=$((n+1)); echo "$n" > "$COUNT"
+output=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) output="$2"; shift 2;;
+    --connect-timeout|--max-time) shift 2;;
+    -fsSL|https://registry.npmjs.org/*) shift;;
+    *) exit 98;;
+  esac
+done
+[ -n "$output" ] || exit 98
+if [ "$n" -le "\${CURL_FAILURES:-0}" ]; then
+  echo 'partial failed bytes' > "$output"
+  exit "\${CURL_EXIT:-22}"
+fi
+cp "$PAYLOAD" "$output"`);
   stub('sleep', 'echo "sleep $*" >> "$EFFECTS"');
   return {
     dir, env, stub,
@@ -145,24 +161,64 @@ test('inherited ambiguous lookup failure attempts publish; retry may fail before
   assert.equal(r.already, false); assert.equal(r.enterBrew, false);
   assert.deepEqual(f.effects(), ['npm view gitrole@0.10.4 version', 'npm publish --provenance --access public']);
 });
+// Execute the actual shell owner. Unsetting Bash's special SECONDS variable makes
+// a deterministic fixture clock; wrappers model elapsed commands, not retry logic.
+function download(f, extra = {}, source = workflow) {
+  return f.run(`unset SECONDS
+SECONDS=0
+curl() {
+  local status=0 limit=999999 elapsed="$CURL_ELAPSED" arg previous=''
+  for arg in "$@"; do
+    if [ "$previous" = --max-time ]; then limit="$arg"; fi
+    previous="$arg"
+  done
+  command curl "$@" || status=$?
+  if [ "$elapsed" -gt "$limit" ]; then elapsed="$limit"; fi
+  SECONDS=$((SECONDS + elapsed))
+  return "$status"
+}
+sleep() { command sleep "$@"; SECONDS=$((SECONDS + $1)); }
+${shell('Download npm tarball and compute sha256', source)}`, { CURL_ELAPSED: '0', ...extra });
+}
 for (const [name, failures, valid, attempts, exit] of [
-  ['immediate success', 0, true, 1, 0], ['delayed registry success', 2, true, 3, 0],
-  ['missing tarball', 5, true, 5, 1], ['invalid gzip', 0, false, 1, 1],
+  ['immediate success', 0, true, 1, 0], ['delayed registry success after old retry window', 8, true, 9, 0],
+  ['missing tarball', 100, true, 60, 1], ['invalid gzip', 0, false, 1, 1],
 ]) test(`actual download shell: ${name}`, (t) => {
   const f = fixture(t); const payload = path.join(f.dir, 'payload');
+  const temp = path.join(f.dir, 'download-temp'); mkdirSync(temp);
   const bytes = valid ? gzipSync('synthetic npm archive fixture') : Buffer.from('not gzip'); writeFileSync(payload, bytes);
-  const r = f.run(shell('Download npm tarball and compute sha256'), { PACKAGE_VERSION: '0.10.4', PAYLOAD: payload, COUNT: path.join(f.dir, 'count'), CURL_FAILURES: String(failures) });
+  const r = download(f, { TMPDIR: temp, PACKAGE_VERSION: '0.10.4', PAYLOAD: payload, COUNT: path.join(f.dir, 'count'), CURL_FAILURES: String(failures) });
   assert.equal(r.status, exit, r.stderr);
-  const effects = f.effects(); assert.equal(effects.filter((x) => x.startsWith('curl ')).length, attempts);
-  assert.deepEqual(effects.filter((x) => x.startsWith('sleep ')), Array.from({ length: valid ? Math.min(failures, 4) : 0 }, (_, i) => `sleep ${(i + 1) * 5}`));
+  const effects = f.effects(); const requests = effects.filter((x) => x.startsWith('curl '));
+  assert.equal(requests.length, attempts);
+  for (const request of requests) {
+    const limits = request.match(/--connect-timeout (\d+) --max-time (\d+) /);
+    assert.ok(limits, 'every request has connection and transfer bounds');
+    assert.ok(Number(limits[1]) > 0 && Number(limits[1]) <= 10);
+    assert.ok(Number(limits[2]) > 0 && Number(limits[2]) <= 30);
+  }
+  assert.deepEqual(effects.filter((x) => x.startsWith('sleep ')), Array(valid ? Math.min(failures, 60) : 0).fill('sleep 10'));
   const output = readFileSync(f.env.GITHUB_OUTPUT, 'utf8');
   if (exit === 0) assert.equal(output, `url=${url('0.10.4')}\nsha256=${digest(bytes)}\n`); else assert.equal(output, '');
+  if (name === 'missing tarball') assert.match(r.stderr, /600.*60 attempts.*curl exit 22/);
+  if (!valid) assert.match(r.stderr, /not a gzip tarball/);
+  assert.deepEqual(readdirSync(temp), []);
   assert.equal(effects.some((x) => x.startsWith('npm publish')), false);
 });
-test('download has five attempts but no configured per-request timeout: inherited unbounded wall-clock risk', () => {
-  const source = shell('Download npm tarball and compute sha256');
-  assert.match(source, /for attempt in 1 2 3 4 5/);
-  assert.doesNotMatch(source, /--max-time|--connect-timeout/);
+for (const [name, elapsed, attempts, lastRequest, lastSleep] of [
+  ['request timeout consumes budget', 30, 15, [10, 30], 10],
+  ['final request and connection clamp', 25, 18, [5, 5], 10],
+  ['final sleep clamp', 28, 16, [10, 30], 2],
+]) test(`actual download shell: ${name}`, (t) => {
+  const f = fixture(t);
+  const r = download(f, { PACKAGE_VERSION: '0.10.4', COUNT: path.join(f.dir, 'count'), CURL_FAILURES: '100', CURL_EXIT: '28', CURL_ELAPSED: String(elapsed) });
+  assert.equal(r.status, 1, r.stderr);
+  const requests = f.effects().filter((x) => x.startsWith('curl '));
+  assert.equal(requests.length, attempts);
+  assert.ok(requests.at(-1).includes(`--connect-timeout ${lastRequest[0]} --max-time ${lastRequest[1]} `));
+  assert.equal(f.effects().filter((x) => x.startsWith('sleep ')).at(-1), `sleep ${lastSleep}`);
+  assert.match(r.stderr, /600.*curl exit 28/);
+  assert.equal(readFileSync(f.env.GITHUB_OUTPUT, 'utf8'), '');
 });
 
 function tap(t) {
