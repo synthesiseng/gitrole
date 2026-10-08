@@ -102,9 +102,11 @@ This bounds network waiting, not the entire job or local gzip/hash processing.
 
 All curl failures remain retryable within that budget. Exhaustion fails the
 step with the URL, attempt count and last curl exit code; it emits no artifact
-outputs and does not update Homebrew. A successful response must still pass the
-existing gzip and checksum checks. Invalid gzip fails immediately. Temporary
-download bytes are removed on success or failure.
+outputs and does not update Homebrew. A successful response must pass `gzip -t`.
+The workflow computes the downloaded file's SHA-256 and checks that the digest
+text has 64 lowercase hexadecimal characters; it does not compare the digest
+with an independently trusted expected value. Invalid gzip fails immediately.
+Temporary download bytes are removed on success or failure.
 
 The local shell fixtures simulate elapsed time and transport results to check
 budget arithmetic, delayed availability and output boundaries. They do not prove
