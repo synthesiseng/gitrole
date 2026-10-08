@@ -69,7 +69,7 @@ export async function collectObservedState(
   const targets = await Promise.all(destination.targets.map(async (remote) => {
     if (!probeSsh) return { remote };
     if (remote.protocol === 'https') return { remote };
-    if (remote.protocol !== 'ssh' || !remote.host) return { remote, message: 'push transport is unsupported; authentication is unverified' };
+    if (remote.protocol !== 'ssh' || !remote.host) return { remote, message: 'push transport is unsupported; authentication is unverified. Review the selected push URL and that transport with the setup owner; changing transports just to clear a warning does not verify an account.' };
     if (!destination.transport.supported) return { remote, message: destination.transport.message ?? 'SSH transport is unverified' };
     const sshAuth = await dependencies.sshAuthProbe.probeGithubUser(remote.host, {
       user: remote.user, port: remote.port, path: remote.path, env: dependencies.env

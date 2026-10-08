@@ -323,7 +323,7 @@ export class SystemGitRepository {
   ): Promise<PushDestination['transport']> {
     // Never execute or shell-parse user-supplied wrappers, even when they happen to look like ssh.
     if (env.GIT_SSH_COMMAND !== undefined || await config('core.sshCommand') !== undefined || env.GIT_SSH !== undefined) {
-      return { supported: false, message: 'custom Git SSH command cannot be reproduced; authentication is unverified' };
+      return { supported: false, message: 'custom Git SSH command cannot be reproduced; authentication is unverified. Review GIT_SSH_COMMAND, GIT_SSH and core.sshCommand with the setup owner; do not remove an intentional override just to clear this warning.' };
     }
     const variant = env.GIT_SSH_VARIANT ?? await config('ssh.variant');
     if (variant !== undefined && variant !== 'ssh' && variant !== 'auto') return {

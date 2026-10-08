@@ -405,7 +405,7 @@ test('a relative path push destination is the path Git pushes to', async (t) => 
   );
   assert.equal(
     diagnosis.checks.find((check) => check.label === 'auth')?.message,
-    'push transport is unsupported; authentication is unverified'
+    'push transport is unsupported; authentication is unverified. Review the selected push URL and that transport with the setup owner; changing transports just to clear a warning does not verify an account.'
   );
   assert.equal(f.calls.length, 0);
   await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');

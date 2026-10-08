@@ -71,6 +71,22 @@ gitrole add work \
   --github-host github.com-acme-dev
 ```
 
+<h2 id="manual-check">Check a standard SSH connection yourself</h2>
+
+If Gitrole cannot confirm an account, read its reason first. Git may be able to ask for a key passphrase while Gitrole checks without asking. This describes what Git can do, not evidence that your key needs a prompt. An agent or macOS keychain can also affect which credentials are available.
+
+For a standard SSH endpoint, Gitrole's diagnostic can show a shell-quoted command using that endpoint's user, host alias and explicit port. A synthetic example is:
+
+```bash
+ssh -T -p '2222' -- 'git@github.com-acme-dev'
+```
+
+This is a template, not a command to copy unchanged. Use the user, alias and port of the actual push endpoint, not its resolved hostname or the saved role's expected host. Omit `-p '2222'` when the URL does not specify a port so SSH keeps its configured port. If the URL has no user, use the quoted alias without `git@` so SSH keeps its configured user. Keep shell quoting; do not interpolate untrusted remote text into a shell command.
+
+The command may ask for your key passphrase. Existing settings such as `BatchMode` may still disable prompts. It can run configured SSH commands, use the agent or keychain, and change SSH state such as known-host entries. Run it only when those effects are acceptable. Do not change SSH settings or accept an unknown host key merely to clear a Gitrole warning.
+
+A GitHub greeting identifies the account used for that connection. It does **not** verify Git's receive-pack context, repository permissions or push success, and it does not change Gitrole's verdict. If Git uses a wrapper or another unsupported transport, this standard OpenSSH example cannot reproduce it; review that transport with its setup owner instead.
+
 <h2 id="confirm-the-fix">Confirm the fix</h2>
 
 After updating the remote or SSH alias, rerun the checks:
@@ -80,6 +96,6 @@ gitrole status
 gitrole doctor
 ```
 
-Use `status` for the quick daily check. Use `doctor` again if you need to confirm that the remote host and SSH account now match the selected role.
+Use `status` for the quick daily check. Use `doctor` to read the saved expectation and any supported account observation. An unverified result stays a warning even when a separate SSH connection succeeds; do not treat it as a confirmed push identity.
 
 If the repository also has a preferred-role policy, see <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">Use repo-local identity policy with .gitrole</a> to make that expectation explicit.

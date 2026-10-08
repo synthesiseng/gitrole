@@ -6,7 +6,7 @@ import {
   findMatchingRole,
   findPinnedRole,
   formatHttpsPushAuth,
-  summarizeAlignment,
+  summarizeAlignment, summarizeSshMessage,
   type HttpsAuthDescription
 } from '../alignment.js';
 import { UNMATCHED_ROLE_NAME } from '../../domain/role.js';
@@ -48,7 +48,7 @@ export async function getStatus(
   return {
     roleName: role?.name ?? UNMATCHED_ROLE_NAME,
     commitIdentity,
-    pushAuth: formatPushAuth(role, observedState, httpsAuth),
+    pushAuth: formatPushAuth(role, observedState, httpsAuth, offline),
     scope: observedState.scope.effective,
     localOverride: observedState.scope.hasLocalOverride,
     lastNonMergeCommit,
@@ -105,7 +105,8 @@ function formatPushAuth(
     repository: DoctorResult['repository'];
     sshAuth?: DoctorResult['sshAuth'];
   },
-  httpsAuth?: HttpsAuthDescription
+  httpsAuth?: HttpsAuthDescription,
+  offline = false
 ): string | undefined {
   if (observedState.repository.push) {
     const push = observedState.repository.push;
@@ -113,7 +114,7 @@ function formatPushAuth(
     if (push.message || !push.targets.length) return push.message ?? 'push destination unverified';
     return push.targets.map(({ remote, sshAuth, message }) =>
       sshAuth?.ok && sshAuth.githubUser ? `${sshAuth.githubUser} via ${remote.host}` :
-      `${remote.name} ${remote.url} (${message ?? sshAuth?.message ?? 'authentication unverified'})`
+      `${remote.name} ${remote.url} (${offline && remote.protocol === 'ssh' ? 'SSH authentication skipped (--offline); local checks only. An online check may connect and run configured SSH commands or change SSH state.' : message ?? (sshAuth?.message ? summarizeSshMessage(sshAuth.message) : 'authentication unverified')})`
     ).join('; ');
   }
   if (observedState.sshAuth?.githubUser) {

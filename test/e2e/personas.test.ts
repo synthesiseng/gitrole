@@ -152,7 +152,7 @@ async function verifyAlignedPersonaScenario(scenario: PersonaScenario): Promise<
   );
   assert.match(
     doctorResult.stdout,
-    new RegExp(`push\\s+${escapeRegex(`${githubUser} via ${githubHost}`)}`)
+    new RegExp(`expected\\s+${escapeRegex(`${githubUser} via ${githubHost}`)}`)
   );
   assert.match(
     doctorResult.stdout,
