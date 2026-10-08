@@ -34,6 +34,14 @@
   * `gitrole status` and the prompt segment still run for that legacy role. Prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.10.10](https://github.com/synthesiseng/gitrole/compare/v0.10.9...v0.10.10) (2026-10-08)
+
+
+### Bug Fixes
+
+* **release:** bound npm tarball propagation retries ([#109](https://github.com/synthesiseng/gitrole/issues/109)) ([f91c3de](https://github.com/synthesiseng/gitrole/commit/f91c3deeebf11e79b4e11419616bcf5408c661e7))
+* **remote:** warn on unsupported remote helpers ([#107](https://github.com/synthesiseng/gitrole/issues/107)) ([bcb4a24](https://github.com/synthesiseng/gitrole/commit/bcb4a24a6ea1294be4deeb3cee43264e39eb54a5))
+
 ## [0.10.9](https://github.com/synthesiseng/gitrole/compare/v0.10.8...v0.10.9) (2026-10-07)
 
 
