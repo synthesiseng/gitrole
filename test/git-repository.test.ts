@@ -138,3 +138,16 @@ test('parseRemoteUrl parses ssh host aliases and https remotes', () => {
     repository: 'openai'
   });
 });
+
+test('remote-helper prefixes are unknown while SCP, URL and path boundaries stay intact', () => {
+  for (const url of ['ext::/bin/false', 'helper::address', '0helper::repo', 'foo+bar.-::repo', 'ssh::host/repo', 'https::https://example.test/repo', 'helper::']) {
+    assert.deepEqual(parseRemoteUrl('origin', url), { name: 'origin', url, protocol: 'unknown' }, url);
+  }
+  for (const url of ['git@host.test:owner/repo.git', 'host.test:repo', 'git@host.test::repo', 'host.test:dir/helper::repo', 'ssh://host.test/owner/helper::repo']) {
+    assert.equal(parseRemoteUrl('origin', url).protocol, 'ssh', url);
+  }
+  assert.equal(parseRemoteUrl('origin', 'https://host.test/owner/helper::repo').protocol, 'https');
+  for (const url of ['./helper::repo', '/tmp/helper::repo', '../helper::repo', 'C:\\repo', 'file:///tmp/helper::repo']) {
+    assert.equal(parseRemoteUrl('origin', url).protocol, 'unknown', url);
+  }
+});

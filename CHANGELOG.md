@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+* **remote:** treat explicit remote-helper destinations as unsupported instead of SSH, so status warns online and offline while doctor warns online, without executing helpers.
+
 ### Push identity correctness
 
 * `status` and `doctor` inspect the effective destination of a default `git push`, including every Git-resolved push URL, instead of authenticating the fetch origin. `repository.remote` now means the first push endpoint; additive `fetchRemote` and `push.targets` retain separate context. Short field order and exit codes are unchanged; strict consumers must account for the changed remote meaning.
