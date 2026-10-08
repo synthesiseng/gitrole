@@ -12,7 +12,7 @@ Use this page when an agent or automation should work under an existing role ins
 
 If you need the baseline one-repo setup first, start with <a href="{{ '/guides/use-the-right-git-identity-for-this-repo/' | url }}">Use the right Git identity for this repo</a>.
 
-Coding agents can load the skill shipped at <code>skills/gitrole/SKILL.md</code>. Install steps for Claude Code, Codex, and Cursor are in <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify Git identity before an agent commits</a>. The skill tells the agent to run <code>gitrole status --short</code> or <code>gitrole doctor --json</code> and to stop on a warning. It does not install hooks.
+Coding agents can load the skill shipped at <code>skills/gitrole/SKILL.md</code>. Install steps for Claude Code, Codex, and Cursor are in <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify Git identity before an agent commits</a>. The skill uses <code>gitrole status --short</code> as the precommit gate and stops on its warnings. It does not install hooks.
 
 This is useful when:
 
@@ -35,7 +35,7 @@ In practice, that means checking:
 - whether the remote host matches the expected GitHub host alias
 - whether SSH auth resolves to the expected GitHub user
 
-Trust the effective identity from <code>gitrole status --short</code> or <code>gitrole doctor --json</code>. <code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config, so a present <code>user.name</code> or <code>user.email</code> is not enough. On <code>doctor --json</code>, read <code>commitIdentity</code> (<code>source</code> may be <code>env</code>), not <code>configuredIdentity</code>. Stop on a warning. HTTPS with no <code>.gitrole</code> pin, an env override that changes the effective identity, are <code>overall=warning</code> and exit <code>2</code>. A repository with no commits can be aligned when a role is applied locally and its default push destinations pass the identity checks; this does not establish refspec readiness or permission to push.
+Trust the effective identity from <code>gitrole status --short</code>; doctor provides broader structured diagnosis. <code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config, so a present <code>user.name</code> or <code>user.email</code> is not enough. On <code>doctor --json</code>, read <code>commitIdentity</code> (<code>source</code> may be <code>env</code>), not <code>configuredIdentity</code>. Stop on a warning. HTTPS with no <code>.gitrole</code> pin, an env override that changes the effective identity, are <code>overall=warning</code> and exit <code>2</code>. A repository with no commits can be aligned when a role is applied locally and its default push destinations pass the identity checks; this does not establish refspec readiness or permission to push.
 
 <h2 id="run-a-fast-preflight-check">Run a fast preflight check</h2>
 
@@ -55,7 +55,9 @@ When the quick check is not clean, ask for the full diagnosis:
 gitrole doctor --json
 ```
 
-This is the better choice when an agent needs structured detail about:
+Doctor is not a substitute for the precommit gate. A fresh repository with an explicit local role and an allowing HTTPS pin can have aligned status while doctor warns only about having no commits. If doctor was run first, run status for the precommit decision; do not create a commit merely to silence the history warning. Other diagnostic warnings or errors require investigation. Do not bypass any status warning or filter doctor checks into a fabricated pass.
+
+Doctor provides structured detail about:
 
 - the active role
 - local versus global config
@@ -93,7 +95,6 @@ A practical automation flow looks like this:
 gitrole resolve --json
 gitrole use work --local
 gitrole status --short
-gitrole doctor --json
 ```
 
 Use <code>resolve --json</code> when the repo should already say which role is preferred. Use <code>use</code> only if the automation is responsible for selecting the role. If the repository should already be configured, <code>status --short</code> is still the fast preflight, and <code>doctor --json</code> is the full explanation when that check is not clean.

@@ -8,19 +8,17 @@ compatibility: Requires the gitrole CLI on PATH.
 
 Git can resolve identity from configuration and environment overrides. Before `git commit`, `git commit --amend`, or `git push`, check the identity gitrole reports and stop when it is a warning.
 
-Run this in the repository. Prefer the first command. Use the second when you need the reason, not only the line.
+Use `gitrole status --short` as the precommit gate in the repository, including before its first commit.
 
 ```bash
 gitrole status --short
 ```
 
-```bash
-gitrole doctor --json
-```
+Use `gitrole doctor --json` for broader diagnosis when a check needs explanation. Doctor is not a substitute for the precommit gate.
 
 If `gitrole` is not on `PATH`, stop and tell the user. Do not commit.
 
-This skill verifies. It doesn't install hooks, switch roles, or rewrite remotes. Do those only when the user asks. Run the chosen command as written. Online SSH inspection may execute configured `Match exec` commands or DNS lookups. Don't add `--offline` before a commit or push, because that flag skips the SSH probe this check is here to run.
+This skill verifies. It doesn't install hooks, switch roles, or rewrite remotes. Do those only when the user asks. Run the status command as written. Online SSH inspection may execute configured `Match exec` commands or DNS lookups. Don't add `--offline` before a commit or push, because that flag skips the SSH probe this check is here to run.
 
 ## `gitrole status --short`
 
@@ -81,23 +79,21 @@ A repository with no commits and no local role warns on commit identity. A desti
 role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
 ```
 
-An explicit local role can keep `commit=ok` and the result can be aligned when all remaining checks pass. This observes identity, not branch readiness, push permission or successful push.
+An explicit local role can keep `commit=ok` and the result can be aligned when all remaining checks pass. This observes identity, not branch readiness, push permission or successful push. With a local role and an allowing HTTPS pin, status can exit `0` before the first commit even though doctor exits `2` because there are no commits to inspect. Use the status gate before the separately authorized first commit; do not create a commit merely to silence doctor.
 
 ## `gitrole doctor --json`
 
 JSON on stdout. Read `overall`, `commitIdentity`, and `checks[].status`. Don't parse `checks[].message`. Don't treat `configuredIdentity` as the commit identity.
 
-| Result | Action |
-| --- | --- |
-| Exit `0`, `overall` is `aligned`, and no `checks[].status` is `warn` | Identity checks aligned. Proceed only within the user’s existing authorization; this is not proof of push permission or success. |
-| Exit `2`, `overall` is `warning`, or any `checks[].status` is `warn` | Stop. Do not commit or push. |
-| Exit `1` | Stop. There is no JSON. The error is on stderr. |
+Doctor includes checks beyond current identity, such as missing history. In a fresh repository, a `history` warning and exit `2` can coexist with aligned status. Doctor's result remains a warning; do not relabel it as success or filter its checks to manufacture a passing diagnosis.
 
-`checks[].status` of `info` is not a warning. It doesn't select exit `2`.
+If doctor was run first, run `gitrole status --short` for the precommit decision. A history-only warning about an unborn repository is explained by the absence of commits. Other diagnostic warnings or errors require investigation; do not use a clean status to dismiss them. Do not bypass any status warning. Any status exit `1` or `2` still stops the commit or push.
+
+`checks[].status` of `info` is not a warning. It doesn't select exit `2`. Exit `1` means diagnosis failed, with the error on stderr; stop and investigate.
 
 ## After a warning
 
-Report the command, the exit code, and `overall`. Quote any `warn` field from `status --short`, or any `warn` check `label` from `doctor --json`. Then stop.
+Report the command, the exit code, and `overall`. Quote any `warn` field from `status --short` and stop. For additional diagnosis, report doctor warning labels separately, including missing history; apply the diagnostic distinction above without changing the status stop rules.
 
 Don't run `gitrole use`, `gitrole pin`, or `gitrole remote set` to clear the warning unless the user asks. Fixing the identity is a separate action, and the user has to choose the role.
 
