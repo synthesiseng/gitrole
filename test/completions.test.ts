@@ -341,8 +341,9 @@ if pid == 0:
 
 def cleanup():
     os.kill(pid, 9)
-    os.waitpid(pid, 0)
+    # Release the master before reaping; an open PTY can hold up termination.
     os.close(fd)
+    os.waitpid(pid, 0)
 
 atexit.register(cleanup)
 
@@ -366,31 +367,31 @@ def wait_for_ready(seconds=8):
             return buf
     raise SystemExit("timed out waiting for completion setup and prompt")
 
-def read_until_quiet(seconds=4):
+def read_completion(request, seconds=4):
     import time
+    marker = ("\x1eGITROLE_COMPLETE_%d\x1f" % request).encode()
     buf = b""
     deadline = time.time() + seconds
-    quiet_at = None
     while time.time() < deadline:
-        timeout = 0.2 if quiet_at is None else max(0.01, quiet_at - time.time())
-        ready, _, _ = select.select([fd], [], [], timeout)
+        ready, _, _ = select.select([fd], [], [], 0.1)
         if not ready:
-            if buf and quiet_at is not None and time.time() >= quiet_at:
-                return buf
             continue
         chunk = os.read(fd, 16384)
         if not chunk:
             break
         buf += chunk
-        quiet_at = time.time() + 0.25
-    if buf:
-        return buf
-    raise SystemExit("timed out waiting for completion output")
+        if marker in buf:
+            return buf.split(marker, 1)[0]
+    raise SystemExit("timed out waiting for completion acknowledgement")
 
 write("unset zle_bracketed_paste\nunsetopt promptsp\n")
 write("autoload -Uz compinit\n")
 write("fpath=(" + sys.argv[2] + " $fpath)\n")
-write("compinit -u\nbindkey -e\nbindkey '^I' complete-word\nsetopt nolistbeep\n")
+write("compinit -u\nbindkey -e\nsetopt nolistbeep\n")
+# Acknowledge execution, including no matches; input echo cannot contain this record.
+write("typeset -gi gitrole_completion_count=0\n")
+write("_gitrole_test_complete() { zle complete-word; local completion_status=$?; zle -R; (( ++gitrole_completion_count )); printf '\\036GITROLE_COMPLETE_%d\\037' $gitrole_completion_count; return $completion_status; }\n")
+write("zle -N _gitrole_test_complete\nbindkey '^I' _gitrole_test_complete\n")
 write("zstyle ':completion:*' menu no\n")
 write("zstyle ':completion:*:descriptions' format ''\n")
 write("zstyle ':completion:*' format ''\n")
@@ -407,11 +408,11 @@ def drain(seconds=0.2):
         os.read(fd, 16384)
 
 results = {}
-for line in cases:
+for request, line in enumerate(cases, 1):
     write("\x15")
     drain()
     write(line + "\t")
-    raw = read_until_quiet()
+    raw = read_completion(request)
     text = raw.decode("utf-8", "replace").replace("\r", "")
     results[line] = text
 
