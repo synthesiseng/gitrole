@@ -100,3 +100,23 @@ SSH may use the network, execute `Match exec`, proxies or providers, and prompt 
 In a terminal, the connection timeout is five seconds; time spent answering prompts has no overall deadline. Use Ctrl-C to cancel. SIGTERM uses the same cleanup; if signals repeat during cleanup, the first signal determines the exit status. Gitrole sends TERM, allows a one-second grace period, then escalates to KILL. It never signals your terminal's shared process group: a pipeline or parent application may share that group. Instead, it uses process snapshots to track SSH's known descendants and rechecks their start times before signalling them, even if SSH has already exited. This cleanup is best effort: children that exit or become reparented between snapshots may escape tracking; PID reuse and the interval between checking a process and signalling it cannot be eliminated. If process inspection is unavailable, only SSH itself is targeted.
 
 Without a terminal, Gitrole uses BatchMode=yes, disables OpenSSH askpass and supplies no stdin; configured providers or hardware may still show UI. The total budget is ten seconds plus one second of cleanup. Gitrole creates and terminates its own process group on timeout, including TERM/KILL escalation. Processes that deliberately leave that group or detach may survive. A terminal suggestion is not a diagnosis of why authentication failed. Platforms without the required process-group support remain unsupported.
+
+### SSH key paths
+
+`--ssh` accepts a file path, including absolute paths, relative paths, `~` paths,
+and quoted paths containing spaces. Paths starting with `-` after whitespace
+normalization are rejected when saving. For a filename beginning with `-`, use
+an explicit relative path such as `./-key`. A lone `-` is also rejected because
+OpenSSH treats it as standard input.
+
+Older saved roles remain readable and removable. If one has an unsafe key path,
+`use` applies the Git identity as usual but reports SSH key loading as failed,
+without invoking `ssh-add` for that path. Update it with `add` and a safe path,
+or use `import current` to replace the role with the current commit identity
+without SSH metadata.
+
+Key loading passes `--` before the path. This follows OpenSSH argument parsing
+(verified against portable OpenSSH 9.9p2 and Apple's OpenSSH source). Custom
+`GITROLE_SSH_ADD_BIN` executables must accept the same argument convention;
+arbitrary wrappers are not qualified. This does not guarantee that a key exists
+or that loading it will succeed.

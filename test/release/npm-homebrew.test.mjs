@@ -36,7 +36,7 @@ function contract(source) {
   assert.match(brew, /if: github.event_name == 'release' && github.event.action == 'published' && github.event.release.prerelease == false && !contains\(github.event.release.tag_name, '-'\)/);
   assert.match(brew, /repositories: homebrew-tap\n          permission-contents: write/);
   assert.match(brew, /token: \$\{\{ steps.tap-token.outputs.token \}\}/);
-  assert.match(brew, /ref: \$\{\{ github.event.release.tag_name \}\}/);
+  assert.match(brew, /ref: \$\{\{ needs.publish.outputs.release_sha \}\}/);
   assert.doesNotMatch(brew, /npm publish|--force|permission-(?:issues|pull-requests):/);
   assert.match(shell('Commit and push formula bump', source), /git push origin "HEAD:\$\{branch\}"/);
 }

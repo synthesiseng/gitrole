@@ -5,6 +5,8 @@ import { execFile as nodeExecFile } from 'node:child_process';
 import os from 'node:os';
 import { promisify } from 'node:util';
 
+import { validateSshKeyPath } from '../domain/role.js';
+
 const execFile = promisify(nodeExecFile);
 
 export interface ExecResult {
@@ -32,7 +34,9 @@ export class SystemSshAgent {
     const expandedPath = expandHomePath(path);
 
     try {
-      await this.exec(this.binaryPath, [expandedPath]);
+      // Saved roles may predate save-time validation; a lone "-" also means stdin.
+      validateSshKeyPath(path);
+      await this.exec(this.binaryPath, ['--', expandedPath]);
 
       return { ok: true };
     } catch (error) {
