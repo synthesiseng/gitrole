@@ -211,3 +211,86 @@ test('nonTTY whole-command timeout is bounded and cannot accept a partial greeti
   assert.equal(r.status,2,r.stderr); assert.match(r.stdout,/time budget exhausted/); assert.doesNotMatch(r.stdout,/Authenticated as:/);
   assert.ok(elapsed>=9900 && elapsed<12500,`elapsed ${elapsed}`);
 });
+
+// Git is the transport oracle; the executable is synthetic and never opens a connection.
+test('auto SSH variant agrees with Git and still refuses custom or unsupported transports', async t => {
+  const f = await fixture(t);
+  const git = spawnSync('git', ['ls-remote', 'origin'], {
+    cwd: f.root, env: { ...f.env, GIT_SSH_VARIANT: 'auto' }, encoding: 'utf8', timeout: 5000
+  });
+  assert.notEqual(git.status, 0, 'synthetic greeting is deliberately not the Git wire protocol');
+  const calls = (await readFile(`${f.root}/calls`, 'utf8')).trim().split('\\n').map(line => JSON.parse(line) as string[]);
+  assert.ok(calls.some(args => args.includes('SendEnv=GIT_PROTOCOL') && args.some(arg => arg.startsWith('git-upload-pack'))), 'Git auto did not use OpenSSH arguments');
+  await rm(`${f.root}/calls`);
+  for (const mode of ['environment', 'config']) {
+    if (mode === 'config') f.git('config', 'ssh.variant', 'auto');
+    const result = f.run(mode === 'environment' ? { GIT_SSH_VARIANT: 'auto' } : {});
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /Authenticated as: fixture-user/);
+  }
+  for (const override of [{ GIT_SSH_VARIANT: 'simple' }, { GIT_SSH_VARIANT: 'plink' },
+    { GIT_SSH_VARIANT: 'auto', GIT_SSH: `${f.root}/bin/ssh` },
+    { GIT_SSH_VARIANT: 'auto', GIT_SSH_COMMAND: 'ssh' }]) {
+    await rm(`${f.root}/calls`, { force: true });
+    assert.equal(f.run(override).status, 2);
+    await assert.rejects(access(`${f.root}/calls`));
+  }
+  f.git('config', 'core.sshCommand', 'ssh');
+  assert.equal(f.run({ GIT_SSH_VARIANT: 'auto' }).status, 2);
+  await assert.rejects(access(`${f.root}/calls`));
+});
+
+test('CLI signals clean resistant descendants and retain the first signal exit status', async t => {
+  for (const scenario of [
+    { stage: 'config', first: 'SIGTERM', again: 'SIGTERM', exit: 143, resistantLeader: false },
+    { stage: 'handshake', first: 'SIGTERM', again: 'SIGINT', exit: 143, resistantLeader: true },
+    { stage: 'handshake', first: 'SIGINT', again: 'SIGTERM', exit: 130, resistantLeader: false }
+  ] as const) {
+    await t.test(`${scenario.stage} ${scenario.first} then ${scenario.again}`, async t => {
+      const f = await fixture(t);
+      await f.ssh(`const fs=require('fs');if(process.argv.includes('-G') && ${JSON.stringify(scenario.stage)}!=='config')console.log('hostname fixture.invalid\\nuser git\\nport 22');else{fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));${scenario.resistantLeader ? "process.on('SIGTERM',()=>{});" : ''}const child=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>{});setInterval(()=>fs.writeFileSync(process.env.ROOT+'/heartbeat',String(Date.now())),20)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/descendant',String(child.pid));setInterval(()=>{},1000);}`);
+      const peer = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
+      const child = spawn(process.execPath, [cli, 'auth', 'test'], { cwd: f.root, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+      let output = '', descendant = 0, leader = 0;
+      child.stdout.on('data', chunk => { output += chunk; }); child.stderr.resume();
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+      t.after(() => { child.kill('SIGKILL'); peer.kill('SIGKILL'); if (leader) { try { process.kill(-leader, 'SIGKILL'); } catch {} } if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch {} } });
+      const deadline = Date.now() + 5000;
+      while (true) {
+        try { await access(`${f.root}/heartbeat`); break; } catch { assert.ok(Date.now() < deadline, 'synthetic descendant not ready'); await new Promise(resolve => setTimeout(resolve, 25)); }
+      }
+      descendant = Number(await readFile(`${f.root}/descendant`, 'utf8'));
+      leader = Number(await readFile(`${f.root}/leader`, 'utf8'));
+      const start = performance.now(); child.kill(scenario.first);
+      await new Promise(resolve => setTimeout(resolve, 100)); child.kill(scenario.again);
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      const result = await Promise.race([exited, new Promise<never>((_, reject) => { watchdog = setTimeout(() => reject(new Error('cleanup exceeded bound')), 4000); })]).finally(() => clearTimeout(watchdog));
+      assert.deepEqual(result, { code: scenario.exit, signal: null });
+      assert.ok(performance.now() - start < 3500);
+      const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      assert.equal(await readFile(`${f.root}/heartbeat`, 'utf8'), heartbeat, 'resistant descendant survived cleanup');
+      assert.equal(peer.exitCode, null); assert.equal(peer.signalCode, null); process.kill(peer.pid!, 0);
+      assert.doesNotMatch(output, /Authenticated as:/);
+    });
+  }
+});
+
+test('auth command restores signal handlers after success, failure and cancellation', async t => {
+  const f = await fixture(t);
+  const moduleUrl = new URL('../src/cli/index.js', import.meta.url).href;
+  for (const mode of ['success', 'failure', 'cancel']) {
+    if (mode === 'failure') f.git('remote', 'remove', 'origin');
+    if (mode === 'cancel') { f.git('remote', 'add', 'origin', 'git@fixture.invalid:repo'); await f.ssh('setInterval(()=>{},1000);'); }
+    const script = `import {run} from ${JSON.stringify(moduleUrl)};
+const signals=['SIGINT','SIGTERM']; const before=signals.map(s=>process.listenerCount(s));
+const timer=${mode === 'cancel' ? "setTimeout(()=>process.kill(process.pid,'SIGTERM'),500)" : 'undefined'};
+const code=await run(['node','gitrole','auth','test']);clearTimeout(timer);
+console.log(JSON.stringify({code,before,after:signals.map(s=>process.listenerCount(s))}));`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: 5000 });
+    assert.equal(result.status, 0, result.stderr);
+    const record = JSON.parse(result.stdout.trim().split('\n').at(-1)!);
+    assert.equal(record.code, mode === 'success' ? 0 : mode === 'failure' ? 1 : 143);
+    assert.deepEqual(record.after, record.before, `${mode} left signal listeners installed`);
+  }
+});

@@ -434,29 +434,38 @@ and never weakens host-key validation. No result is stored.
 Non-terminal execution allows ten seconds total plus one second cleanup;
 detached provider processes may outlive cleanup. Terminal input has no deadline.
 Exit 0: all accounts observed and applicable role expectations met.
-Exit 2: mismatch or unobserved endpoint. Exit 1: operational error. Exit 130: cancelled.
+Exit 2: mismatch or unobserved endpoint. Exit 1: operational error. Exit 130: Ctrl-C. Exit 143: SIGTERM.
 `)
     .action(async () => {
       const interactive = hasAuthTerminal();
       const controller = new AbortController();
-      const cancel = () => controller.abort('cancelled');
-      process.on('SIGINT', cancel);
+      let signalExitCode: number | undefined;
+      const cancel = (exitCode: number) => {
+        // The first termination signal owns the exit status; later signals cannot interrupt cleanup.
+        signalExitCode ??= exitCode;
+        controller.abort('cancelled');
+      };
+      const interrupt = () => cancel(130);
+      const terminate = () => cancel(143);
+      process.on('SIGINT', interrupt);
+      process.on('SIGTERM', terminate);
       const timer = !interactive ? setTimeout(() => controller.abort('timeout'), 10000) : undefined;
       io.stderr('Explicit SSH test: network and SSH configuration evaluation (including Match exec and providers) may run commands, prompt, update known hosts or save credentials under existing settings.');
       try {
         const result = await testAuthentication({ ...dependencies, ...dependencies.authInputs?.(controller.signal), authTester: new SystemAuthTester(interactive) }, controller.signal);
         io.stdout(renderAuthTest(result.endpoints));
-        commandExitCode = result.exitCode;
+        commandExitCode = signalExitCode ?? result.exitCode;
         if (!interactive && result.endpoints.some(endpoint => endpoint.result.outcome === 'unobserved')) {
           io.stderr('Could not prompt here; run gitrole auth test in a terminal. See the endpoint reason above; lack of a terminal may not be the cause.');
         }
       } catch {
         // Git/SSH errors can contain credential-bearing URLs or configuration values.
         io.stderr(controller.signal.reason === 'cancelled' ? 'Authentication test cancelled.' : controller.signal.aborted ? 'Authentication test time budget exhausted before local inputs were resolved.' : 'Authentication test could not read the repository, destination or role configuration.');
-        commandExitCode = controller.signal.reason === 'cancelled' ? 130 : controller.signal.aborted ? 2 : 1;
+        commandExitCode = signalExitCode ?? (controller.signal.aborted ? 2 : 1);
       } finally {
         if (timer) clearTimeout(timer);
-        process.removeListener('SIGINT', cancel);
+        process.removeListener('SIGINT', interrupt);
+        process.removeListener('SIGTERM', terminate);
       }
     });
 

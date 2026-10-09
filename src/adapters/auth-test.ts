@@ -102,7 +102,7 @@ export class SystemAuthTester implements AuthTester {
   async observe(remote: RemoteInfo, signal: AbortSignal): Promise<AuthObservation> {
     if (!isSafeAuthDestination(remote) || this.env.GITROLE_SSH_BIN !== undefined ||
       this.env.GIT_SSH_COMMAND !== undefined || this.env.GIT_SSH !== undefined ||
-      (this.env.GIT_SSH_VARIANT !== undefined && this.env.GIT_SSH_VARIANT !== 'ssh')) {
+      (this.env.GIT_SSH_VARIANT !== undefined && !['ssh', 'auto'].includes(this.env.GIT_SSH_VARIANT))) {
       return { outcome: 'unobserved', reason: 'unsupported SSH transport or destination' };
     }
     if (process.platform === 'win32') return { outcome: 'unobserved', reason: 'process-group cleanup is not supported on this platform' };
