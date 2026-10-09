@@ -124,3 +124,7 @@ Gitrole warns on violated expectations, not assumptions. Use the command referen
 ## License
 
 MIT
+
+### Explicitly check an SSH account
+
+Run `gitrole auth test` yourself in a terminal to see the account reported by each default SSH push destination. A mismatch with the effective role's expected account exits 2. This can prompt through SSH and run configured SSH commands; it neither guarantees a future push nor clears diagnostic warnings. No result is stored. See the [command reference](docs/commands.md#gitrole-auth-test) for effects, limits and exits.

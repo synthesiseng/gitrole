@@ -16,6 +16,8 @@ const invalidSavedRoleDataMessage =
 
 export interface RoleStoreOptions {
   configFilePath?: string;
+  /** Leave absent role storage untouched for an explicit read-only lookup. */
+  createIfMissing?: boolean;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -28,8 +30,10 @@ export class InvalidSavedRoleDataError extends Error {
 
 export class FileRoleStore {
   private readonly configFilePath: string;
+  private readonly createIfMissing: boolean;
 
   constructor(options: RoleStoreOptions = {}) {
+    this.createIfMissing = options.createIfMissing !== false;
     this.configFilePath =
       options.configFilePath ?? resolveRolesFilePath(options.env ?? process.env);
   }
@@ -77,9 +81,12 @@ export class FileRoleStore {
   }
 
   private async readData(): Promise<StoredRoles> {
-    await this.ensureFile();
-
-    const raw = await readFile(this.configFilePath, 'utf8');
+    if (this.createIfMissing) await this.ensureFile();
+    let raw: string;
+    try { raw = await readFile(this.configFilePath, 'utf8'); } catch (error) {
+      if (!this.createIfMissing && (error as NodeJS.ErrnoException).code === 'ENOENT') return { roles: [] };
+      throw error;
+    }
     let parsed: unknown;
 
     try {

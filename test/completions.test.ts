@@ -27,6 +27,7 @@ const commandNames = [
   'list',
   'status',
   'doctor',
+  'auth',
   'remote',
   'remove',
   'help'
@@ -259,6 +260,7 @@ test('bash completion offers commands, flags, and saved role names', async () =>
   assertSameMembers(bashCompletions(env, 'gitrole remove ').values, roles, 'remove roles');
   assert.deepEqual(bashCompletions(env, 'gitrole resolve --').values, ['--json', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole status --').values, ['--short', '--offline', '--help']);
+  assert.deepEqual(bashCompletions(env, 'gitrole auth ').values, ['test']);
   assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole current ').values, []);
   assert.deepEqual(bashCompletions(env, 'gitrole list --').values, ['--help']);
