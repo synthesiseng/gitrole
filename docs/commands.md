@@ -60,3 +60,40 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
 <p>None of them switch your GitHub browser session, store an HTTPS token, or install a hook for you. The optional check-only hook is a file you copy yourself. It runs <code>gitrole status --short</code>.</p>
 
 <p>Optional <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">shell tab completion</a> completes commands and saved role names; installation does not enable it automatically.</p>
+
+## `gitrole auth test`
+
+Run an explicit SSH account check yourself in a terminal:
+
+```bash
+gitrole auth test
+```
+
+Gitrole checks every effective default push destination, using the destination's SSH alias, user and port. This uses the same destination and SSH configuration, not an identical push: command-dependent rules may differ. It does not test repository permissions or guarantee a future push. It does not change status or doctor verdicts, and stores no history.
+
+```text
+Destination: git@work-alias.example:team/repo.git
+Host: work-alias.example
+Authenticated as: example-user
+Role expects: example-user
+Checked: 2026-10-09T12:00:00.000Z
+This connection does not guarantee the account or success of a future push.
+```
+
+The effective commit identity selects the saved role, just as in `current`. Account comparison uses the existing exact-string rule. A mismatch prints `Mismatch: observed actual-user, role expects expected-user` and exits 2. Without a matching role or configured `githubUser`, the command reports that no account expectation is configured; it never invents one.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Every endpoint reported an account and met any applicable account expectation |
+| 2 | An account mismatched, or at least one endpoint remained unobserved/unsupported |
+| 1 | Repository, configuration or other operational error |
+| 130 | Cancelled by Ctrl-C (SIGINT) |
+| 143 | Terminated by SIGTERM |
+
+Each endpoint has its own result; one success cannot hide another failure. Results go to stdout; notices and operational errors go to stderr. There is no JSON mode. Unsupported transports, SSH wrappers/overrides and configured remote commands are not executed. Unsafe or credential-bearing destinations are withheld from output. Only a recognized, complete GitHub-style account greeting counts as observed.
+
+SSH may use the network, execute `Match exec`, proxies or providers, and prompt according to existing settings. It may update known hosts or save credentials under those settings. Gitrole never weakens host-key validation or adds a credential-saving policy, and does not override `BatchMode=yes`. Configured effects can occur even during SSH settings inspection. Run this deliberately, never from an agent skill, prompt or hook.
+
+In a terminal, the connection timeout is five seconds; time spent answering prompts has no overall deadline. Use Ctrl-C to cancel. SIGTERM uses the same cleanup; if signals repeat during cleanup, the first signal determines the exit status. Gitrole sends TERM, allows a one-second grace period, then escalates to KILL. It never signals your terminal's shared process group: a pipeline or parent application may share that group. Instead, it uses process snapshots to track SSH's known descendants and rechecks their start times before signalling them, even if SSH has already exited. This cleanup is best effort: children that exit or become reparented between snapshots may escape tracking; PID reuse and the interval between checking a process and signalling it cannot be eliminated. If process inspection is unavailable, only SSH itself is targeted.
+
+Without a terminal, Gitrole uses BatchMode=yes, disables OpenSSH askpass and supplies no stdin; configured providers or hardware may still show UI. The total budget is ten seconds plus one second of cleanup. Gitrole creates and terminates its own process group on timeout, including TERM/KILL escalation. Processes that deliberately leave that group or detach may survive. A terminal suggestion is not a diagnosis of why authentication failed. Platforms without the required process-group support remain unsupported.

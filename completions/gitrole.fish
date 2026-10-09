@@ -51,4 +51,7 @@ complete -c gitrole -f -n '__fish_seen_subcommand_from doctor' -l json -d 'Write
 complete -c gitrole -f -n '__fish_seen_subcommand_from remote; and not __fish_seen_subcommand_from set' -a set -d 'Rewrite origin to the role GitHub host alias'
 complete -c gitrole -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from set' -a '(__gitrole_roles)' -d 'Saved role'
 
-complete -c gitrole -f -n '__fish_seen_subcommand_from help' -a 'add import use pin resolve current list status doctor remote remove' -d 'Command'
+complete -c gitrole -f -n '__fish_seen_subcommand_from help' -a 'add import use pin resolve current list status doctor auth remote remove' -d 'Command'
+
+complete -c gitrole -f -n '__fish_use_subcommand' -a auth -d 'Explicit authentication checks'
+complete -c gitrole -f -n '__fish_seen_subcommand_from auth; and not __fish_seen_subcommand_from test' -a test -d 'Observe SSH accounts'

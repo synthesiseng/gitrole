@@ -89,6 +89,10 @@ For an unverified SSH account, read the specific reason and any manual-check gui
 
 A result is a snapshot. It cannot predict future explicit author/push arguments or changed configuration/environment, and it does not prove refspec readiness, push authorization, or push success.
 
+### Explicitly check an SSH account
+
+Run `gitrole auth test` yourself in a terminal to see the account reported by each default SSH push destination. A mismatch with the effective role's expected account exits 2. This can prompt through SSH and run configured SSH commands; it neither guarantees a future push nor clears diagnostic warnings. No result is stored. See the [command reference](docs/commands.md#gitrole-auth-test) for effects, limits and exits.
+
 ## Troubleshoot and continue
 
 Run `gitrole doctor` to identify a warning, then use [Troubleshoot identity warnings](https://docs.gitrole.dev/guides/troubleshoot-identity-warnings/).

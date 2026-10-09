@@ -33,6 +33,7 @@ commands=(
   'current:show which saved role matches the active commit identity'
   'list:list saved roles and mark the active one'
   'status:check whether the current repo is aligned for commit and push'
+  'auth:explicit authentication checks'
   'doctor:diagnose identity, remote, and SSH auth alignment'
   'remote:manage repository remotes for a selected role'
   'remove:remove a saved role'
@@ -102,6 +103,9 @@ case $state in
           '(- :)'{-h,--help}'[print help]' \
           '1:saved role:_gitrole_saved_roles' \
           && ret=0
+        ;;
+      auth)
+        _arguments '(- :)'{-h,--help}'[print help]' '1:subcommand:(test)' && ret=0
         ;;
       remote)
         _arguments -C \

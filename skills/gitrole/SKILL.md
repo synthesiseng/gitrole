@@ -102,3 +102,9 @@ The package also ships `hooks/pre-commit`, which only runs `gitrole status --sho
 ## Push observation limits
 
 Default push observation checks every Git-resolved push URL, independently of fetch origin. Mixed SSH/HTTPS warns online. Custom commands, alternate diagnostic SSH binaries and interactive or incomplete SSH contexts remain unverified. Online inspection may execute configured Match commands or DNS; offline invokes no SSH. Alignment does not prove refspec readiness, push authorization or success and does not predict future explicit push arguments.
+
+## Explicit account test belongs to the human
+
+If the user wants an interactive account check, ask them to run `gitrole auth test` in a terminal. Never invoke it automatically from this skill, a hook or a prompt. It can execute configured SSH commands, contact the network and prompt through SSH. Existing SSH settings may save credentials or update known hosts.
+
+The command reports the observed account and any mismatch with the effective role's `githubUser`. A mismatch exits 2. Even exit 0 is not proof of a future push and does not override a status warning. No history is stored.
