@@ -11,6 +11,24 @@ import { fileURLToPath } from 'node:url';
 import { SystemAuthTester } from '../src/adapters/auth-test.js';
 import { parseRemoteUrl } from '../src/adapters/git-repository.js';
 
+// Publish complete samples: readers must never observe writeFileSync's truncation window.
+function heartbeatWriter(name = 'heartbeat'): string {
+  return `(() => { const file = process.env.ROOT + '/${name}'; fs.writeFileSync(file + '.next', String(Date.now())); fs.renameSync(file + '.next', file); })()`;
+}
+
+async function waitForHeartbeat(file: string, previous?: string): Promise<string> {
+  const deadline = performance.now() + 5000;
+  let sample: string | undefined;
+  do {
+    try { sample = await readFile(file, 'utf8'); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (sample && /^\d+$/.test(sample) && sample !== previous) return sample;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  } while (performance.now() < deadline);
+  assert.fail(`heartbeat did not ${previous === undefined ? 'start' : 'advance'}: ${file}; last sample ${JSON.stringify(sample)}`);
+}
+
 const cli = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'gitrole-auth-'));
@@ -85,13 +103,16 @@ test('nonTTY argv preserves user/port, suppresses prompts and rejects RemoteComm
 
 test('abort kills the nonTTY process group, including a child that ignores TERM', async t => {
   const f = await fixture(t);
-  await f.ssh(`const fs=require('fs'); if(process.argv.includes('-G')) console.log('hostname fixture.invalid\\nuser git\\nport 22\\nremotecommand none'); else { const {spawn}=require('child_process'); const c=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});const fs=require('fs');setInterval(()=>fs.writeFileSync(process.env.ROOT+'/heartbeat',String(Date.now())),50)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000); }`);
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort('timeout'), 500);
-  const start = performance.now();
-  const result = await new SystemAuthTester(false, f.env).observe(parseRemoteUrl('origin','git@fixture.invalid:repo'), controller.signal);
-  clearTimeout(timer); assert.equal(result.outcome, 'unobserved'); assert.ok(performance.now()-start < 2500);
+  await f.ssh(`const fs=require('fs'); if(process.argv.includes('-G')) console.log('hostname fixture.invalid\\nuser git\\nport 22\\nremotecommand none'); else { const {spawn}=require('child_process'); const c=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});const fs=require('fs');setInterval(()=>${heartbeatWriter()},50)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000); }`);
+  const controller = new AbortController();
+  const observation = new SystemAuthTester(false, f.env).observe(parseRemoteUrl('origin','git@fixture.invalid:repo'), controller.signal);
+  f.cleanup.push(() => { controller.abort('timeout'); });
+  await waitForHeartbeat(`${f.root}/heartbeat`);
   const pid = Number(await readFile(`${f.root}/child`, 'utf8'));
-  t.after(async () => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  f.cleanup.push(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  const start = performance.now(); controller.abort('timeout');
+  const result = await observation;
+  assert.equal(result.outcome, 'unobserved'); assert.ok(performance.now()-start < 2500);
   await new Promise(resolve => setTimeout(resolve, 50));
   const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8');
   await new Promise(resolve => setTimeout(resolve, 150));
@@ -106,10 +127,10 @@ test('interactive cancellation escalates known descendants after leader exit wit
   ] as const) {
     await t.test(name, async t => {
       const f = await fixture(t);
-      const peer = spawn(process.execPath, ['-e', `const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(process.env.ROOT+'/peer-signalled','TERM'));setInterval(()=>fs.writeFileSync(process.env.ROOT+'/peer-heartbeat',String(Date.now())),20);`], { env: f.env, stdio: 'ignore' });
+      const peer = spawn(process.execPath, ['-e', `const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(process.env.ROOT+'/peer-signalled','TERM'));setInterval(()=>${heartbeatWriter('peer-heartbeat')},20);`], { env: f.env, stdio: 'ignore' });
       f.cleanup.push(() => { peer.kill('SIGKILL'); });
       await f.ssh(`const fs=require('fs');if(process.argv.includes('-G'))console.log('hostname fixture.invalid\\nuser git\\nport 22');else{
-        const {spawn}=require('child_process');const c=spawn(process.execPath,['-e',${JSON.stringify(`const fs=require('fs');process.on('SIGINT',()=>{});process.on('SIGTERM',()=>{fs.writeFileSync(process.env.ROOT+'/child-term','TERM');${childResists ? '' : 'process.exit(0);'}});setInterval(()=>fs.writeFileSync(process.env.ROOT+'/heartbeat',String(Date.now())),20);`)}],{stdio:'ignore'});
+        const {spawn}=require('child_process');const c=spawn(process.execPath,['-e',${JSON.stringify(`const fs=require('fs');process.on('SIGINT',()=>{});process.on('SIGTERM',()=>{fs.writeFileSync(process.env.ROOT+'/child-term','TERM');${childResists ? '' : 'process.exit(0);'}});setInterval(()=>${heartbeatWriter()},20);`)}],{stdio:'ignore'});
         fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));process.on('SIGTERM',()=>{${leaderResists ? '' : 'process.exit(0);'}});setInterval(()=>{},1000);
       }`);
       const controller = new AbortController();
@@ -133,10 +154,10 @@ test('interactive cancellation escalates known descendants after leader exit wit
       assert.equal((await observation).outcome, 'cancelled');
       assert.equal(await readFile(`${f.root}/child-term`, 'utf8'), 'TERM');
       const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8');
-      const peerHeartbeat = await readFile(`${f.root}/peer-heartbeat`, 'utf8');
+      const peerHeartbeat = await waitForHeartbeat(`${f.root}/peer-heartbeat`);
       await new Promise(resolve => setTimeout(resolve, 100));
       assert.equal(await readFile(`${f.root}/heartbeat`, 'utf8'), heartbeat, 'known SSH descendant survived cleanup');
-      assert.notEqual(await readFile(`${f.root}/peer-heartbeat`, 'utf8'), peerHeartbeat, 'unrelated peer stopped');
+      await waitForHeartbeat(`${f.root}/peer-heartbeat`, peerHeartbeat);
       await assert.rejects(access(`${f.root}/peer-signalled`));
     });
   }
@@ -147,12 +168,36 @@ test('interactive cleanup falls back safely on incomplete inspection or a change
     await t.test(mode, async t => {
       const f = await fixture(t);
       let cancelling = false, descendantPid = 0, faultReads = 0;
+      let learnedDescendant = false;
+      const snapshots: string[] = [];
+      let learnedSnapshot = '';
+      let leaderPid = 0;
+      const attempts: { pid: number; signal: number | string | undefined; via: string }[] = [];
+      const originalKill = process.kill;
+      const originalChildKill = childProcess.ChildProcess.prototype.kill;
+      process.kill = function (pid, signal) {
+        if (cancelling) attempts.push({ pid, signal, via: 'process.kill' });
+        return originalKill.call(process, pid, signal);
+      };
+      childProcess.ChildProcess.prototype.kill = function (signal) {
+        if (cancelling && this.pid) attempts.push({ pid: this.pid, signal, via: 'ChildProcess.kill' });
+        return originalChildKill.call(this, signal);
+      };
+      t.after(() => { process.kill = originalKill; childProcess.ChildProcess.prototype.kill = originalChildKill; });
       const original = childProcess.execFile;
       const execute = promisify(original);
       const replacement = (...args: Parameters<typeof original>) => original(...args);
       Object.defineProperty(replacement, promisify.custom, { value: async (file: string, args: string[], options: object) => {
         const result = await execute(file, args, options);
-        if (file !== '/bin/ps' || !cancelling) return result;
+        if (file !== '/bin/ps') return result;
+        if (!cancelling) {
+          const row = result.stdout.split('\n').find(line => Number(line.trim().split(/\s+/)[0]) === descendantPid);
+          if (row && leaderPid && Number(row.trim().split(/\s+/)[1]) === leaderPid) {
+            learnedDescendant = true; learnedSnapshot = row;
+          }
+          return result;
+        }
+        snapshots.push(result.stdout.split('\n').filter(line => [leaderPid, descendantPid].includes(Number(line.trim().split(/\s+/)[0]))).join('\n'));
         faultReads++;
         if (mode === 'truncated' || mode === 'unavailable') throw new Error(mode);
         const stdout = mode === 'malformed' ? result.stdout + '\ninvalid process row\n' :
@@ -163,7 +208,7 @@ test('interactive cleanup falls back safely on incomplete inspection or a change
       childProcess.execFile = replacement as typeof original;
       syncBuiltinESMExports();
       t.after(() => { childProcess.execFile = original; syncBuiltinESMExports(); });
-      await f.ssh(`const fs=require('fs');if(process.argv.includes('-G'))console.log('hostname fixture.invalid\\nuser git\\nport 22');else{const c=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(process.env.ROOT+'/child-term','TERM'));setInterval(()=>fs.writeFileSync(process.env.ROOT+'/heartbeat',String(Date.now())),20);"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));setInterval(()=>{},1000);}`);
+      await f.ssh(`const fs=require('fs');if(process.argv.includes('-G'))console.log('hostname fixture.invalid\\nuser git\\nport 22');else{fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));const c=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(process.env.ROOT+'/child-term','TERM'));setInterval(()=>${heartbeatWriter()},20);"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));setInterval(()=>{},1000);}`);
       const controller = new AbortController();
       const observation = new SystemAuthTester(true, f.env).observe(parseRemoteUrl('origin', 'git@fixture.invalid:repo'), controller.signal);
       f.cleanup.push(() => { controller.abort('cancelled'); if (descendantPid) { try { process.kill(descendantPid, 'SIGKILL'); } catch {} } });
@@ -175,13 +220,24 @@ test('interactive cleanup falls back safely on incomplete inspection or a change
         }
       }
       descendantPid = Number(await readFile(`${f.root}/child`, 'utf8'));
-      await new Promise(resolve => setTimeout(resolve, 350));
+      leaderPid = Number(await readFile(`${f.root}/leader`, 'utf8'));
+      const learnedDeadline = performance.now() + 5000;
+      while (!learnedDescendant) {
+        assert.ok(performance.now() < learnedDeadline, 'no pre-cancellation descendant snapshot');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      const start = performance.now();
       cancelling = true; controller.abort('cancelled');
       assert.equal((await observation).outcome, 'cancelled');
       assert.ok(faultReads >= 2, 'TERM and KILL did not exercise the faulty inspection boundary');
-      const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8');
-      await new Promise(resolve => setTimeout(resolve, 100));
-      assert.notEqual(await readFile(`${f.root}/heartbeat`, 'utf8'), heartbeat, 'uncertain PID was killed');
+      assert.ok(performance.now() - start < 3000, 'faulty inspection cleanup exceeded bound');
+      assert.ok(learnedSnapshot, 'missing pre-cancellation ancestry evidence');
+      assert.ok(snapshots.length >= 2, 'missing fault-boundary ownership evidence');
+      assert.ok(attempts.some(attempt => attempt.pid === leaderPid && attempt.signal === 'SIGTERM'), 'direct child TERM fallback was not observed');
+      assert.ok(attempts.some(attempt => attempt.pid === leaderPid && attempt.signal === 'SIGKILL'), 'direct child KILL fallback was not observed');
+      assert.deepEqual(attempts.filter(attempt => attempt.pid !== leaderPid), [], 'cleanup attempted to signal an uncertain or unowned PID');
+      const heartbeat = await waitForHeartbeat(`${f.root}/heartbeat`);
+      await waitForHeartbeat(`${f.root}/heartbeat`, heartbeat);
       await assert.rejects(access(`${f.root}/child-term`));
     });
   }
@@ -248,7 +304,7 @@ test('CLI signals clean resistant descendants and retain the first signal exit s
   ] as const) {
     await t.test(`${scenario.stage} ${scenario.first} then ${scenario.again}`, async t => {
       const f = await fixture(t);
-      await f.ssh(`const fs=require('fs');if(process.argv.includes('-G') && ${JSON.stringify(scenario.stage)}!=='config')console.log('hostname fixture.invalid\\nuser git\\nport 22');else{fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));${scenario.resistantLeader ? "process.on('SIGTERM',()=>{});" : ''}const child=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>{});setInterval(()=>fs.writeFileSync(process.env.ROOT+'/heartbeat',String(Date.now())),20)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/descendant',String(child.pid));setInterval(()=>{},1000);}`);
+      await f.ssh(`const fs=require('fs');if(process.argv.includes('-G') && ${JSON.stringify(scenario.stage)}!=='config')console.log('hostname fixture.invalid\\nuser git\\nport 22');else{fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));${scenario.resistantLeader ? "process.on('SIGTERM',()=>{});" : ''}const child=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>{});setInterval(()=>${heartbeatWriter()},20)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/descendant',String(child.pid));setInterval(()=>{},1000);}`);
       const peer = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
       const child = spawn(process.execPath, [cli, 'auth', 'test'], { cwd: f.root, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
       let output = '', descendant = 0, leader = 0;
