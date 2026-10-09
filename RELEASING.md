@@ -162,3 +162,34 @@ Do not move a shipped tag, recreate a release to pick up new workflow source,
 change normal dispatch semantics, or infer live success from these fixtures.
 A future approved release containing the updated workflow can advance the tap,
 but does not establish recovery of exactly 0.10.4. Live recovery remains unproven.
+
+## Main CI publication prerequisite
+
+Publish requires the newest `.github/workflows/ci.yml` run triggered by a `push`
+on `main` for the exact tagged commit to have completed successfully. The gate
+resolves lightweight and annotated tags to a commit and pins both distribution
+jobs to that SHA. PR checks, release validation, another workflow or another SHA
+cannot qualify. Among matching runs, creation time (then run ID) determines the
+newest run; only its current attempt counts. A successful rerun may qualify after
+an earlier failure, but an older green run or attempt never overrides a newer
+pending or failed result.
+
+Each waiting gate allows at most 20 minutes, including bounded API requests.
+Missing or pending CI waits; timeout, inaccessible/incomplete API evidence and
+any completed conclusion other than `success` fail closed. The gate never starts
+or reruns CI. Inspect the recorded commit, run ID and attempt before arranging a
+CI repair or a separate Publish retry.
+
+The npm check runs after preparation and immediately before publish, including
+when the version already exists. Homebrew checks again after downloading the
+archive and before minting its tap token, then performs a nonwaiting fresh check
+before formula writes. A job-only Homebrew retry retains the original publish
+job's commit and rechecks current CI; moved or missing tags fail. Dispatch keeps
+its existing version-specific npm tag and does not update Homebrew. Its gate
+helper comes from the pinned workflow revision, so an older target tag need not
+contain the helper. Rerunning an old workflow does not acquire this gate.
+
+CI observations cannot atomically lock GitHub Actions and npm or the tap. A CI
+rerun started after the last observation cannot undo a completed publication.
+Offline fixtures test selection, failure, deadlines and workflow boundaries;
+they do not establish live Actions, OIDC or tap permission enforcement.

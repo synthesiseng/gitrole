@@ -301,8 +301,25 @@ export function buildPushAlignmentChecks(input: {
     } else if (remote.protocol !== 'ssh' || target.message || !sshAuth?.ok || !sshAuth.githubUser) {
       checks.push({ status: 'warn', label: 'auth', message: (target.message ?? sshAuth?.message ?? 'SSH auth could not be probed for the current push target') + endpoint });
     } else {
-      checks.push({ status: role?.githubUser && role.githubUser !== sshAuth.githubUser ? 'warn' : role?.githubUser ? 'ok' : 'info', label: 'auth',
-        message: (role?.githubUser ? role.githubUser === sshAuth.githubUser ? `SSH auth matches role githubUser ${role.githubUser}` : `SSH auth resolved to ${sshAuth.githubUser}, expected ${role.githubUser}` : `SSH auth resolved to ${sshAuth.githubUser}`) + endpoint });
+      if (!role?.githubUser) {
+        checks.push({
+          status: 'info',
+          label: 'auth',
+          message: `SSH auth resolved to ${sshAuth.githubUser}` + endpoint
+        });
+      } else if (role.githubUser === sshAuth.githubUser) {
+        checks.push({
+          status: 'ok',
+          label: 'auth',
+          message: `SSH auth matches role githubUser ${role.githubUser}` + endpoint
+        });
+      } else {
+        checks.push({
+          status: 'warn',
+          label: 'auth',
+          message: `SSH auth resolved to ${sshAuth.githubUser}, expected ${role.githubUser}` + endpoint
+        });
+      }
       if ((!role || (role.githubUser && role.githubUser !== sshAuth.githubUser)) && observedState.commitIdentity.fullName.value && observedState.commitIdentity.email.value) {
         checks.push({ status: 'warn', label: 'identity', message: `commit identity is ${observedState.commitIdentity.fullName.value} <${observedState.commitIdentity.email.value}> but SSH auth resolves to ${sshAuth.githubUser}` + endpoint });
       }

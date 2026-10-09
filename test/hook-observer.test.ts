@@ -8,6 +8,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { observeLegacyHook } from '../src/adapters/hook-observer.js';
 
 const exec = promisify(execFile);
@@ -185,7 +186,7 @@ test('unreadable hook reports unknown without changing permissions', async t => 
 });
 
 async function doctorCli(f: Awaited<ReturnType<typeof fixture>>, args = ['doctor', '--json']) {
-  const cli = path.resolve('dist/cli/index.js');
+  const cli = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
   try {
     const result = await exec(process.execPath, [cli, ...args], { cwd: f.cwd, env: { ...f.env, NO_COLOR: '1', FORCE_COLOR: '0' } });
     return { code: 0, stdout: result.stdout, stderr: result.stderr };
