@@ -49,6 +49,21 @@ export class InvalidRoleIdentityError extends Error {
   }
 }
 
+/** Reports a key path that could be interpreted as an ssh-add option or stdin. */
+export class InvalidSshKeyPathError extends Error {
+  constructor() {
+    super('SSH key path must not start with "-"; use "./" for a filename starting with "-"');
+    this.name = 'InvalidSshKeyPathError';
+  }
+}
+
+/** Rejects option-like key paths before saving or invoking ssh-add. */
+export function validateSshKeyPath(path: string | undefined): void {
+  if (path?.trimStart().startsWith('-')) {
+    throw new InvalidSshKeyPathError();
+  }
+}
+
 /** Lists blank required identity fields, including whitespace-only values. */
 export function getBlankRoleIdentityFields(role: Pick<Role, 'fullName' | 'email'>): Array<'full name' | 'email'> {
   const fields: Array<'full name' | 'email'> = [];
@@ -124,6 +139,7 @@ function normalizeRoleFields(input: Role, name: string): Role {
 export function normalizeRole(input: Role): Role {
   const role = normalizeRoleFields(input, validateRoleName(input.name));
   validateRoleIdentity(role);
+  validateSshKeyPath(role.sshKeyPath);
   return role;
 }
 
