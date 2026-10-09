@@ -108,7 +108,7 @@ _gitrole() {
     if [[ "$cur" == -* ]]; then
       _gitrole_comp_words "--help -h --version -V"
     else
-      _gitrole_comp_words "add import use pin resolve current list status doctor auth remote remove help"
+      _gitrole_comp_words "add import use pin resolve current list check status doctor auth remote remove help"
     fi
     return 0
   fi
@@ -150,6 +150,13 @@ _gitrole() {
         _gitrole_comp_words "--help -h"
       else
         _gitrole_comp_roles
+      fi
+      ;;
+    check)
+      if [[ -z "$sub" && "$cur" != -* ]]; then
+        _gitrole_comp_words "commit"
+      elif [[ "$cur" == -* ]]; then
+        _gitrole_comp_words "--help -h"
       fi
       ;;
     auth)
@@ -196,7 +203,7 @@ _gitrole() {
       ;;
     help)
       if [[ "$cur" != -* ]]; then
-        _gitrole_comp_words "add import use pin resolve current list status doctor remote remove"
+        _gitrole_comp_words "add import use pin resolve current list check status doctor remote remove"
       fi
       ;;
   esac

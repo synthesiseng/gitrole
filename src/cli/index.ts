@@ -8,6 +8,10 @@ import { fileURLToPath } from 'node:url';
 
 import { Command } from 'commander';
 
+import { observeLegacyHook } from '../adapters/hook-observer.js';
+import { loadCommitInputs } from '../adapters/commit-check.js';
+import { checkCommit } from '../application/check-commit.js';
+import { renderCommitCheck } from '../interface/check-commit.js';
 import { getDoctorExitCode } from './exit-codes.js';
 import { SystemAuthTester, hasAuthTerminal, authTestInputs } from '../adapters/auth-test.js';
 import { testAuthentication } from '../application/auth-test.js';
@@ -96,6 +100,8 @@ type CliDependencies = AppDependencies & {
   repository: DoctorDependencies['repository'];
   sshAuthProbe: DoctorDependencies['sshAuthProbe'];
   authInputs?: typeof authTestInputs;
+  commitInputs?: typeof loadCommitInputs;
+  hookObserver?: DoctorDependencies['hookObserver'];
 };
 
 function createCliDependencies(): CliDependencies {
@@ -103,7 +109,9 @@ function createCliDependencies(): CliDependencies {
     ...createDependencies(),
     repository: new SystemGitRepository(),
     sshAuthProbe: new SystemSshAuthProbe(),
-    authInputs: authTestInputs
+    authInputs: authTestInputs,
+    commitInputs: loadCommitInputs,
+    hookObserver: observeLegacyHook
   };
 }
 
@@ -389,6 +397,24 @@ Shell prompt:
       commandExitCode = result.overall === 'aligned' ? 0 : 2;
     });
 
+  program.command('check').description('read-only local safety checks')
+    .command('commit')
+    .description('check effective author, committer and optional repo policy without network access')
+    .allowExcessArguments(false)
+    .addHelpText('after', `
+Requires a complete saved-role match even without a repo pin.
+Save the intended identity as a role, or do not install the hook here.
+Always local: no remote, SSH, authentication or history checks. No --offline flag.
+Exit 0: allowed, no output. Exit 2: mismatch. Exit 1: required input failure.
+Failures write reasons to stderr. This command never changes roles or Git config.
+`)
+    .action(async () => {
+      const result = await checkCommit(dependencies.commitInputs ?? (() => Promise.reject(new Error('commit input adapter unavailable'))));
+      const message = renderCommitCheck(result, process.env.GITROLE_COMMIT_HOOK === '1');
+      if (message) io.stderr(message);
+      commandExitCode = result.exitCode;
+    });
+
   program
     .command('doctor')
     .description('diagnose identity, remote, and SSH auth alignment')
@@ -403,6 +429,7 @@ Checks:
   - repository context and branch
   - every effective default push URL (fetch origin is separate context)
   - account alignment for supported SSH push transports
+  - informational legacy pre-commit hook migration hints (no setup changes)
 
 Policy:
   gitrole warns on violated expectations, not assumptions.

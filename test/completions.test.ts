@@ -25,6 +25,7 @@ const commandNames = [
   'resolve',
   'current',
   'list',
+  'check',
   'status',
   'doctor',
   'auth',
@@ -266,6 +267,9 @@ test('bash completion offers commands, flags, and saved role names', async () =>
   assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--offline', '--help']);
   assert.ok(bashCompletions(env, 'gitrole doctor --json --').values.includes('--offline'));
   assert.ok(bashCompletions(env, 'gitrole doctor --offline --').values.includes('--json'));
+  assert.deepEqual(bashCompletions(env, 'gitrole check ').values, ['commit']);
+  assert.deepEqual(bashCompletions(env, 'gitrole check commit ').values, []);
+  assert.deepEqual(bashCompletions(env, 'gitrole check commit --').values, ['--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole current ').values, []);
   assert.deepEqual(bashCompletions(env, 'gitrole list --').values, ['--help']);
   assert.ok(bashCompletions(env, 'gitrole help ').values.includes('use'));
@@ -433,6 +437,8 @@ print(json.dumps(results))
     'gitrole add --name ',
     'gitrole remote ',
     'gitrole remote set ',
+    'gitrole check ',
+    'gitrole check commit --',
     'gitrole status --',
     'gitrole doctor --',
     'gitrole doctor --json --',
@@ -448,7 +454,7 @@ print(json.dumps(results))
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const completed = JSON.parse(result.stdout) as Record<string, string>;
-  for (const command of ['add', 'use', 'remote', 'remove', 'doctor', 'status']) {
+  for (const command of ['add', 'use', 'remote', 'remove', 'doctor', 'check', 'status']) {
     assert.match(completed['gitrole '], new RegExp(`\\b${command}\\b`));
   }
   for (const role of ['work', 'personal', 'client-acme']) {
@@ -468,6 +474,9 @@ print(json.dumps(results))
   assert.match(completed['gitrole add --'], /--github-host/);
   assert.match(completed['gitrole add --'], /--email/);
   assert.match(completed['gitrole remote '], /\bset\b/);
+  assert.match(completed['gitrole check '], /commit/);
+  assert.match(completed['gitrole check commit --'], /--help/);
+  assert.doesNotMatch(completed['gitrole check commit --'], /--offline|--json/);
   assert.match(completed['gitrole status --'], /--short/);
   assert.match(completed['gitrole status --'], /--offline/);
   assert.match(completed['gitrole doctor --'], /--json/);
@@ -526,6 +535,9 @@ fishBehavior('fish completion offers commands, flags, and saved role names', asy
   assert.ok(fishCompletions(env, 'gitrole resolve --').values.includes('--json'));
   assert.ok(fishCompletions(env, 'gitrole status --').values.includes('--short'));
   assert.ok(fishCompletions(env, 'gitrole status --').values.includes('--offline'));
+  assert.deepEqual(fishCompletions(env, 'gitrole check ').values, ['commit']);
+  assert.deepEqual(fishCompletions(env, 'gitrole check commit ').values, []);
+  assert.ok(!fishCompletions(env, 'gitrole check commit --').values.includes('--offline'));
   assert.ok(fishCompletions(env, 'gitrole doctor --').values.includes('--json'));
   assert.ok(fishCompletions(env, 'gitrole doctor --json --').values.includes('--offline'));
   assert.ok(fishCompletions(env, 'gitrole doctor --offline --').values.includes('--json'));

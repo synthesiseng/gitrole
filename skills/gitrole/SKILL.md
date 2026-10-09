@@ -97,7 +97,7 @@ Report the command, the exit code, and `overall`. Quote any `warn` field from `s
 
 Don't run `gitrole use`, `gitrole pin`, or `gitrole remote set` to clear the warning unless the user asks. Fixing the identity is a separate action, and the user has to choose the role.
 
-The package also ships `hooks/pre-commit`, which only runs `gitrole status --short`. Leave it uninstalled unless the user asks for that optional hook.
+The package also ships `hooks/pre-commit`, which runs the local `gitrole check commit` guard. It does not replace this skill's strict `gitrole status --short` precommit gate. Leave it uninstalled unless the user asks for that optional hook. Review the [local hook and manual migration guide](https://docs.gitrole.dev/guides/check-identity-before-a-local-commit/) first.
 
 ## Push observation limits
 

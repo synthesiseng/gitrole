@@ -100,7 +100,7 @@ role=maintainer-personal scope=global override=false commit=ok remote=ok auth=ok
 
 <h2 id="what-it-does-not-do">What it doesn't do</h2>
 
-<p>The file doesn't switch roles, install a hook, or block <code>git commit</code>. It tells <code>status</code> and <code>doctor</code> whether the current role is the one this repo asked for. If an agent should read that before it commits, continue with <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.</p>
+<p>The file doesn't switch roles, install a hook, or block <code>git commit</code>. It tells <code>check commit</code>, <code>status</code>, and <code>doctor</code> whether the current role is the one this repo asked for. If an agent should read that before it commits, continue with <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.</p>
 
 <h2 id="the-file-format">File format</h2>
 

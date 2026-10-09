@@ -50,6 +50,15 @@ export async function doctor(
     offline
   });
 
+  if (observedState.repository.isInsideWorkTree && dependencies.hookObserver) {
+    try {
+      const hook = await dependencies.hookObserver();
+      if (hook) checks.push({ ...hook, status: 'info', label: 'hook' });
+    } catch {
+      checks.push({ status: 'info', label: 'hook', message: 'Could not inspect pre-commit hook; migration state unknown. Review it manually.' });
+    }
+  }
+
   return {
     role,
     overall: getDoctorOverall({ checks }),

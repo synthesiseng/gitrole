@@ -162,7 +162,8 @@ async function loadRepoPolicyFile(targetPath: string): Promise<RepoPolicy> {
   return validateRepoPolicy(parsed);
 }
 
-function validateRepoPolicy(input: unknown): RepoPolicy {
+/** Decode the existing repository policy representation without filesystem effects. */
+export function validateRepoPolicy(input: unknown): RepoPolicy {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new InvalidRepoPolicyError('expected a JSON object');
   }

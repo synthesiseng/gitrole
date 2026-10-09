@@ -5,7 +5,7 @@ eyebrow: Reference
 summary: Public contract reference for gitrole machine readable CLI output, including status --short, doctor --json, and resolve --json for scripts and automation.
 ---
 
-<p>Scripts and agents break when they guess which field is the summary, or when they paraphrase <code>overall</code> as "ok". This page is the contract for the three commands they should parse. Field names, values, and exit codes below are the ones the CLI writes.</p>
+<p>Scripts and agents break when they guess which field is the summary, or when they paraphrase <code>overall</code> as "ok". This page is the contract for structured diagnostic output and the local commit check’s exit codes. Field names, values, and exit codes below are the ones the CLI writes.</p>
 
 <h2 id="quick-start">Quick start</h2>
 
@@ -36,6 +36,8 @@ fi
 <p>Shell prompts call <code>gitrole status --short --offline</code> instead, so they don't open SSH on every redraw. <code>--offline</code> does not emit <code>auth=ok</code>. Setup and the segment glyphs are in <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>.</p>
 
 <dl class="command-list">
+  <dt><a href="#check-commit"><code>gitrole check commit</code></a></dt>
+  <dd>Local-only saved identity and policy guard. Automate against its exit code; success is quiet.</dd>
   <dt><a href="#status-short"><code>gitrole status --short</code></a></dt>
   <dd>One line. Order is <code>role scope override commit remote auth policy overall</code>.</dd>
   <dt><a href="#doctor-json"><code>gitrole doctor --json</code></a></dt>
@@ -45,6 +47,26 @@ fi
   <dt><a href="#role-name-format">Role name format</a></dt>
   <dd>Saved role names, and the reserved <code>role=no-role</code> sentinel.</dd>
 </dl>
+
+<h2 id="check-commit"><code>gitrole check commit</code></h2>
+
+<p>This command checks local commit identity and repository policy. It accepts no operands, <code>--offline</code>, or JSON mode. It does not resolve push destinations, invoke SSH, check authentication, or write roles, policy, or Git configuration. It can pass without a remote.</p>
+
+| Exit | Meaning | stdout | stderr |
+| --- | --- | --- | --- |
+| <code>0</code> | Complete saved identity and applicable policy match | Empty | Empty |
+| <code>2</code> | Identity/policy mismatch or unsuitable repository context | Empty | Human-readable explanation |
+| <code>1</code> | Required read, parse, Git operation, or usage failure | Empty | Human-readable explanation |
+
+<p>The command and exit codes are the automation contract; diagnostic wording is not. A required read or parse failure takes precedence over an observed mismatch. No successful result means a commit occurred.</p>
+
+<p>The complete effective author name and email must match the first saved role with that identity, in store order. The committer must equal that same complete identity. No pin is required, but no saved match is exit <code>2</code>, including a missing or empty role store; the check never creates a store. A matching legacy reserved <code>no-role</code> profile is refused. Duplicate identities do not select a later profile to satisfy policy.</p>
+
+<p>With a valid <code>.gitrole</code>, both <code>default</code> and <code>allowed</code> evaluations pass. <code>notAllowed</code> refuses. An allowed non-default role may pass without a saved default profile. Missing policy is optional; malformed role data anywhere in the store or malformed policy is exit <code>1</code>. Existing tolerant parsing of legacy blank identities and filtered allowed-list elements remains unchanged; unrelated unusable identities do not veto a valid match. Unreadable files and dangling symlinks are failures, not absence; valid file symlinks may be read.</p>
+
+<p>Mixed configured identity sources refuse. An unborn branch requires a local or worktree override; matching global-only identity can pass in an established repository. A valid unborn branch differs from damaged HEAD, index, config, or unexpected Git results, which fail with <code>1</code>. Outside a worktree and bare repositories return <code>2</code>. The check reads the invocation's effective identity, including Git-prepared author values in a hook; a standalone run cannot predict later author arguments.</p>
+
+<p>The optional packaged pre-commit wrapper delegates to this command. It preserves <code>1</code>/<code>2</code>, normalizes unexpected failures to <code>1</code>, and appends a fixed bypass disclosure on failure. Missing or incompatible CLI and missing Node never count as a pass. The wrapper is quiet on success. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">local hook setup and migration</a>. Existing status fields/exits and the packaged agent skill's strict gate remain unchanged.</p>
 
 <h2 id="status-short"><code>gitrole status --short</code></h2>
 
@@ -469,6 +491,8 @@ gitrole doctor --json --offline
     <tr><td><code>message</code></td><td>Human-readable explanation</td><td>string. Don't parse this.</td></tr>
   </tbody>
 </table>
+
+<p>Doctor may append at most one <code>{status: "info", label: "hook", message: "..."}</code> entry for a legacy pre-commit hook or an unknown inspection result. It reads Git's effective hook path without executing or modifying the hook. This uses the existing check shape and status vocabulary, adds no top-level field, and does not change <code>overall</code> or exits. Exact legacy bytes, inactive files, symlink targets, and uncertain text matches receive explanatory wording; do not parse that wording. No finding is not proof of protection or successful migration. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}#doctor-hint">inspection limits and manual review</a>.</p>
 
 <p>When a pin allows the active role and that role has a <code>githubUser</code>, the HTTPS auth entry is <code>info</code>:</p>
 

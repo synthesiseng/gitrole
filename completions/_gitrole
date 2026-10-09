@@ -32,6 +32,7 @@ commands=(
   'resolve:print the repo-local default role from .gitrole'
   'current:show which saved role matches the active commit identity'
   'list:list saved roles and mark the active one'
+  'check:local identity and policy checks'
   'status:check whether the current repo is aligned for commit and push'
   'auth:explicit authentication checks'
   'doctor:diagnose identity, remote, and SSH auth alignment'
@@ -103,6 +104,9 @@ case $state in
           '(- :)'{-h,--help}'[print help]' \
           '1:saved role:_gitrole_saved_roles' \
           && ret=0
+        ;;
+      check)
+        _arguments '(- :)'{-h,--help}'[print help]' '1:subcommand:(commit)' && ret=0
         ;;
       auth)
         _arguments '(- :)'{-h,--help}'[print help]' '1:subcommand:(test)' && ret=0

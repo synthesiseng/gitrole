@@ -116,23 +116,7 @@ gitrole doctor --json
 
 <p>The skill doesn't install a git hook, switch roles, or block git. It checks, and the agent decides to stop. Scripted preflight without a skill is in <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.</p>
 
-<p>For an npm installation, the package also ships <code>hooks/pre-commit</code>, which only runs <code>gitrole status --short</code>. Copy it yourself when you want git to run the same check:</p>
-
-```bash
-GITROLE_HOOK="$(npm root -g)/gitrole/hooks/pre-commit"
-HOOK_PATH="$(git rev-parse --git-path hooks/pre-commit)"
-if [ -e "$HOOK_PATH" ] || [ -L "$HOOK_PATH" ]; then
-  printf '%s\n' 'An existing hook needs review; no file copied.'
-elif [ ! -f "$GITROLE_HOOK" ]; then
-  printf '%s\n' 'Hook file not found; check the package or checkout path.'
-else
-  cp "$GITROLE_HOOK" "$HOOK_PATH" && chmod +x "$HOOK_PATH"
-fi
-```
-
-<p>Review the resolved <code>HOOK_PATH</code> before choosing this optional setup. Git can use <code>core.hooksPath</code>, and linked worktrees can share a hook directory. An existing file, directory, or symlink is left for review. If you use a custom hook directory, ensure it exists before copying.</p>
-
-<p>Homebrew users can use <code>skills/gitrole</code> and <code>hooks/pre-commit</code> from an absolute source-checkout path. The npm paths below require an actual npm installation; no supported Homebrew asset path is documented. See <a href="{{ '/guides/install-and-update-gitrole/' | url }}">Install and update</a>.</p>
+<p>The optional <code>hooks/pre-commit</code> asset now runs <code>gitrole check commit</code>, a local identity and policy guard. It requires a full saved-role match even without a pin. It does not change this skill's strict <code>status --short</code> gate. Existing copied hooks that run status keep their earlier behavior until manually migrated. For installation, compatibility, backup and rollback guidance, read <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">Check identity before a local commit</a>.</p>
 
 <h2 id="where-the-skill-lives">Where the skill lives</h2>
 

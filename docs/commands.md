@@ -36,6 +36,9 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dt><code>gitrole list</code></dt>
   <dd>List all saved roles and mark the active one when there is a match.</dd>
 
+  <dt><code>gitrole check commit</code></dt>
+  <dd>Check the complete effective author and committer against a saved role and any repository policy, using local data only. Requires a saved-role match even without a pin. Quiet exit 0 passes; exit 2 explains a mismatch; exit 1 explains a required read, parse, or operational failure. No operands, <code>--offline</code>, or JSON mode. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">the local commit guide</a>.</dd>
+
   <dt><code>gitrole status</code></dt>
   <dd>Check current author/committer identity, policy, and every resolved default push destination. Alignment does not prove push success.</dd>
 
@@ -43,7 +46,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to <code>status</code> to invoke no SSH commands, including configuration inspection. Local HTTPS pin checks still apply.</dd>
 
   <dt><code>gitrole doctor</code></dt>
-  <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name or email, including inactive roles. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config.</dd>
+  <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name or email, including inactive roles. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config. A read-only legacy pre-commit inspection may add an informational migration hint; it never installs, executes, or replaces hooks, and that hint does not change the verdict or exit. This hint is available in both default online diagnosis and <code>doctor --offline</code>.</dd>
 
   <dt><code>gitrole doctor --json</code></dt>
   <dd>Return the full diagnosis as structured JSON.</dd>
@@ -60,7 +63,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
 
 <h2 id="what-it-does-not-do">What these commands don't do</h2>
 
-<p>None of them switch your GitHub browser session, store an HTTPS token, or install a hook for you. The optional check-only hook is a file you copy yourself. It runs <code>gitrole status --short</code>.</p>
+<p>None of them switch your GitHub browser session, store an HTTPS token, or install a hook for you. The optional check-only hook is a file you copy yourself. It runs <code>gitrole check commit</code>. Older copied hooks keep their combined <code>status --short</code> behavior until <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}#migration">manually migrated</a>.</p>
 
 <p>Optional <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">shell tab completion</a> completes commands and saved role names; installation does not enable it automatically.</p>
 

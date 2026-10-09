@@ -655,9 +655,9 @@ test('e2e GIT_COMMITTER_EMAIL warns when the committer is not the author', async
   );
 });
 
-test('e2e optional pre-commit hook only runs status --short and exits non-zero on warn', async () => {
+test('e2e optional pre-commit hook runs check commit and refuses unsafe local identity', async () => {
   const hookSource = await readFile(path.resolve('hooks/pre-commit'), 'utf8');
-  assert.match(hookSource, /^exec gitrole status --short$/m);
+  assert.match(hookSource, /gitrole check commit/);
   assert.doesNotMatch(hookSource, /gitrole use/);
 
   const workspace = await createHermeticWorkspace({
@@ -699,8 +699,8 @@ test('e2e optional pre-commit hook only runs status --short and exits non-zero o
     }
   });
   assert.notEqual(warned.status, 0);
-  assert.match(warned.stdout, /commit=warn/);
-  assert.match(warned.stdout, /overall=warning/);
+  assert.equal(warned.stdout, '');
+  assert.match(warned.stderr, /--no-verify/);
 
   commitEmpty(workspace, {
     message: 'feat: local role committed'
@@ -715,8 +715,8 @@ test('e2e optional pre-commit hook only runs status --short and exits non-zero o
     }
   });
   assert.equal(aligned.status, 0, aligned.stderr);
-  assert.match(aligned.stdout, /commit=ok/);
-  assert.match(aligned.stdout, /overall=aligned/);
+  assert.equal(aligned.stdout, '');
+  assert.equal(aligned.stderr, '');
 });
 
 test('e2e remote set preserves owner and repository while rewriting the host alias', async () => {

@@ -452,24 +452,28 @@ test('status, doctor, and the pre-commit hook keep git detection outside the pro
   const offlineSubmodule = runCli(fixture, fixture.dirs.submodule, ['status', '--short', '--offline']);
   assertResult(offlineSubmodule, { status: 0, stdout: alignedShort, stderr: '' }, 'submodule offline');
 
+  assertResult(
+    runCli(fixture, fixture.dirs.httpsRepo, ['status', '--short']),
+    { status: 2, stdout: httpsShort, stderr: '' },
+    'HTTPS status retains its combined readiness warning'
+  );
+
   const hook = await readFile(hookPath, 'utf8');
-  assert.match(hook, /^exec gitrole status --short$/m);
+  assert.match(hook, /gitrole check commit/);
   const hookRun = (cwd: string) =>
     spawnSync(hookPath, [], { cwd, env: fixture.env, encoding: 'utf8' });
-  assertResult(
-    hookRun(fixture.dirs.plain),
-    { status: 2, stdout: outsideShort, stderr: '' },
-    'hook plain'
-  );
-  assertResult(
-    hookRun(fixture.dirs.emptyGit),
-    { status: 2, stdout: outsideShort, stderr: '' },
-    'hook empty .git'
-  );
+  const plainHook = hookRun(fixture.dirs.plain);
+  assert.equal(plainHook.status, 2);
+  assert.equal(plainHook.stdout, '');
+  assert.match(plainHook.stderr, /--no-verify/);
+  const damagedHook = hookRun(fixture.dirs.emptyGit);
+  assert.equal(damagedHook.status, 1);
+  assert.equal(damagedHook.stdout, '');
+  assert.match(damagedHook.stderr, /--no-verify/);
   assertResult(
     hookRun(fixture.dirs.httpsRepo),
-    { status: 2, stdout: httpsShort, stderr: '' },
-    'hook https repo'
+    { status: 0, stdout: '', stderr: '' },
+    'hook permits valid local identity independently of HTTPS auth'
   );
 
   const broken = [

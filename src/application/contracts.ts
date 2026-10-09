@@ -222,6 +222,8 @@ export interface UseRoleDependencies extends AppDependencies {
 }
 
 export interface DoctorDependencies {
+  /** Optional read-only legacy-hook observation, used only by doctor. */
+  hookObserver?: () => Promise<DoctorCheck | undefined>;
   roleStore: RoleStore;
   gitConfig: GitConfig;
   repository: GitRepository;

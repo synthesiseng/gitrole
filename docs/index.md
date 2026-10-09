@@ -20,18 +20,20 @@ The installation channels can publish different versions. The first-use guide in
 
 | Command | Use it to |
 | --- | --- |
+| `gitrole check commit` | Check saved commit identity and policy locally, without remote or SSH checks. |
 | `gitrole current` | Find the saved role matching Git's effective author. |
 | `gitrole status` | Read a concise identity and default push check. |
 | `gitrole doctor` | Explain warnings and inspect each push destination. |
 | `gitrole status --short --offline` | Read local checks without invoking SSH. HTTPS pin checks still apply. |
 
-Exit `0` means aligned, `2` means warning, and `1` means the command failed. `auth=na` means authentication was skipped or does not apply; it does not prove credentials. No result guarantees a future commit's explicit author or a successful push.
+For status and doctor, exit `0` means aligned, `2` means warning, and `1` means the command failed. `check commit` is quiet on success, exits `2` for a local mismatch, and `1` for a failure. `auth=na` means authentication was skipped or does not apply; it does not prove credentials. No result guarantees a future commit's explicit author or a successful push.
 
 <h2 id="keep-reading">Continue with a task</h2>
 
 - <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>: save the author Git already uses.
 - <a href="{{ '/guides/use-repo-local-identity-policy-with-gitrole/' | url }}">Use repo-local identity policy</a>: declare a default and allowed roles.
 - <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>: use a local check and understand shell limitations.
+- <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">Check identity before a local commit</a>: use the local guard and review copied-hook migration.
 - <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">Enable shell tab completion</a>: load optional completion scripts.
 - <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify identity before an agent commits</a>: add check instructions to an authorized agent workflow.
 - <a href="{{ '/use-cases/give-an-agent-its-own-git-identity/' | url }}">Give an agent its own Git identity</a>: apply an identity whose account, key, and alias already exist.
