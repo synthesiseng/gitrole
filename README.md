@@ -78,12 +78,15 @@ For SSH prerequisites and a full walkthrough, read [Use the right Git identity f
 | `gitrole status` | Read a concise identity and default push check. |
 | `gitrole doctor` | Explain warnings and each push destination. |
 | `gitrole doctor --json` | Inspect structured identity, provenance, and check results. |
+| `gitrole doctor --offline` | Explain local checks without running SSH; combine with `--json` in either order. |
 
 `status --short` prints eight fields in order: `role scope override commit remote auth policy overall`. Read fields by name. Exit `0` means `overall=aligned`; exit `2` means `overall=warning` with a valid result. Exit `1` means failure, with stderr and empty stdout. `na` is skipped or inapplicable, not proof of authentication.
 
 Gitrole asks Git for the effective author and committer, including environment overrides and included configuration. `current` and `import current` use the author. A mismatched or missing committer warns. Configured scope can be `mixed` even when effective field sources are `env`.
 
 Push checks cover the selected default remote and **every** Git-resolved push URL. HTTPS-only matching pins can yield `auth=na`; absent or mismatched pins warn, including offline. Mixed SSH/HTTPS warns online. Custom, interactive, or incomplete SSH contexts remain unverified. Online inspection may execute configured `Match exec` commands or DNS lookups.
+
+`doctor --offline` skips all SSH execution, including configuration inspection. Skipped authentication is informational; exit `0` means no local warnings, not verified authentication or a guarantee of a future push. Identity, policy, every push host and HTTPS pin checks remain active, including mixed destinations. It reads or saves no authentication history.
 
 For an unverified SSH account, read the specific reason and any manual-check guidance. `gitrole doctor --json` retains all reported reasons; a separate SSH greeting does not verify the push context. See [SSH warnings](https://docs.gitrole.dev/guides/troubleshoot-identity-warnings/#ssh-unverified).
 

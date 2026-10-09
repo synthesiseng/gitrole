@@ -271,6 +271,7 @@ export function buildPushAlignmentChecks(input: {
   repoPolicy?: RepoPolicyEvaluation;
   pinnedRole?: Role;
   enforceHttpsPin?: boolean;
+  offline?: boolean;
 }): DoctorCheck[] {
   const { role, observedState } = input;
   const push = observedState.repository.push;
@@ -279,7 +280,7 @@ export function buildPushAlignmentChecks(input: {
     status: 'warn', label: 'remote', message: push?.message ?? 'default push destination could not be observed'
   }];
   const checks: DoctorCheck[] = [];
-  if (push.targets.some(({ remote }) => remote.protocol === 'ssh') && push.targets.some(({ remote }) => remote.protocol === 'https')) {
+  if (!input.offline && push.targets.some(({ remote }) => remote.protocol === 'ssh') && push.targets.some(({ remote }) => remote.protocol === 'https')) {
     checks.push({ status: 'warn', label: 'auth', message: 'mixed SSH and HTTPS push destinations include unverified authentication' });
   }
   for (const target of push.targets) {
@@ -293,6 +294,10 @@ export function buildPushAlignmentChecks(input: {
     if (remote.protocol === 'https') {
       const description = describeHttpsAuth(input);
       checks.push({ status: description.auth === 'warn' && input.enforceHttpsPin !== false ? 'warn' : 'info', label: 'auth', message: description.message + endpoint });
+    } else if (input.offline) {
+      checks.push(remote.protocol === 'ssh'
+        ? { status: 'info', label: 'auth', message: 'SSH authentication skipped (--offline); local checks only. An online check may connect and run configured SSH commands or change SSH state.' + endpoint }
+        : { status: 'warn', label: 'remote', message: 'push transport is unsupported; review the selected push URL' + endpoint });
     } else if (remote.protocol !== 'ssh' || target.message || !sshAuth?.ok || !sshAuth.githubUser) {
       checks.push({ status: 'warn', label: 'auth', message: (target.message ?? sshAuth?.message ?? 'SSH auth could not be probed for the current push target') + endpoint });
     } else {

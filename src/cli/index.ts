@@ -393,6 +393,7 @@ Shell prompt:
     .command('doctor')
     .description('diagnose identity, remote, and SSH auth alignment')
     .option('--json', 'write the diagnostic result as JSON')
+    .option('--offline', 'skip all SSH execution and use local checks only')
     .addHelpText(
       'after',
       `
@@ -413,10 +414,22 @@ Policy:
 Example:
   $ gitrole doctor
   $ gitrole doctor --json
+  $ gitrole doctor --offline
+  $ gitrole doctor --offline --json
+  $ gitrole doctor --json --offline
+
+Offline:
+  --offline invokes no SSH, including configuration inspection (ssh -G).
+  Authentication is skipped (info), not failed or verified. Exit 0 means only
+  that local checks have no warnings; it does not verify a future push.
+  Identity, policy, every push host and HTTPS pin checks still apply, including
+  mixed SSH/HTTPS destinations. No history is read or saved.
+  Without --offline, existing online SSH checks remain enabled; they may run
+  configured commands, contact the network or change SSH state.
 `
     )
-    .action(async (options: { json?: boolean }) => {
-      const result = await doctor(dependencies);
+    .action(async (options: { json?: boolean; offline?: boolean }) => {
+      const result = await doctor(dependencies, { offline: options.offline === true });
       io.stdout(options.json ? JSON.stringify(result, null, 2) : renderDoctor(result));
       commandExitCode = getDoctorExitCode(result);
     });
