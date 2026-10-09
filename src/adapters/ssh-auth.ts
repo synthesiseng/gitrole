@@ -50,11 +50,26 @@ export class SystemSshAuthProbe {
     if (context) {
       // Git uses its standard ssh transport here; an independent diagnostic binary cannot prove it.
       if (this.binaryPath !== 'ssh') {
-        return { ok: false, host, message: 'diagnostic SSH binary differs from Git transport; authentication is unverified. Review the diagnostic override with the setup owner; a separate SSH check cannot verify this transport.' };
+        return {
+          ok: false,
+          host,
+          message: 'diagnostic SSH binary differs from Git transport; authentication is unverified. Review the diagnostic override with the setup owner; a separate SSH check cannot verify this transport.'
+        };
       }
-      if ((context.port !== undefined && (!Number.isInteger(context.port) || context.port < 1 || context.port > 65535)) ||
-          !context.path || /[\r\n\0]/.test(context.path) || host.startsWith('-') || context.user?.startsWith('-')) {
-        return { ok: false, host, message: 'SSH URL context is unsupported; authentication is unverified' };
+      const invalidPort = context.port !== undefined &&
+        (!Number.isInteger(context.port) || context.port < 1 || context.port > 65535);
+      if (
+        invalidPort ||
+        !context.path ||
+        /[\r\n\0]/.test(context.path) ||
+        host.startsWith('-') ||
+        context.user?.startsWith('-')
+      ) {
+        return {
+          ok: false,
+          host,
+          message: 'SSH URL context is unsupported; authentication is unverified'
+        };
       }
       // Online only. ssh -G may execute Match exec or DNS; callers must skip this entire method offline.
       // Compare all effective options in Git's receive-pack and our handshake contexts.
@@ -65,34 +80,65 @@ export class SystemSshAuthProbe {
         const expected = parseSshConfiguration(gitContext.stdout);
         const actual = parseSshConfiguration(probeContext.stdout);
         // Interactive Git authentication can unlock different credentials than our bounded probe.
-        const required = ['hostname', 'user', 'port', 'identityfile', 'identitiesonly', 'batchmode',
-          'passwordauthentication', 'kbdinteractiveauthentication', 'pubkeyauthentication'];
+        const required = [
+          'hostname', 'user', 'port', 'identityfile', 'identitiesonly', 'batchmode',
+          'passwordauthentication', 'kbdinteractiveauthentication', 'pubkeyauthentication'
+        ];
         const complete = required.every((key) => expected.has(key) && actual.has(key));
         const noninteractive = expected.get('batchmode')?.[0] === 'yes';
         // These diagnostic limits can make observation fail, but cannot authorize another identity.
-        for (const key of ['connecttimeout', 'requesttty']) { expected.delete(key); actual.delete(key); }
-        if (!complete || !noninteractive ||
-          JSON.stringify([...expected]) !== JSON.stringify([...actual]) ||
-          !['none', undefined].includes(expected.get('remotecommand')?.[0])) {
-          const reasons: string[] = [];
-          if (!complete) reasons.push('OpenSSH did not report all settings needed to compare the push and connection check. Review the existing OpenSSH setup.');
-          if (expected.has('batchmode') && !noninteractive) reasons.push('Git can ask for your key passphrase during push; Gitrole checks without asking, so it may see different keys. Do not change settings just to clear this warning.');
-          if (!['none', undefined].includes(expected.get('remotecommand')?.[0])) reasons.push('A configured remote command prevents this comparison. Review whether that command is intentional; Gitrole will not bypass it.');
-          // Describe independent differences without repeating a reason already explained above.
-          const differentKeys = new Set([...expected.keys(), ...actual.keys()].filter((key) =>
-            JSON.stringify(expected.get(key)) !== JSON.stringify(actual.get(key))));
-          if (!noninteractive) differentKeys.delete('batchmode');
-          if (!['none', undefined].includes(expected.get('remotecommand')?.[0])) differentKeys.delete('remotecommand');
-          if (!complete) for (const key of required) {
-            if (!expected.has(key) || !actual.has(key)) differentKeys.delete(key);
-          }
-          if (differentKeys.size) reasons.push("Git's push command and the connection check use different SSH settings. Review command-dependent SSH rules with the setup owner.");
-          // A probe-owned message envelope keeps reason lists distinct from raw connection errors.
-          return { ok: false, host, message: `SSH account unverified:\n${reasons.map((reason) => `- ${reason}`).join('\n')}\n\n${manualCheck(host, context)}` };
+        for (const key of ['connecttimeout', 'requesttty']) {
+          expected.delete(key);
+          actual.delete(key);
+        }
+        const configurationsMatch = JSON.stringify([...expected]) === JSON.stringify([...actual]);
+        const hasRemoteCommand = !['none', undefined].includes(expected.get('remotecommand')?.[0]);
 
+        if (!complete || !noninteractive || !configurationsMatch || hasRemoteCommand) {
+          const reasons: string[] = [];
+          if (!complete) {
+            reasons.push('OpenSSH did not report all settings needed to compare the push and connection check. Review the existing OpenSSH setup.');
+          }
+          if (expected.has('batchmode') && !noninteractive) {
+            reasons.push('Git can ask for your key passphrase during push; Gitrole checks without asking, so it may see different keys. Do not change settings just to clear this warning.');
+          }
+          if (hasRemoteCommand) {
+            reasons.push('A configured remote command prevents this comparison. Review whether that command is intentional; Gitrole will not bypass it.');
+          }
+          // Describe independent differences without repeating a reason already explained above.
+          const differentKeys = new Set(
+            [...expected.keys(), ...actual.keys()].filter((key) =>
+              JSON.stringify(expected.get(key)) !== JSON.stringify(actual.get(key)))
+          );
+          if (!noninteractive) {
+            differentKeys.delete('batchmode');
+          }
+          if (hasRemoteCommand) {
+            differentKeys.delete('remotecommand');
+          }
+          if (!complete) {
+            for (const key of required) {
+              if (!expected.has(key) || !actual.has(key)) {
+                differentKeys.delete(key);
+              }
+            }
+          }
+          if (differentKeys.size) {
+            reasons.push("Git's push command and the connection check use different SSH settings. Review command-dependent SSH rules with the setup owner.");
+          }
+          // A probe-owned message envelope keeps reason lists distinct from raw connection errors.
+          return {
+            ok: false,
+            host,
+            message: `SSH account unverified:\n${reasons.map((reason) => `- ${reason}`).join('\n')}\n\n${manualCheck(host, context)}`
+          };
         }
       } catch {
-        return { ok: false, host, message: 'SSH account unverified: OpenSSH settings could not be inspected. Review the SSH configuration for errors before retrying; no account was confirmed.' };
+        return {
+          ok: false,
+          host,
+          message: 'SSH account unverified: OpenSSH settings could not be inspected. Review the SSH configuration for errors before retrying; no account was confirmed.'
+        };
       }
     }
     try {
