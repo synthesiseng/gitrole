@@ -169,6 +169,8 @@ test('completion scripts exist and read role names from gitrole list', async () 
     assert.ok(source.includes(roleListSed), filePath);
   }
 
+  const fishSource = await readFile(fishScript, 'utf8');
+  assert.match(fishSource, /__fish_seen_subcommand_from doctor' -l offline/);
   const zshSource = await readFile(zshScript, 'utf8');
   assert.match(zshSource, /^#compdef gitrole\n/);
   const guide = await readFile(
@@ -261,7 +263,9 @@ test('bash completion offers commands, flags, and saved role names', async () =>
   assert.deepEqual(bashCompletions(env, 'gitrole resolve --').values, ['--json', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole status --').values, ['--short', '--offline', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole auth ').values, ['test']);
-  assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--help']);
+  assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--offline', '--help']);
+  assert.ok(bashCompletions(env, 'gitrole doctor --json --').values.includes('--offline'));
+  assert.ok(bashCompletions(env, 'gitrole doctor --offline --').values.includes('--json'));
   assert.deepEqual(bashCompletions(env, 'gitrole current ').values, []);
   assert.deepEqual(bashCompletions(env, 'gitrole list --').values, ['--help']);
   assert.ok(bashCompletions(env, 'gitrole help ').values.includes('use'));
@@ -431,6 +435,8 @@ print(json.dumps(results))
     'gitrole remote set ',
     'gitrole status --',
     'gitrole doctor --',
+    'gitrole doctor --json --',
+    'gitrole doctor --offline --',
     'gitrole resolve --',
     'gitrole pin '
   ];
@@ -465,6 +471,9 @@ print(json.dumps(results))
   assert.match(completed['gitrole status --'], /--short/);
   assert.match(completed['gitrole status --'], /--offline/);
   assert.match(completed['gitrole doctor --'], /--json/);
+  assert.match(completed['gitrole doctor --'], /--offline/);
+  assert.match(completed['gitrole doctor --json --'], /--offline/);
+  assert.match(completed['gitrole doctor --offline --'], /--json/);
   assert.match(completed['gitrole resolve --'], /--json/);
 });
 
@@ -518,6 +527,8 @@ fishBehavior('fish completion offers commands, flags, and saved role names', asy
   assert.ok(fishCompletions(env, 'gitrole status --').values.includes('--short'));
   assert.ok(fishCompletions(env, 'gitrole status --').values.includes('--offline'));
   assert.ok(fishCompletions(env, 'gitrole doctor --').values.includes('--json'));
+  assert.ok(fishCompletions(env, 'gitrole doctor --json --').values.includes('--offline'));
+  assert.ok(fishCompletions(env, 'gitrole doctor --offline --').values.includes('--json'));
   assert.deepEqual(fishCompletions(env, 'gitrole current ').values, []);
   assert.equal(fishCompletions(env, 'gitrole use ').stderr, '');
 });

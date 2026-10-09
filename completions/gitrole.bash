@@ -186,7 +186,7 @@ _gitrole() {
       ;;
     doctor)
       if [[ "$cur" == -* ]]; then
-        _gitrole_comp_words "--json --help -h"
+        _gitrole_comp_words "--json --offline --help -h"
       fi
       ;;
     current|list)

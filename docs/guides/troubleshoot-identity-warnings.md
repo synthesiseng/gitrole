@@ -14,6 +14,17 @@ gitrole doctor
 
 For structured detail, use `gitrole doctor --json`. Both commands may exit `2` and still return a valid diagnosis. Exit `1` is failure; the error is on stderr and no result is printed on stdout.
 
+<h2 id="offline">Diagnose locally without SSH</h2>
+
+```bash
+gitrole doctor --offline
+gitrole doctor --offline --json
+```
+
+Use this when you want local explanations without SSH connections or SSH configuration evaluation. `--json --offline` works too. Authentication is explicitly skipped, not failed or verified. Exit `0` means no local warnings; it does not establish an authenticated account or guarantee a future push.
+
+Local identity, author/committer differences, fresh-repository state, policy, every selected push host and HTTPS pin checks still apply. Mixed SSH/HTTPS destinations keep local pin checks without the online mixed-authentication warning. A missing or mismatched pin still warns. No authentication history is read or saved. To inspect online authentication later, run `gitrole doctor` yourself with awareness that configured SSH commands, network access and SSH state changes may occur.
+
 <h2 id="choose-a-warning">Choose the warning</h2>
 
 | What warned | What to inspect | Next action |

@@ -14,6 +14,12 @@ import {
 import { collectObservedState, type ObservedState } from '../observed-state.js';
 import { evaluateRepoPolicy, loadOptionalRepoPolicy } from '../repo-policy.js';
 
+/** Options for choosing local-only diagnosis without SSH observation. */
+export interface DoctorOptions {
+  /** Skip all SSH execution; retain local identity, destination and policy checks. */
+  offline?: boolean;
+}
+
 /**
  * Diagnoses the active commit identity and push path for the current repository.
  *
@@ -24,11 +30,13 @@ import { evaluateRepoPolicy, loadOptionalRepoPolicy } from '../repo-policy.js';
  * 2. Who will GitHub think I am when I push over SSH?
  */
 export async function doctor(
-  dependencies: DoctorDependencies
+  dependencies: DoctorDependencies,
+  options: DoctorOptions = {}
 ): Promise<DoctorResult> {
+  const offline = options.offline === true;
   const [roles, observedState, repoPolicy] = await Promise.all([
     dependencies.roleStore.list(),
-    collectObservedState(dependencies),
+    collectObservedState(dependencies, { probeSsh: !offline }),
     loadOptionalRepoPolicy(dependencies.repository)
   ]);
   const role = findMatchingRole(roles, observedState.commitIdentity);
@@ -38,7 +46,8 @@ export async function doctor(
     roles,
     observedState,
     repoPolicy: evaluatedRepoPolicy,
-    pinnedRole: findPinnedRole(roles, evaluatedRepoPolicy)
+    pinnedRole: findPinnedRole(roles, evaluatedRepoPolicy),
+    offline
   });
 
   return {
@@ -118,6 +127,7 @@ function buildDoctorChecks(input: {
   observedState: ObservedState;
   repoPolicy?: DoctorResult['repoPolicy'];
   pinnedRole?: Role;
+  offline?: boolean;
 }): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const { observedState } = input;
@@ -206,9 +216,9 @@ function buildDoctorChecks(input: {
   }
 
   if (input.role) {
-    checks.push(...buildRoleAlignmentChecks({ role: input.role, observedState, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole, enforceHttpsPin: true }));
+    checks.push(...buildRoleAlignmentChecks({ role: input.role, observedState, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole, enforceHttpsPin: true, offline: input.offline }));
   } else {
-    checks.push(...buildPushAlignmentChecks({ observedState, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole, enforceHttpsPin: true }));
+    checks.push(...buildPushAlignmentChecks({ observedState, repoPolicy: input.repoPolicy, pinnedRole: input.pinnedRole, enforceHttpsPin: true, offline: input.offline }));
   }
 
   if (input.repoPolicy) {
@@ -224,6 +234,7 @@ function buildRoleAlignmentChecks(input: {
   repoPolicy?: DoctorResult['repoPolicy'];
   pinnedRole?: Role;
   enforceHttpsPin?: boolean;
+  offline?: boolean;
 }): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const { role, observedState } = input;

@@ -56,13 +56,12 @@ for (const mode of ['named', 'pushurl', 'direct', 'rewrite', 'mixed']) {
       assert.match(status.stdout, /commit=ok remote=warn/);
       assert.match(status.stdout, /policy=ok overall=warning/);
       assert.match(status.stdout, offline ? /auth=na/ : /auth=warn/);
-      if (offline) continue; // doctor has no offline CLI mode.
-      const doctor = runCli(w, ['doctor', '--json']);
+      const doctor = runCli(w, ['doctor', '--json', ...flags]);
       assert.equal(doctor.status, 2, doctor.stdout + doctor.stderr);
       const diagnosis = JSON.parse(doctor.stdout);
       assert.equal(diagnosis.overall, 'warning');
       assert.ok(diagnosis.repository.push.targets.some((target: { remote: { url: string; protocol: string } }) => target.remote.url === helper && target.remote.protocol === 'unknown'));
-      assert.ok(diagnosis.checks.some((check: { status: string; label: string }) => check.status === 'warn' && check.label === 'auth'));
+      assert.ok(diagnosis.checks.some((check: { status: string; label: string }) => check.status === 'warn' && check.label === (offline ? 'remote' : 'auth')));
     }
     assert.deepEqual(await readFile(path.join(w.repoDir, '.git/config')), before);
     await assert.rejects(readFile(marker), { code: 'ENOENT' });

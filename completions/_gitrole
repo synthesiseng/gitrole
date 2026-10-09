@@ -149,6 +149,7 @@ case $state in
       doctor)
         _arguments \
           '--json[write the diagnostic result as JSON]' \
+          '--offline[skip all SSH execution and use local checks only]' \
           '(- :)'{-h,--help}'[print help]' \
           && ret=0
         ;;

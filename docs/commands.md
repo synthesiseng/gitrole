@@ -40,13 +40,16 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Check current author/committer identity, policy, and every resolved default push destination. Alignment does not prove push success.</dd>
 
   <dt><code>gitrole status --short</code></dt>
-  <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to <code>status</code> to invoke no SSH commands, including configuration inspection. <code>doctor</code> does not accept that flag. Local HTTPS pin checks still apply.</dd>
+  <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to <code>status</code> to invoke no SSH commands, including configuration inspection. Local HTTPS pin checks still apply.</dd>
 
   <dt><code>gitrole doctor</code></dt>
   <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name or email, including inactive roles. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config.</dd>
 
   <dt><code>gitrole doctor --json</code></dt>
   <dd>Return the full diagnosis as structured JSON.</dd>
+
+  <dt><code>gitrole doctor --offline</code></dt>
+  <dd>Run local diagnosis without any SSH execution, including <code>ssh -G</code>. Combine with <code>--json</code> in either order. SSH authentication is skipped as <code>info</code>; local warnings still cause exit <code>2</code>. Exit <code>0</code> means only that local checks have no warnings. Every push host and HTTPS pin is still checked, including mixed SSH/HTTPS destinations. No authentication history is read or saved. Default doctor retains online SSH checks and their possible network/configuration effects.</dd>
 
   <dt><code>gitrole remote set &lt;name&gt;</code></dt>
   <dd>Rewrite origin’s fetch URL to the saved GitHub SSH host alias, preserving its owner/repository. It does not change a separate push URL or another selected push remote.</dd>

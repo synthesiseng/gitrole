@@ -311,6 +311,21 @@ gitrole doctor --json
 
 <p>HTTPS auth is <code>info</code>, with message <code>push destination uses HTTPS; SSH auth verification does not apply</code>, only when a repo pin allows the active role and that role has a <code>githubUser</code>. No pin, or a pin that doesn't allow the active role, is <code>warn</code> and exit <code>2</code>. <code>sshAuth</code> is omitted when no SSH probe runs.</p>
 
+<h3 id="doctor-offline">Offline diagnosis</h3>
+
+```bash
+gitrole doctor --offline --json
+gitrole doctor --json --offline
+```
+
+<p>Both flag orders return the same <code>DoctorResult</code> shape. Offline mode adds no keys and invokes no SSH commands, including configuration inspection (<code>ssh -G</code>) or an authentication test. Top-level and per-target <code>sshAuth</code> are omitted. A saved <code>role.githubUser</code> is still an expectation, never an observed account.</p>
+
+<p>For each SSH target, the authentication check is <code>info</code> with a message that authentication was skipped. Skipping alone causes no warning. Exit <code>0</code> and <code>overall=aligned</code> mean only that local checks have no warnings; neither verifies authentication, repository permission or a future push. A local <code>warn</code> still selects <code>overall=warning</code> and exit <code>2</code>; usage and operational errors remain exit <code>1</code>.</p>
+
+<p>Role and effective author/committer checks, fresh-repository warnings, policy, default push resolution and every target's host checks remain active. HTTPS pin checks also remain active for pure and mixed destinations: an allowing repo pin plus a saved <code>githubUser</code> yields <code>info</code>; absent or mismatched pins warn. Offline mode omits the online mixed-authentication blanket warning. Unsupported transports remain local destination warnings, not failed SSH observations.</p>
+
+<p>No authentication history is read or saved. Existing role-store behavior remains: an absent roles file may be initialized. Default online doctor, status, prompt and <code>auth test</code> are unchanged; online SSH inspection may run configured commands, use the network or change SSH state.</p>
+
 <h3 id="doctor-json-fields">Fields</h3>
 
 <h4 id="doctor-json-top-level">Top-level fields</h4>
