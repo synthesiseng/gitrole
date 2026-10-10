@@ -36,6 +36,25 @@
   * `gitrole status` and the prompt segment still run for that legacy role. Prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
 * **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
 
+## [0.12.0](https://github.com/synthesiseng/gitrole/compare/v0.11.0...v0.12.0) (2026-10-10)
+
+
+### Features
+
+* **doctor:** add offline local diagnosis ([#120](https://github.com/synthesiseng/gitrole/issues/120)) ([2a114f9](https://github.com/synthesiseng/gitrole/commit/2a114f93492ec80ef314f7e12fb0f23329799b00))
+* **hooks:** add offline commit check and thin pre-commit hook ([#121](https://github.com/synthesiseng/gitrole/issues/121)) ([9b0df14](https://github.com/synthesiseng/gitrole/commit/9b0df144eb7b4cfa9b1e15e50e56fe09469c2949))
+
+
+### Bug Fixes
+
+* **release:** require main CI for the tagged commit ([#117](https://github.com/synthesiseng/gitrole/issues/117)) ([4f7b82b](https://github.com/synthesiseng/gitrole/commit/4f7b82b1609cd1fccd26bd172c7bfac5bc9ff9b0))
+* **ssh:** reject option-like key paths ([#116](https://github.com/synthesiseng/gitrole/issues/116)) ([7d2a55e](https://github.com/synthesiseng/gitrole/commit/7d2a55e8137b3bcdfdc993622442612350dc1f7e))
+
+### Hook migration
+
+* The packaged pre-commit hook now runs `gitrole check commit`. It checks the effective author, committer, and repository policy locally, without remote or SSH authentication checks. The author must fully match a saved role, even without a repository pin, and the committer must match that identity. `status` behavior is unchanged.
+* **Migrate existing hooks manually:** upgrading the CLI does not replace copied hooks. Legacy hooks keep running `gitrole status --short`, including remote and authentication checks. Upgrade the CLI first, then follow the [manual migration guide](docs/guides/check-identity-before-a-local-commit.md#migration). Keep a verified backup and preserve custom hook chains.
+
 ## [0.11.0](https://github.com/synthesiseng/gitrole/compare/v0.10.11...v0.11.0) (2026-10-09)
 
 
