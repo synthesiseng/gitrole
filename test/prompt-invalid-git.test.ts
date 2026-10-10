@@ -15,7 +15,10 @@ const cliPath = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 const examplesDir = fileURLToPath(new URL('../../examples/prompt/', import.meta.url));
 const hookPath = fileURLToPath(new URL('../../hooks/pre-commit', import.meta.url));
 const zshAvailable = spawnSync('zsh', ['-f', '-c', 'exit 0']).status === 0;
-const fishAvailable = spawnSync('fish', ['--no-config', '-c', 'exit 0']).status === 0;
+// Resolve Fish before fixtures restrict PATH and change the working directory.
+const fishPath = spawnSync('/bin/sh', ['-c', 'command -v fish'], { encoding: 'utf8' }).stdout.trim();
+const fishBinary = fishPath ? path.resolve(fishPath) : 'fish';
+const fishAvailable = spawnSync(fishBinary, ['--no-config', '-c', 'exit 0']).status === 0;
 
 const alignedShort =
   'role=work scope=local override=true commit=ok remote=ok auth=na policy=na overall=aligned\n';
@@ -396,7 +399,7 @@ test('shipped snippets stay empty for invalid .git and unchanged inside a work t
       await resetCalls(fixture);
       const fishSource = path.join(examplesDir, 'fish.fish').replaceAll("'", "'\\''");
       const result = spawnSync(
-        'fish',
+        fishBinary,
         [
           '--no-config',
           '-c',

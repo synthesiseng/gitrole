@@ -50,6 +50,11 @@
 * **release:** require main CI for the tagged commit ([#117](https://github.com/synthesiseng/gitrole/issues/117)) ([4f7b82b](https://github.com/synthesiseng/gitrole/commit/4f7b82b1609cd1fccd26bd172c7bfac5bc9ff9b0))
 * **ssh:** reject option-like key paths ([#116](https://github.com/synthesiseng/gitrole/issues/116)) ([7d2a55e](https://github.com/synthesiseng/gitrole/commit/7d2a55e8137b3bcdfdc993622442612350dc1f7e))
 
+### Hook migration
+
+* The packaged pre-commit hook now runs `gitrole check commit`. It checks the effective author, committer, and repository policy locally, without remote or SSH authentication checks. The author must fully match a saved role, even without a repository pin, and the committer must match that identity. `status` behavior is unchanged.
+* **Migrate existing hooks manually:** upgrading the CLI does not replace copied hooks. Legacy hooks keep running `gitrole status --short`, including remote and authentication checks. Upgrade the CLI first, then follow the [manual migration guide](docs/guides/check-identity-before-a-local-commit.md#migration). Keep a verified backup and preserve custom hook chains.
+
 ## [0.11.0](https://github.com/synthesiseng/gitrole/compare/v0.10.11...v0.11.0) (2026-10-09)
 
 
