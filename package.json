@@ -1,6 +1,6 @@
 {
   "name": "gitrole",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Switch your full git identity in one command.",
   "type": "module",
   "bin": {
