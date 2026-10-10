@@ -134,7 +134,8 @@ export function resolveRolesFilePath(env: NodeJS.ProcessEnv = process.env): stri
   return path.join(configHome, 'gitrole', 'roles.json');
 }
 
-function parseStoredRoles(input: unknown): StoredRoles {
+/** Decode all saved roles without creating or writing storage. */
+export function parseStoredRoles(input: unknown): StoredRoles {
   if (!isRecord(input) || !Array.isArray(input.roles)) {
     throw new InvalidSavedRoleDataError();
   }

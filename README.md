@@ -74,6 +74,7 @@ For SSH prerequisites and a full walkthrough, read [Use the right Git identity f
 
 | Command | Purpose |
 | --- | --- |
+| `gitrole check commit` | Check saved commit identity and policy locally; no remote or SSH check. |
 | `gitrole current` | Find the saved role matching the effective author. |
 | `gitrole status` | Read a concise identity and default push check. |
 | `gitrole doctor` | Explain warnings and each push destination. |
@@ -106,6 +107,8 @@ Run `gitrole doctor` to identify a warning, then use [Troubleshoot identity warn
 - [Show gitrole in your shell prompt](https://docs.gitrole.dev/guides/show-gitrole-in-your-shell-prompt/): offline checks require 0.9.0 or newer. Current source examples are in `examples/prompt/`. Fish and full Starship rendering are not qualified by this documentation pass.
 - [Enable shell completion](https://docs.gitrole.dev/guides/enable-shell-tab-completion/): load optional scripts from npm or a checkout.
 - [Verify identity before an agent commits](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/): use the packaged skill or an optional check-only hook within an authorized workflow.
+
+The optional `hooks/pre-commit` now runs `gitrole check commit`. It requires a complete saved author/committer identity even without a pin: save the intended identity as a role, or do not install the hook there. Existing copied hooks and the packaged agent skill retain their strict `status --short` gate. See [the local commit guide](docs/guides/check-identity-before-a-local-commit.md) for command exits, manual migration, backups, and CLI compatibility. A source change does not establish publication.
 
 The npm package includes `skills`, `hooks`, and `completions`. This guide provides no supported Homebrew path for those assets; Homebrew users can use a source checkout. Installation does not enable them automatically.
 

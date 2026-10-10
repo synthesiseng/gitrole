@@ -17,6 +17,8 @@ complete -c gitrole -f -n '__fish_use_subcommand' -a pin -d 'Create a strict rep
 complete -c gitrole -f -n '__fish_use_subcommand' -a resolve -d 'Print the repo-local default role from .gitrole'
 complete -c gitrole -f -n '__fish_use_subcommand' -a current -d 'Show which saved role matches the active commit identity'
 complete -c gitrole -f -n '__fish_use_subcommand' -a list -d 'List saved roles and mark the active one'
+complete -c gitrole -f -n '__fish_use_subcommand' -a check -d 'Local identity and policy checks'
+complete -c gitrole -f -n '__fish_seen_subcommand_from check; and not __fish_seen_subcommand_from commit' -a commit -d 'Check local commit identity and policy'
 complete -c gitrole -f -n '__fish_use_subcommand' -a status -d 'Check whether the current repo is aligned for commit and push'
 complete -c gitrole -f -n '__fish_use_subcommand' -a doctor -d 'Diagnose identity, remote, and SSH auth alignment'
 complete -c gitrole -f -n '__fish_use_subcommand' -a remote -d 'Manage repository remotes for a selected role'
@@ -52,7 +54,7 @@ complete -c gitrole -f -n '__fish_seen_subcommand_from doctor' -l offline -d 'Sk
 complete -c gitrole -f -n '__fish_seen_subcommand_from remote; and not __fish_seen_subcommand_from set' -a set -d 'Rewrite origin to the role GitHub host alias'
 complete -c gitrole -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from set' -a '(__gitrole_roles)' -d 'Saved role'
 
-complete -c gitrole -f -n '__fish_seen_subcommand_from help' -a 'add import use pin resolve current list status doctor auth remote remove' -d 'Command'
+complete -c gitrole -f -n '__fish_seen_subcommand_from help' -a 'add import use pin resolve current list check status doctor auth remote remove' -d 'Command'
 
 complete -c gitrole -f -n '__fish_use_subcommand' -a auth -d 'Explicit authentication checks'
 complete -c gitrole -f -n '__fish_seen_subcommand_from auth; and not __fish_seen_subcommand_from test' -a test -d 'Observe SSH accounts'
