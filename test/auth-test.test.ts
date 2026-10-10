@@ -29,6 +29,39 @@ async function waitForHeartbeat(file: string, previous?: string): Promise<string
   assert.fail(`heartbeat did not ${previous === undefined ? 'start' : 'advance'}: ${file}; last sample ${JSON.stringify(sample)}`);
 }
 
+// A successful signal request does not mean the kernel has finished terminating the child.
+// Inspect only; a missing PID or the same process in zombie state can no longer write.
+async function readProcessState(pid: number): Promise<{ started: string; state: string } | undefined> {
+  assert.ok(Number.isSafeInteger(pid) && pid > 0, 'invalid fixture PID');
+  const { stdout } = await promisify(childProcess.execFile)('/bin/ps', ['-e', '-o', 'pid=,stat=,lstart='], {
+    env: { ...process.env, LC_ALL: 'C' }, timeout: 500, maxBuffer: 2 * 1024 * 1024
+  });
+  assert.ok(stdout.trim(), 'empty process snapshot');
+  let result: { started: string; state: string } | undefined;
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const match = /^\s*(\d+)\s+(\S+)\s+([A-Za-z]{3} [A-Za-z]{3}\s+\d{1,2} \d{2}:\d{2}:\d{2} \d{4})\s*$/.exec(line);
+    assert.ok(match, 'malformed process snapshot');
+    if (Number(match[1]) === pid) {
+      assert.equal(result, undefined, 'duplicate fixture PID in snapshot');
+      result = { state: match[2], started: match[3] };
+    }
+  }
+  return result;
+}
+
+async function waitForTermination(pid: number, started: string, timeoutMs = 1000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  do {
+    const current = await readProcessState(pid);
+    if (!current) return;
+    assert.equal(current.started, started, 'fixture PID identity changed while observing termination');
+    if (current.state.startsWith('Z')) return;
+    assert.ok(performance.now() < deadline, 'known SSH descendant survived cleanup');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  } while (true);
+}
+
 const cli = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'gitrole-auth-'));
@@ -119,6 +152,20 @@ test('abort kills the nonTTY process group, including a child that ignores TERM'
   assert.equal(await readFile(`${f.root}/heartbeat`, 'utf8'), heartbeat, 'descendant continued running after group cleanup');
 });
 
+test('termination observation rejects a surviving process and a changed identity', async t => {
+  const f = await fixture(t);
+  const child = spawn(process.execPath, ['-e', `const fs=require('fs');setInterval(()=>${heartbeatWriter()},20);`], { env: f.env, stdio: 'ignore' });
+  f.cleanup.push(() => { child.kill('SIGKILL'); });
+  const heartbeat = await waitForHeartbeat(`${f.root}/heartbeat`);
+  const current = await readProcessState(child.pid!);
+  assert.ok(current);
+  await assert.rejects(waitForTermination(child.pid!, current.started, 100), /known SSH descendant survived cleanup/);
+  await assert.rejects(waitForTermination(child.pid!, 'different start time'), /fixture PID identity changed/);
+  await waitForHeartbeat(`${f.root}/heartbeat`, heartbeat);
+  child.kill('SIGKILL');
+  await waitForTermination(child.pid!, current.started);
+});
+
 test('interactive cancellation escalates known descendants after leader exit without signalling a peer', async t => {
   for (const [name, childResists, leaderResists] of [
     ['cooperative child', false, false],
@@ -150,9 +197,12 @@ test('interactive cancellation escalates known descendants after leader exit wit
       f.cleanup.push(() => { try { process.kill(descendantPid, 'SIGKILL'); } catch {} });
       // Let the real platform process snapshot observe this long-lived descendant before cancellation.
       await new Promise(resolve => setTimeout(resolve, 350));
+      const descendant = await readProcessState(descendantPid);
+      assert.ok(descendant && !descendant.state.startsWith('Z'), 'fixture descendant must be alive before cancellation');
       controller.abort('cancelled');
       assert.equal((await observation).outcome, 'cancelled');
       assert.equal(await readFile(`${f.root}/child-term`, 'utf8'), 'TERM');
+      await waitForTermination(descendantPid, descendant.started);
       const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8');
       const peerHeartbeat = await waitForHeartbeat(`${f.root}/peer-heartbeat`);
       await new Promise(resolve => setTimeout(resolve, 100));
