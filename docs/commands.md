@@ -123,3 +123,39 @@ Key loading passes `--` before the path. This follows OpenSSH argument parsing
 `GITROLE_SSH_ADD_BIN` executables must accept the same argument convention;
 arbitrary wrappers are not qualified. This does not guarantee that a key exists
 or that loading it will succeed.
+
+### Human diagnostic detail
+
+`gitrole status` shows the role, effective identity, scope and check outcomes.
+`gitrole doctor` lists every push destination in both modes, counts successful
+checks, and shows each warning and informational check. Verbose also lists every
+successful check; counts describe checks, not verified accounts or destinations.
+Multiline explanations stay indented beneath their check.
+
+Both modes give the same next action, ordered by missing/unobservable destination,
+history, identity/policy, then auth; remaining host/transport warnings follow.
+History advice requires resolving identity/policy warnings before making a commit.
+Outside a repository, enter the intended repository first. Policy conflicts ask
+you to review the effective identity and `.gitrole` allowed/default roles.
+For supported SSH destinations, auth advice offers the existing deliberate
+`gitrole auth test`, with its network/command/state effects and future-push limits.
+Unsupported transport warnings never imply an equivalent plain SSH command.
+The suggested action is never executed automatically. Unknown diagnostic errors
+keep their original detail rather than being guessed into an authentication cause.
+
+Use `gitrole status --verbose` or `gitrole doctor --verbose` for full reasons.
+Doctor also expands repository and configuration context. `--verbose` changes
+presentation only: no extra Git/SSH checks, writes or interactive prompts.
+Combine it with `--offline` to keep the existing zero-SSH boundary.
+
+Machine modes take precedence: `status --short --verbose` is identical to
+`status --short`; `doctor --json --verbose` is identical to `doctor --json`.
+Exits and report streams are unchanged. Human reports (including check warnings)
+are on stdout; operational errors remain on stderr. Use machine modes for scripts.
+
+A missing destination remains unverified; configure your intended push destination
+before retrying. `remote set` rewrites an existing origin, not creates one. An
+expected account is not an observed account. Offline/skipped and HTTPS-not-applicable
+authentication do not verify an account or a future push. In an unborn repository,
+status may exit 0 while doctor exits 2 for its history warning; verbosity preserves
+that distinction. Guided setup and a full-screen TUI are not part of this change.

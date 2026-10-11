@@ -74,3 +74,20 @@ Check `gitrole --version` and `command -v gitrole`, then read <a href="{{ '/guid
 <h2 id="limits">An aligned result still cannot establish push success</h2>
 
 A check does not prove refspec readiness or repository authorization. It observes current identity and default destinations. A later explicit `git push` target, `git commit --author`, or changed environment/configuration falls outside that snapshot.
+
+## Read concise output and expand details
+
+Start with `gitrole status` for check outcomes, or `gitrole doctor` for the
+warnings and every push destination. Default doctor counts ok checks; verbose
+lists them. Warn/info checks remain visible in both modes. Each warning is shown once. The `next` line is advice, not an
+automatic repair. Use `gitrole doctor --verbose` for complete reasons and context;
+use `gitrole doctor --offline --verbose` when SSH execution is not appropriate.
+
+With no default push destination, choose and configure the intended destination
+before retrying; gitrole won't guess the URL. Next-action priority is destination,
+then history, identity/policy, then auth, and does not change with verbosity.
+Resolve identity/policy warnings before making the first commit. A matching local identity can
+coexist with unverified authentication. Do not change SSH settings merely to clear
+a warning. An explicit `gitrole auth test` remains a separate deliberate action;
+it may prompt, run configured commands or change SSH state, and its connection
+observation does not clear doctor's verdict or prove a future push.

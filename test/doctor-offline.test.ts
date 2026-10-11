@@ -123,8 +123,16 @@ test('offline doctor checks later push hosts while ignoring unrelated fetch host
   assert.equal(result.repository.fetchRemote?.host, 'fetch.test');
   check(result, 'host', 'warn', /later\.test.*does not match/);
   assert.equal(result.checks.filter((entry) => entry.label === 'auth' && entry.status === 'info').length, 2);
-  const human = f.run(['--offline']); await f.zeroSsh();
-  assert.equal(human.status, 2); assert.match(human.stdout, /later\.test.*does not match/);
+  const advice: string[] = [];
+  for (const verbose of [false, true]) {
+    const human = f.run(['--offline', ...(verbose ? ['--verbose'] : [])]); await f.zeroSsh();
+    assert.equal(human.status, 2); assert.match(human.stdout, /later\.test.*does not match/);
+    assert.deepEqual(human.stdout.split('\n').filter((line) => /^  push\s/.test(line)), [
+      '  push  git@fixture.test:team/repo.git', '  push  git@later.test:team/repo.git'
+    ]);
+    advice.push(human.stdout.split('\n').find((line) => /^  next /.test(line))!);
+  }
+  assert.equal(advice[0], advice[1]);
 });
 
 test('offline doctor preserves pure and mixed HTTPS pin semantics for every target order', async (t) => {
@@ -138,6 +146,16 @@ test('offline doctor preserves pure and mixed HTTPS pin semantics for every targ
     for (const url of urls.slice(1)) f.git('config', '--add', 'remote.origin.pushurl', url);
     await rm(path.join(f.repo, '.gitrole'), { force: true });
     check(await f.json(2), 'auth', 'warn', /no repo pin/);
+    const unpinnedAdvice: string[] = [];
+    for (const verbose of [false, true]) {
+      const human = f.run(['--offline', ...(verbose ? ['--verbose'] : [])]); await f.zeroSsh();
+      assert.equal(human.status, 2);
+      const next = human.stdout.split('\n').find((line) => /^  next /.test(line))!;
+      assert.match(next, /Review the saved role and .gitrole pin/);
+      assert.doesNotMatch(next, /gitrole auth test/);
+      unpinnedAdvice.push(next);
+    }
+    assert.equal(unpinnedAdvice[0], unpinnedAdvice[1]);
     await f.policy('work');
     const aligned = await f.json(0);
     check(aligned, 'auth', 'info', /HTTPS/);
@@ -189,4 +207,32 @@ test('doctor help exposes offline JSON composition and local-only meaning', () =
   assert.match(result.stdout, /doctor --offline --json/);
   assert.match(result.stdout, /doctor --json --offline/);
   assert.match(result.stdout, /Authentication is skipped \(info\), not failed or verified/);
+});
+
+// The process boundary owns flag composition, streams and exit-code compatibility.
+test('verbose preserves offline JSON and short bytes, exits and zero-SSH effects', async (t) => {
+  const f = await fixture(t, false);
+  const before = await Promise.all([readFile(f.roles, 'utf8'), readFile(path.join(f.repo, '.git/config'), 'utf8')]);
+  const json = f.run(['--offline', '--json']);
+  const verboseJson = f.run(['--verbose', '--json', '--offline']);
+  assert.equal(verboseJson.stdout, json.stdout);
+  assert.equal(verboseJson.stderr, json.stderr);
+  assert.equal(verboseJson.status, json.status);
+  assert.equal(json.status, 2, 'doctor retains its unborn-history warning');
+  for (const args of [['--offline'], ['--offline', '--verbose']]) {
+    const human = f.run(args);
+    assert.equal(human.status, json.status);
+    assert.match(human.stdout, /warn history/);
+    assert.match(human.stdout, /SSH authentication skipped/);
+  }
+  const status = (verbose: boolean) => spawnSync(process.execPath, [cli, 'status', '--short', '--offline', ...(verbose ? ['--verbose'] : [])], {
+    cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000
+  });
+  const short = status(false), verboseShort = status(true);
+  assert.equal(short.status, 0, 'status retains its distinct history semantics');
+  assert.equal(verboseShort.stdout, short.stdout);
+  assert.equal(verboseShort.stderr, short.stderr);
+  assert.equal(verboseShort.status, short.status);
+  await f.zeroSsh();
+  assert.deepEqual(await Promise.all([readFile(f.roles, 'utf8'), readFile(path.join(f.repo, '.git/config'), 'utf8')]), before);
 });

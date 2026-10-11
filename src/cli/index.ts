@@ -342,6 +342,7 @@ Examples:
     .command('status')
     .description('check whether the current repo is aligned for commit and push')
     .option('--short', 'show machine-friendly one-line status output')
+    .option('--verbose', 'show full human-readable diagnostic details')
     .option('--offline', 'skip the live SSH githubUser probe and use local checks only')
     .addHelpText(
       'after',
@@ -362,6 +363,8 @@ HTTPS auth is unchanged, because it uses the saved role and .gitrole, not the ne
 
 Use this when you want to know whether the repo looks ready to commit or push.
 Use 'gitrole current' when you only want to know which saved role matches the active commit identity.
+Human output is concise; use --verbose for full explanations. --short takes
+precedence over --verbose and keeps its exact machine contract.
 Use 'gitrole status --short --offline' for a shell prompt. It does not open SSH.
 
 Policy:
@@ -391,9 +394,9 @@ Shell prompt:
   It is opt-in. It does not switch roles.
 `
     )
-    .action(async (options: { short?: boolean; offline?: boolean }) => {
-      const result = await getStatus(dependencies, { offline: options.offline === true });
-      io.stdout(options.short ? renderShortStatus(result) : renderStatus(result));
+    .action(async (options: { short?: boolean; offline?: boolean; verbose?: boolean }) => {
+      const result = await getStatus(dependencies, { offline: options.offline === true, verbose: !options.short && options.verbose === true });
+      io.stdout(options.short ? renderShortStatus(result) : renderStatus(result, options));
       commandExitCode = result.overall === 'aligned' ? 0 : 2;
     });
 
@@ -418,11 +421,17 @@ Failures write reasons to stderr. This command never changes roles or Git config
   program
     .command('doctor')
     .description('diagnose identity, remote, and SSH auth alignment')
+    .option('--verbose', 'show full human-readable diagnostic details')
     .option('--json', 'write the diagnostic result as JSON')
     .option('--offline', 'skip all SSH execution and use local checks only')
     .addHelpText(
       'after',
       `
+
+Human output lists every push destination, counts ok checks and keeps warn/info
+checks. --verbose expands all checks and context without additional checks.
+Both modes give the same next action: destination, history, identity/policy, then auth. --json takes precedence over
+--verbose and keeps the same full result and exit code.
 
 Checks:
   - effective git identity
@@ -455,9 +464,9 @@ Offline:
   configured commands, contact the network or change SSH state.
 `
     )
-    .action(async (options: { json?: boolean; offline?: boolean }) => {
+    .action(async (options: { json?: boolean; offline?: boolean; verbose?: boolean }) => {
       const result = await doctor(dependencies, { offline: options.offline === true });
-      io.stdout(options.json ? JSON.stringify(result, null, 2) : renderDoctor(result));
+      io.stdout(options.json ? JSON.stringify(result, null, 2) : renderDoctor(result, 'doctor', options));
       commandExitCode = getDoctorExitCode(result);
     });
 

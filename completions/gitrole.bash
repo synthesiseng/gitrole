@@ -188,12 +188,12 @@ _gitrole() {
       ;;
     status)
       if [[ "$cur" == -* ]]; then
-        _gitrole_comp_words "--short --offline --help -h"
+        _gitrole_comp_words "--short --offline --verbose --help -h"
       fi
       ;;
     doctor)
       if [[ "$cur" == -* ]]; then
-        _gitrole_comp_words "--json --offline --help -h"
+        _gitrole_comp_words "--json --offline --verbose --help -h"
       fi
       ;;
     current|list)

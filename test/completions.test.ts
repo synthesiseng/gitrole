@@ -262,9 +262,9 @@ test('bash completion offers commands, flags, and saved role names', async () =>
   assertSameMembers(bashCompletions(env, 'gitrole pin ').values, roles, 'pin roles');
   assertSameMembers(bashCompletions(env, 'gitrole remove ').values, roles, 'remove roles');
   assert.deepEqual(bashCompletions(env, 'gitrole resolve --').values, ['--json', '--help']);
-  assert.deepEqual(bashCompletions(env, 'gitrole status --').values, ['--short', '--offline', '--help']);
+  assert.deepEqual(bashCompletions(env, 'gitrole status --').values, ['--short', '--offline', '--verbose', '--help']);
   assert.deepEqual(bashCompletions(env, 'gitrole auth ').values, ['test']);
-  assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--offline', '--help']);
+  assert.deepEqual(bashCompletions(env, 'gitrole doctor --').values, ['--json', '--offline', '--verbose', '--help']);
   assert.ok(bashCompletions(env, 'gitrole doctor --json --').values.includes('--offline'));
   assert.ok(bashCompletions(env, 'gitrole doctor --offline --').values.includes('--json'));
   assert.deepEqual(bashCompletions(env, 'gitrole check ').values, ['commit']);

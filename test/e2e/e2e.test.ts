@@ -808,7 +808,7 @@ test('e2e shared org repo stays aligned when the effective role is allowed but n
     'role=saraeloop scope=global override=false commit=ok remote=ok auth=ok policy=ok overall=aligned'
   );
 
-  const doctorResult = runCli(workspace, ['doctor']);
+  const doctorResult = runCli(workspace, ['doctor', '--verbose']);
   mustSucceed(doctorResult, 'gitrole doctor failed for shared org repo');
   assert.match(doctorResult.stdout, /policy\s+\.gitrole \(v1\)/);
   assert.match(doctorResult.stdout, /default\s+acmedeploy/);

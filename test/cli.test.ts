@@ -1961,7 +1961,7 @@ process.exit(1);
   assert.equal(result.stderr, '');
 });
 
-test('cli doctor shows the hidden global identity when a local override is active', async () => {
+test('verbose doctor shows the hidden global identity when a local override is active', async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gitrole-cli-doctor-local-'));
   const configHome = path.join(tempDir, 'config');
   const gitStubPath = path.join(tempDir, 'git-stub.mjs');
@@ -2065,7 +2065,7 @@ process.exit(1);
     PATH: `${tempDir}:${process.env.PATH}`
   };
 
-  const result = spawnSync(process.execPath, [cliPath, 'doctor'], {
+  const result = spawnSync(process.execPath, [cliPath, 'doctor', '--verbose'], {
     encoding: 'utf8',
     env
   });
