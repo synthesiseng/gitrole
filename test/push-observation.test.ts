@@ -775,6 +775,8 @@ for (const reversed of [false, true]) {
       { name: 'aligned pin', pin: 'work', next: /separate checks/, offlineNext: undefined },
       { name: 'unverified SSH', pin: 'work', unverified: true, next: /separate checks/, offlineNext: undefined },
       { name: 'absent pin', next: /separate checks/, offlineNext: /separate checks/ },
+      { name: 'unsupported third target', pin: 'work', unsupported: true, next: /separate checks.*unsupported.*--verbose/, offlineNext: /Compare each listed push destination/ },
+      { name: 'custom SSH command', pin: 'work', custom: true, next: /separate checks.*unsupported.*--verbose/, offlineNext: undefined },
       { name: 'mismatched pin', pin: 'other', next: /Resolve the effective identity and .gitrole policy warnings/, offlineNext: /Resolve the effective identity and .gitrole policy warnings/ },
       { name: 'identity warning', pin: 'work', identity: true, next: /Confirm the intended commit identity/, offlineNext: /Confirm the intended commit identity/ },
       { name: 'missing history', pin: 'work', history: true, next: /Create the intended first commit/, offlineNext: /Create the intended first commit/ },
@@ -787,12 +789,14 @@ for (const reversed of [false, true]) {
           const f = await fixture(t);
           if (!scenario.history) await f.git('-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'fixture');
           const urls = ['git@work.test:acme/repo.git', 'https://work.test/acme/repo.git'];
+          if (scenario.unsupported) urls.push('file:///unsupported/repo.git');
           if (reversed) urls.reverse();
           if (!scenario.missing) {
             await f.git('remote', 'add', 'origin', urls[0]);
             for (const url of urls) await f.git('config', '--add', 'remote.origin.pushurl', url);
           }
           if (scenario.pin) await writeFile(path.join(f.repo, '.gitrole'), JSON.stringify({ version: 1, defaultRole: scenario.pin, allowedRoles: [scenario.pin] }));
+          if (scenario.custom) f.env.GIT_SSH_COMMAND = '/never-execute-wrapper --synthetic';
           if (scenario.identity) f.env.GIT_COMMITTER_EMAIL = 'different@example.test';
           let attempts = 0;
           f.dependencies.sshAuthProbe.probeGithubUser = async (host) => {
@@ -802,7 +806,7 @@ for (const reversed of [false, true]) {
           };
           const diagnosis = await doctor(f.dependencies, { offline });
           assert.deepEqual(diagnosis.repository.push?.targets.map((target) => target.remote.url) ?? [], scenario.missing ? [] : urls);
-          assert.equal(attempts, offline || scenario.missing ? 0 : 1);
+          assert.equal(attempts, offline || scenario.missing || scenario.custom ? 0 : 1);
           const before = JSON.stringify(diagnosis);
           const advice = [false, true].map((verbose) => renderDoctor(diagnosis, 'doctor', { offline, verbose }).split('\n').find((line) => /^  next /.test(line)));
           assert.equal(advice[0], advice[1]);
@@ -816,7 +820,7 @@ for (const reversed of [false, true]) {
             }
           } else assert.equal(advice[0], undefined);
           assert.equal(JSON.stringify(diagnosis), before, 'rendering must preserve the diagnosis');
-          assert.equal(attempts, offline || scenario.missing ? 0 : 1, 'rendering must not observe again');
+          assert.equal(attempts, offline || scenario.missing || scenario.custom ? 0 : 1, 'rendering must not observe again');
         });
       }
     }

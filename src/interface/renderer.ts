@@ -290,6 +290,9 @@ function doctorNextAction(result: DoctorResult, warnings: DoctorResult['checks']
     // One transport-specific action cannot cover a mixed destination set.
     if (push.targets.some((target) => target.remote.protocol === 'ssh')
       && push.targets.some((target) => target.remote.protocol === 'https')) {
+      if (push.targets.some((target) => target.message || target.remote.protocol === 'unknown')) {
+        return 'Push destinations need separate checks; review the unsupported push/SSH configuration and every destination in --verbose before choosing an account check.';
+      }
       return 'SSH and HTTPS push destinations need separate checks; review --verbose details before choosing an account check.';
     }
     // A local HTTPS pin warning cannot be resolved by observing an SSH endpoint.
