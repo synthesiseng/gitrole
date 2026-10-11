@@ -137,8 +137,10 @@ history, identity/policy, then auth; remaining host/transport warnings follow.
 History advice requires resolving identity/policy warnings before making a commit.
 Outside a repository, enter the intended repository first. Policy conflicts ask
 you to review the effective identity and `.gitrole` allowed/default roles.
-For supported SSH destinations, auth advice offers the existing deliberate
+When all push destinations use supported SSH, auth advice offers the existing deliberate
 `gitrole auth test`, with its network/command/state effects and future-push limits.
+Mixed SSH/HTTPS destinations need separate checks; the next action points to
+`--verbose` details instead of suggesting a check for only one transport.
 Unsupported transport warnings never imply an equivalent plain SSH command.
 The suggested action is never executed automatically. Unknown diagnostic errors
 keep their original detail rather than being guessed into an authentication cause.
