@@ -287,6 +287,11 @@ function doctorNextAction(result: DoctorResult, warnings: DoctorResult['checks']
   if (has('policy')) return 'Resolve the effective identity and .gitrole policy warnings before committing; review allowed/default roles before changing configuration.';
   if (has('role', 'scope', 'commit', 'identity')) return 'Confirm the intended commit identity against the saved role and effective Git configuration before committing.';
   if (has('auth')) {
+    // One transport-specific action cannot cover a mixed destination set.
+    if (push.targets.some((target) => target.remote.protocol === 'ssh')
+      && push.targets.some((target) => target.remote.protocol === 'https')) {
+      return 'SSH and HTTPS push destinations need separate checks; review --verbose details before choosing an account check.';
+    }
     // A local HTTPS pin warning cannot be resolved by observing an SSH endpoint.
     if (push.targets.some((target) => target.remote.protocol === 'https')
       && describeHttpsAuth({ role: result.role, repoPolicy: result.repoPolicy }).auth === 'warn') {

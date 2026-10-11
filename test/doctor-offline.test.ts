@@ -151,7 +151,9 @@ test('offline doctor preserves pure and mixed HTTPS pin semantics for every targ
       const human = f.run(['--offline', ...(verbose ? ['--verbose'] : [])]); await f.zeroSsh();
       assert.equal(human.status, 2);
       const next = human.stdout.split('\n').find((line) => /^  next /.test(line))!;
-      assert.match(next, /Review the saved role and .gitrole pin/);
+      assert.match(next, urls.length === 1
+        ? /Review the saved role and .gitrole pin/
+        : /SSH and HTTPS push destinations need separate checks; review --verbose/);
       assert.doesNotMatch(next, /gitrole auth test/);
       unpinnedAdvice.push(next);
     }

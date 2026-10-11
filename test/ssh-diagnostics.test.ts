@@ -207,7 +207,7 @@ test('doctor never suggests equivalent plain SSH for unsupported wrappers or pre
 });
 
 
-test('mixed-transport advice resolves a local HTTPS pin warning before suggesting an SSH test', () => {
+test('mixed-transport auth advice covers both transports with or without a local HTTPS pin', () => {
   for (const reversed of [false, true]) {
     for (const offline of [false, true]) {
       for (const pinned of [false, true]) {
@@ -226,11 +226,11 @@ test('mixed-transport advice resolves a local HTTPS pin warning before suggestin
         const outputs = [false, true].map((verbose) => renderDoctor(result, 'doctor', { offline, verbose }));
         const advice = outputs.map((output) => output.split('\n').find((line) => /^  next /.test(line)));
         assert.equal(advice[0], advice[1]);
-        if (!pinned) {
-          assert.match(advice[0]!, /Review the saved role and .gitrole pin/);
-          assert.doesNotMatch(advice[0]!, /gitrole auth test/);
-        } else if (!offline) assert.match(advice[0]!, /gitrole auth test/);
-        else assert.equal(advice[0], undefined);
+        if (!pinned || !offline) {
+          assert.match(advice[0]!, /SSH and HTTPS push destinations need separate checks/);
+          assert.match(advice[0]!, /--verbose/);
+          assert.doesNotMatch(advice[0]!, /gitrole auth test|ssh -T/);
+        } else assert.equal(advice[0], undefined);
       }
     }
   }

@@ -90,4 +90,6 @@ Resolve identity/policy warnings before making the first commit. A matching loca
 coexist with unverified authentication. Do not change SSH settings merely to clear
 a warning. An explicit `gitrole auth test` remains a separate deliberate action;
 it may prompt, run configured commands or change SSH state, and its connection
-observation does not clear doctor's verdict or prove a future push.
+observation does not clear doctor's verdict or prove a future push. When push
+destinations mix SSH and HTTPS, separate checks are needed. The next action points
+to `--verbose` details because a check for one transport cannot cover both.
