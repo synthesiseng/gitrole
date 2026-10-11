@@ -70,6 +70,14 @@ Use your actual username. `add` replaces the profile; include any other fields y
 
 For SSH prerequisites and a full walkthrough, read [Use the right Git identity for this repo](https://docs.gitrole.dev/guides/use-the-right-git-identity-for-this-repo/).
 
+Human `status` and `doctor` output is concise. Each diagnostic warning appears
+once; doctor lists every push destination, counts ok checks and keeps warn/info.
+Its `next` action is the same in both modes and never runs automatically. Use
+`gitrole status --verbose` or `gitrole doctor --verbose` for full explanations.
+Add `--offline` to keep diagnosis local. Verbosity does not add checks or change
+verdicts. `status --short` and `doctor --json` retain their exact machine output
+and exit behavior, including when combined with `--verbose`.
+
 ## Interpret results
 
 | Command | Purpose |

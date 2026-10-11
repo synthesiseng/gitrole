@@ -58,3 +58,5 @@ complete -c gitrole -f -n '__fish_seen_subcommand_from help' -a 'add import use 
 
 complete -c gitrole -f -n '__fish_use_subcommand' -a auth -d 'Explicit authentication checks'
 complete -c gitrole -f -n '__fish_seen_subcommand_from auth; and not __fish_seen_subcommand_from test' -a test -d 'Observe SSH accounts'
+
+complete -c gitrole -f -n '__fish_seen_subcommand_from status doctor' -l verbose -d 'Show full human-readable diagnostic details'

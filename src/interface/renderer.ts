@@ -1,7 +1,7 @@
 /*
  * Renders human-readable CLI output for saved roles, status, and diagnosis results.
  */
-import { summarizeSshMessage } from '../application/alignment.js';
+import { describeHttpsAuth, summarizeSshMessage } from '../application/alignment.js';
 import os from 'node:os';
 
 import chalk from 'chalk';
@@ -147,7 +147,7 @@ export function renderPinnedRepoPolicy(result: PinRepoPolicyResult): string {
   ].join('\n');
 }
 
-export function renderStatus(result: StatusResult): string {
+export function renderStatus(result: StatusResult, options: { verbose?: boolean; offline?: boolean } = {}): string {
   const summary =
     result.overall === 'aligned' ? chalk.green(result.overall) : chalk.yellow(result.overall);
   const roleLabel =
@@ -155,7 +155,9 @@ export function renderStatus(result: StatusResult): string {
       ? chalk.yellow('no matching role')
       : chalk.bold(result.roleName);
 
-  const lines = [`${roleLabel}  ${summary}`];
+  const localOnly = options.offline ? ' (local checks only)' : '';
+  const lines = [`${roleLabel}  ${summary}${localOnly}`];
+  lines.push(formatDetail('checks', `commit ${result.commit}  remote ${result.remote}  auth ${result.auth}  policy ${result.policy}`));
 
   lines.push(formatDetail('commit', result.commitIdentity ?? chalk.dim('unset')));
 
@@ -179,6 +181,10 @@ export function renderStatus(result: StatusResult): string {
     lines.push(formatDetail('policy', formatRepoPolicyStatus(result.repoPolicy)));
   }
 
+  if (result.overall !== 'aligned') {
+    lines.push(formatDetail('next', `Review details: gitrole doctor${options.offline ? ' --offline' : ''} --verbose`));
+  }
+
   return lines.join('\n');
 }
 
@@ -197,103 +203,105 @@ export function renderShortStatus(result: StatusResult): string {
   ].join(' ');
 }
 
-export function renderDoctor(result: DoctorResult, title = 'doctor'): string {
+/** Renders each diagnostic check once; verbose adds context without observing again. */
+export function renderDoctor(
+  result: DoctorResult,
+  title = 'doctor',
+  options: { verbose?: boolean; offline?: boolean } = {}
+): string {
   const probeMessages = [result.sshAuth, ...(result.repository.push?.targets.map((target) => target.sshAuth) ?? [])]
     .flatMap((probe) => probe?.message ? [probe.message] : []);
   const summarizeCheck = (message: string): string => {
     const probeMessage = probeMessages.find((candidate) => message.startsWith(candidate));
-    return probeMessage ? summarizeSshMessage(probeMessage) + message.slice(probeMessage.length) : message;
+    return probeMessage ? summarizeSshMessage(probeMessage, options.verbose) + message.slice(probeMessage.length) : message;
   };
-
   const lines = [
-    chalk.bold(title),
+    `${chalk.bold(title)}  ${result.overall}${options.offline ? ' (local checks only)' : ''}`,
     formatDetail('role', result.role?.name ?? chalk.yellow('no matching role')),
     formatDetail('scope', result.scope.effective),
-    formatDetail('local', result.scope.hasLocalOverride ? 'active' : 'inactive'),
     formatDetail('commit', formatDiagnosedIdentity(result.commitIdentity))
   ];
-
-  const globalIdentity = formatIdentityPair(result.configuredIdentity.global);
-
-  if (shouldRenderGlobalIdentity(result)) {
-    lines.push(formatDetail('global', globalIdentity));
+  const expected = formatPushAuth(result.role?.githubUser, result.role?.githubHost);
+  if (expected) lines.push(formatDetail('expected', expected));
+  for (const target of result.repository.push?.targets ?? []) {
+    lines.push(formatDetail('push', target.remote.url));
   }
 
-  const expectedPushAuth = formatPushAuth(result.role?.githubUser, result.role?.githubHost);
-
-  if (expectedPushAuth) {
-    lines.push(formatDetail('expected', expectedPushAuth));
+  if (options.verbose) {
+    lines.push(formatDetail('local', result.scope.hasLocalOverride ? 'active' : 'inactive'));
+    if (shouldRenderGlobalIdentity(result)) {
+      lines.push(formatDetail('global', formatIdentityPair(result.configuredIdentity.global)));
+    }
+    if (result.repository.isInsideWorkTree) {
+      lines.push(formatDetail('repo', result.repository.topLevelPath ?? 'current directory'));
+      if (result.repository.currentBranch) lines.push(formatDetail('branch', result.repository.currentBranch));
+      if (result.repository.upstreamBranch) lines.push(formatDetail('upstream', result.repository.upstreamBranch));
+      if (result.repository.fetchRemote) lines.push(formatDetail('fetch', result.repository.fetchRemote.url));
+      const remote = result.repository.remote;
+      if (remote?.host) lines.push(formatDetail('rhost', remote.host));
+      if (remote?.owner && remote.repository) lines.push(formatDetail('rrepo', `${remote.owner}/${remote.repository}`));
+      if (result.sshAuth?.githubUser) lines.push(formatDetail('auth', `${result.sshAuth.githubUser} via ${result.sshAuth.host}`));
+    }
+    if (result.repoPolicy) {
+      lines.push(formatDetail('policy', `.gitrole (v${result.repoPolicy.version})`));
+      lines.push(formatDetail('default', result.repoPolicy.defaultRole));
+      lines.push(formatDetail('allowed', result.repoPolicy.allowedRoles.join(', ')));
+    }
   }
 
-  if (result.repository.isInsideWorkTree) {
-    lines.push(formatDetail('repo', result.repository.topLevelPath ?? 'current directory'));
-
-    if (result.repository.currentBranch) {
-      lines.push(formatDetail('branch', result.repository.currentBranch));
-    }
-
-    if (result.repository.hasCommits === false) {
-      lines.push(formatDetail('history', chalk.yellow('no commits yet')));
-    }
-
-    if (result.repository.upstreamBranch) {
-      lines.push(formatDetail('upstream', result.repository.upstreamBranch));
-    }
-
-    if (result.repository.fetchRemote) lines.push(formatDetail('fetch', result.repository.fetchRemote.url));
-    for (const target of result.repository.push?.targets ?? []) {
-      lines.push(formatDetail('push', target.remote.url));
-    }
-    if (result.repository.remote) {
-      lines.push(formatDetail('remote', result.repository.remote.url));
-
-      if (result.repository.remote.host) {
-        lines.push(formatDetail('rhost', result.repository.remote.host));
-      }
-
-      if (result.repository.remote.owner && result.repository.remote.repository) {
-        lines.push(
-          formatDetail(
-            'rrepo',
-            `${result.repository.remote.owner}/${result.repository.remote.repository}`
-          )
-        );
-      }
-    } else {
-      lines.push(formatDetail('remote', chalk.yellow(result.repository.push?.message ?? 'default push destination not configured')));
-    }
-  } else {
-    lines.push(formatDetail('repo', chalk.yellow('not a git repository')));
+  // Collapse only the known duplicate cause, never equal prose at distinct endpoints.
+  const hasMixedScopeWarning = result.scope.effective === 'mixed' && result.checks.some((check) =>
+    check.status === 'warn' && check.label === 'scope'
+      && check.message === 'effective commit identity mixes Git config sources');
+  const checks = result.checks.filter((check) => !(hasMixedScopeWarning && result.role
+    && check.status === 'warn' && check.label === 'scope'
+    && check.message === `selected role ${result.role.name} is split across Git config sources`));
+  const okCount = checks.filter((check) => check.status === 'ok').length;
+  const warnings = checks.filter((check) => check.status === 'warn');
+  lines.push('', `${chalk.bold('checks')}  ${okCount} ok, ${warnings.length} ${warnings.length === 1 ? 'warning' : 'warnings'}`);
+  for (const check of checks) {
+    if (!options.verbose && check.status === 'ok') continue;
+    const status = check.status === 'ok' ? chalk.green('ok')
+      : check.status === 'warn' ? chalk.yellow('warn') : chalk.blue('info');
+    const continuation = ' '.repeat(2 + check.status.length + 1 + Math.max(6, check.label.length) + 1);
+    const message = summarizeCheck(check.message).replace(/\n/g, `\n${continuation}`);
+    lines.push(`  ${status} ${check.label.padEnd(6, ' ')} ${message}`);
   }
 
-  if (result.sshAuth?.githubUser) {
-    lines.push(formatDetail('auth', `${result.sshAuth.githubUser} via ${result.sshAuth.host}`));
-  } else if (result.sshAuth?.message) {
-    lines.push(formatDetail('auth', chalk.yellow(summarizeSshMessage(result.sshAuth.message))));
-  }
-
-  if (result.repoPolicy) {
-    lines.push(formatDetail('policy', `.gitrole (v${result.repoPolicy.version})`));
-    lines.push(formatDetail('default', result.repoPolicy.defaultRole));
-    lines.push(formatDetail('allowed', result.repoPolicy.allowedRoles.join(', ')));
-  }
-
-  lines.push('');
-  lines.push(chalk.bold('checks'));
-  lines.push(
-    ...result.checks.map((check) => {
-      const status =
-        check.status === 'ok'
-          ? chalk.green('ok')
-          : check.status === 'warn'
-            ? chalk.yellow('warn')
-            : chalk.blue('info');
-
-      return `  ${status} ${check.label.padEnd(6, ' ')} ${summarizeCheck(check.message)}`;
-    })
-  );
-
+  if (warnings.length) lines.push('', formatDetail('next', doctorNextAction(result, warnings)));
   return lines.join('\n');
+}
+
+/** Advice from the same observation, independent of verbosity; never executes a command. */
+function doctorNextAction(result: DoctorResult, warnings: DoctorResult['checks']): string {
+  const has = (...labels: string[]) => warnings.some((check) => labels.includes(check.label));
+  if (!result.repository.isInsideWorkTree) return 'Run doctor from the intended Git repository.';
+  const push = result.repository.push;
+  if (!push || push.message || !push.targets.length) {
+    return "Review and configure the intended push destination, then run doctor again; gitrole won't guess the URL.";
+  }
+  // History stays first, but never invite a commit under an unresolved identity/policy.
+  if (has('history')) return has('role', 'scope', 'commit', 'identity', 'policy')
+    ? 'Prepare the first commit after resolving the reported identity and policy warnings.'
+    : 'Create the intended first commit before pushing.';
+  if (has('policy')) return 'Resolve the effective identity and .gitrole policy warnings before committing; review allowed/default roles before changing configuration.';
+  if (has('role', 'scope', 'commit', 'identity')) return 'Confirm the intended commit identity against the saved role and effective Git configuration before committing.';
+  if (has('auth')) {
+    // A local HTTPS pin warning cannot be resolved by observing an SSH endpoint.
+    if (push.targets.some((target) => target.remote.protocol === 'https')
+      && describeHttpsAuth({ role: result.role, repoPolicy: result.repoPolicy }).auth === 'warn') {
+      return 'Review the saved role and .gitrole pin for each HTTPS push destination; provider credentials have not been observed.';
+    }
+    if (push.targets.some((target) => target.message || target.remote.protocol === 'unknown')) {
+      return 'Review the reported unsupported push/SSH configuration before choosing an account check; a plain SSH command cannot reproduce it.';
+    }
+    if (push.targets.some((target) => target.remote.protocol === 'ssh')) {
+      return 'For an explicit SSH account check, choose to run gitrole auth test in a terminal. It may prompt, connect, run configured commands or change SSH state; it cannot verify a future Git push.';
+    }
+    return 'Review the saved role and .gitrole pin for each HTTPS push destination; provider credentials have not been observed.';
+  }
+  if (has('remote', 'host')) return 'Compare each listed push destination with the intended repository and role host before changing remote configuration.';
+  return 'Resolve the remaining reported warnings before committing or pushing; review their details without assuming a successful check.';
 }
 
 function formatDetail(label: string, value: string): string {

@@ -130,7 +130,7 @@ async function verifyAlignedPersonaScenario(scenario: PersonaScenario): Promise<
   mustSucceed(statusShortResult, `${scenario.title}: gitrole status --short failed`);
   assert.equal(statusShortResult.stdout.trim(), scenario.expectedStatusShort);
 
-  const doctorResult = runCli(workspace, ['doctor']);
+  const doctorResult = runCli(workspace, ['doctor', '--verbose']);
   mustSucceed(doctorResult, `${scenario.title}: gitrole doctor failed`);
   assert.match(doctorResult.stdout, /^doctor/m);
   assert.match(doctorResult.stdout, new RegExp(`role\\s+${escapeRegex(scenario.role.name)}`));

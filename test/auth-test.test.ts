@@ -50,16 +50,38 @@ async function readProcessState(pid: number): Promise<{ started: string; state: 
   return result;
 }
 
-async function waitForTermination(pid: number, started: string, timeoutMs = 1000): Promise<void> {
+async function waitForTermination(
+  pid: number, started: string, timeoutMs = 1000,
+  observe?: (current: Awaited<ReturnType<typeof readProcessState>>) => void
+): Promise<void> {
   const deadline = performance.now() + timeoutMs;
   do {
     const current = await readProcessState(pid);
+    observe?.(current);
     if (!current) return;
     assert.equal(current.started, started, 'fixture PID identity changed while observing termination');
     if (current.state.startsWith('Z')) return;
     assert.ok(performance.now() < deadline, 'known SSH descendant survived cleanup');
     await new Promise(resolve => setTimeout(resolve, 20));
   } while (true);
+}
+
+// This observer never signals a process. A quiet heartbeat is meaningful only after termination.
+async function assertTerminatedHeartbeat(
+  pid: number, started: string, file: string, cancellationStarted: number,
+  record: (event: string, data: Record<string, unknown>) => void = () => {},
+  timeoutMs = 1000
+): Promise<void> {
+  await waitForTermination(pid, started, timeoutMs, current => {
+    record('process', { pid, started: current?.started, state: current?.state ?? 'absent' });
+  });
+  assert.ok(performance.now() - cancellationStarted < 3500, 'cleanup exceeded overall bound');
+  const heartbeat = await readFile(file, 'utf8');
+  record('heartbeat baseline', { heartbeat });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const after = await readFile(file, 'utf8');
+  record('heartbeat after', { heartbeat: after });
+  assert.equal(after, heartbeat, 'resistant descendant survived cleanup');
 }
 
 const cli = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
@@ -164,6 +186,48 @@ test('termination observation rejects a surviving process and a changed identity
   await waitForHeartbeat(`${f.root}/heartbeat`, heartbeat);
   child.kill('SIGKILL');
   await waitForTermination(child.pid!, current.started);
+});
+
+test('heartbeat baseline waits for observed termination after a final fixture write', async t => {
+  const f = await fixture(t);
+  // Hold the child alive until the observer has actually seen it; no timing-only readiness guess.
+  const child = spawn(process.execPath, ['-e', `const fs=require('fs');fs.writeFileSync(process.env.ROOT+'/heartbeat','1');process.on('message',()=>{fs.writeFileSync(process.env.ROOT+'/heartbeat','2');process.exit(0);});`], { env: f.env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  f.cleanup.push(() => { child.kill('SIGKILL'); });
+  await waitForHeartbeat(`${f.root}/heartbeat`);
+  const identity = await readProcessState(child.pid!);
+  assert.ok(identity && !identity.state.startsWith('Z'));
+  let release!: () => void;
+  const observingAlive = new Promise<void>(resolve => { release = resolve; });
+  let terminalObserved = false;
+  const samples: string[] = [];
+  const observation = assertTerminatedHeartbeat(child.pid!, identity.started, `${f.root}/heartbeat`, performance.now(), (event, data) => {
+    if (event === 'process') {
+      terminalObserved = data.state === 'absent' || String(data.state).startsWith('Z');
+      if (!terminalObserved) release();
+    } else {
+      assert.ok(terminalObserved, 'heartbeat sampled before descendant termination was observed');
+      samples.push(String(data.heartbeat));
+    }
+  });
+  // A missing wait must reject through the ordering assertion, not hang on the fixture barrier.
+  await Promise.race([observingAlive, observation]);
+  child.send('finish');
+  await observation;
+  assert.deepEqual(samples, ['2', '2']);
+});
+
+test('ordered heartbeat observation rejects a truly surviving descendant without sampling', async t => {
+  const f = await fixture(t);
+  const child = spawn(process.execPath, ['-e', `const fs=require('fs');setInterval(()=>${heartbeatWriter()},20);`], { env: f.env, stdio: 'ignore' });
+  f.cleanup.push(() => { child.kill('SIGKILL'); });
+  const heartbeat = await waitForHeartbeat(`${f.root}/heartbeat`);
+  const identity = await readProcessState(child.pid!);
+  assert.ok(identity);
+  const events: string[] = [];
+  await assert.rejects(assertTerminatedHeartbeat(child.pid!, identity.started, `${f.root}/heartbeat`, performance.now(), event => events.push(event), 100), /known SSH descendant survived cleanup/);
+  assert.ok(events.length > 0);
+  assert.ok(events.every(event => event === 'process'), 'must not sample a living descendant heartbeat baseline');
+  await waitForHeartbeat(`${f.root}/heartbeat`, heartbeat);
 });
 
 test('interactive cancellation escalates known descendants after leader exit without signalling a peer', async t => {
@@ -361,23 +425,35 @@ test('CLI signals clean resistant descendants and retain the first signal exit s
       child.stdout.on('data', chunk => { output += chunk; }); child.stderr.resume();
       const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
       t.after(() => { child.kill('SIGKILL'); peer.kill('SIGKILL'); if (leader) { try { process.kill(-leader, 'SIGKILL'); } catch {} } if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch {} } });
-      const deadline = Date.now() + 5000;
-      while (true) {
-        try { await access(`${f.root}/heartbeat`); break; } catch { assert.ok(Date.now() < deadline, 'synthetic descendant not ready'); await new Promise(resolve => setTimeout(resolve, 25)); }
+      const samples: Record<string, unknown>[] = [];
+      const record = (event: string, data: Record<string, unknown>) => samples.push({ event, at: Date.now(), ...data });
+      try {
+        const deadline = Date.now() + 5000;
+        while (true) {
+          try { await access(`${f.root}/heartbeat`); break; } catch { assert.ok(Date.now() < deadline, 'synthetic descendant not ready'); await new Promise(resolve => setTimeout(resolve, 25)); }
+        }
+        descendant = Number(await readFile(`${f.root}/descendant`, 'utf8'));
+        leader = Number(await readFile(`${f.root}/leader`, 'utf8'));
+        const identity = await readProcessState(descendant);
+        record('identity', { pid: descendant, started: identity?.started, state: identity?.state ?? 'absent' });
+        assert.ok(identity && !identity.state.startsWith('Z'), 'fixture descendant must be alive before cancellation');
+        const start = performance.now();
+        record('cancel', { signal: scenario.first }); child.kill(scenario.first);
+        await new Promise(resolve => setTimeout(resolve, 100)); child.kill(scenario.again);
+        let watchdog: ReturnType<typeof setTimeout> | undefined;
+        const result = await Promise.race([exited, new Promise<never>((_, reject) => { watchdog = setTimeout(() => reject(new Error('cleanup exceeded bound')), 4000); })]).finally(() => clearTimeout(watchdog));
+        record('exit', { ...result, elapsedMs: performance.now() - start });
+        assert.deepEqual(result, { code: scenario.exit, signal: null });
+        await assertTerminatedHeartbeat(descendant, identity.started, `${f.root}/heartbeat`, start, record);
+        assert.equal(peer.exitCode, null); assert.equal(peer.signalCode, null); process.kill(peer.pid!, 0);
+        assert.doesNotMatch(output, /Authenticated as:/);
+      } catch (error) {
+        // Only synthetic fixture metadata; retain evidence in TAP before fixture cleanup removes files.
+        const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8').catch(() => undefined);
+        record('failure heartbeat', { heartbeat: heartbeat && /^\d{1,20}$/.test(heartbeat) ? heartbeat : 'unavailable' });
+        t.diagnostic(JSON.stringify({ scenario, leader, descendant, peer: peer.pid, samples }));
+        throw error;
       }
-      descendant = Number(await readFile(`${f.root}/descendant`, 'utf8'));
-      leader = Number(await readFile(`${f.root}/leader`, 'utf8'));
-      const start = performance.now(); child.kill(scenario.first);
-      await new Promise(resolve => setTimeout(resolve, 100)); child.kill(scenario.again);
-      let watchdog: ReturnType<typeof setTimeout> | undefined;
-      const result = await Promise.race([exited, new Promise<never>((_, reject) => { watchdog = setTimeout(() => reject(new Error('cleanup exceeded bound')), 4000); })]).finally(() => clearTimeout(watchdog));
-      assert.deepEqual(result, { code: scenario.exit, signal: null });
-      assert.ok(performance.now() - start < 3500);
-      const heartbeat = await readFile(`${f.root}/heartbeat`, 'utf8');
-      await new Promise(resolve => setTimeout(resolve, 100));
-      assert.equal(await readFile(`${f.root}/heartbeat`, 'utf8'), heartbeat, 'resistant descendant survived cleanup');
-      assert.equal(peer.exitCode, null); assert.equal(peer.signalCode, null); process.kill(peer.pid!, 0);
-      assert.doesNotMatch(output, /Authenticated as:/);
     });
   }
 });

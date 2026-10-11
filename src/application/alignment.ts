@@ -329,10 +329,11 @@ export function buildPushAlignmentChecks(input: {
 }
 
 /** Condenses a probe-owned reason message for human output, preserving the full message for JSON. */
-export function summarizeSshMessage(message: string): string {
+export function summarizeSshMessage(message: string, verbose = false): string {
+  if (verbose) return message;
   const match = /^SSH account unverified:\n((?:- [^\n]+\n)+)\n([\s\S]*)$/.exec(message);
   if (!match) return message;
   const reasons = match[1].trimEnd().split('\n').map((line) => line.slice(2));
-  const more = reasons.length > 1 ? ' (and other differences; see gitrole doctor --json).' : '';
-  return `SSH account unverified: ${reasons[0]}${more} ${match[2]}`;
+  const more = reasons.length > 1 ? ` (and ${reasons.length - 1} other differences)` : '';
+  return `SSH account unverified: ${reasons[0]}${more}`;
 }

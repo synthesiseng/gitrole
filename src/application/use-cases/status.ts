@@ -15,6 +15,8 @@ import { collectObservedState, type ObservedState } from '../observed-state.js';
 import { evaluateRepoPolicy, loadOptionalRepoPolicy } from '../repo-policy.js';
 
 export interface StatusOptions {
+  /** Include full human explanations without changing observations or verdicts. */
+  verbose?: boolean;
   /**
    * Skip the live SSH githubUser probe.
    * SSH `auth` is `na`. HTTPS pin checks still use the saved role and `.gitrole`.
@@ -48,7 +50,7 @@ export async function getStatus(
   return {
     roleName: role?.name ?? UNMATCHED_ROLE_NAME,
     commitIdentity,
-    pushAuth: formatPushAuth(role, observedState, httpsAuth, offline),
+    pushAuth: formatPushAuth(role, observedState, httpsAuth, offline, options.verbose === true),
     scope: observedState.scope.effective,
     localOverride: observedState.scope.hasLocalOverride,
     lastNonMergeCommit,
@@ -106,7 +108,8 @@ function formatPushAuth(
     sshAuth?: DoctorResult['sshAuth'];
   },
   httpsAuth?: HttpsAuthDescription,
-  offline = false
+  offline = false,
+  verbose = false
 ): string | undefined {
   if (observedState.repository.push) {
     const push = observedState.repository.push;
@@ -114,7 +117,7 @@ function formatPushAuth(
     if (push.message || !push.targets.length) return push.message ?? 'push destination unverified';
     return push.targets.map(({ remote, sshAuth, message }) =>
       sshAuth?.ok && sshAuth.githubUser ? `${sshAuth.githubUser} via ${remote.host}` :
-      `${remote.name} ${remote.url} (${offline && remote.protocol === 'ssh' ? 'SSH authentication skipped (--offline); local checks only. An online check may connect and run configured SSH commands or change SSH state.' : message ?? (sshAuth?.message ? summarizeSshMessage(sshAuth.message) : 'authentication unverified')})`
+      `${remote.name} ${remote.url} (${offline && remote.protocol === 'ssh' ? 'SSH authentication skipped (--offline); local checks only. An online check may connect and run configured SSH commands or change SSH state.' : message ?? (sshAuth?.message ? summarizeSshMessage(sshAuth.message, verbose) : 'authentication unverified')})`
     ).join('; ');
   }
   if (observedState.sshAuth?.githubUser) {

@@ -146,6 +146,7 @@ case $state in
       status)
         _arguments \
           '--short[show machine-friendly one-line status output]' \
+          '--verbose[show full human-readable diagnostic details]' \
           '--offline[skip the live SSH githubUser probe and use local checks only]' \
           '(- :)'{-h,--help}'[print help]' \
           && ret=0
@@ -154,6 +155,7 @@ case $state in
         _arguments \
           '--json[write the diagnostic result as JSON]' \
           '--offline[skip all SSH execution and use local checks only]' \
+          '--verbose[show full human-readable diagnostic details]' \
           '(- :)'{-h,--help}'[print help]' \
           && ret=0
         ;;

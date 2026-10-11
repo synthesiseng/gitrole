@@ -31,24 +31,26 @@ const httpsShort =
 const alignedSegment = 'gitrole:work ✓\n';
 const misalignedSegment = 'gitrole:no-role ⚠\n';
 const outsideStatus = `no matching role  warning
+  checks commit warn  remote na  auth na  policy na
   commit unset
   push  default push destination could not be observed
   scope unset
   history no non-merge commits yet
+  next  Review details: gitrole doctor --verbose
 `;
-const outsideDoctor = `doctor
+const outsideDoctor = `doctor  warning
   role  no matching role
   scope unset
-  local inactive
   commit not set (unset) <not set (unset)>
-  repo  not a git repository
 
-checks
+checks  0 ok, 4 warnings
   warn role   active commit identity does not match any saved role
   info fix    add a role for the active commit identity or switch to the intended saved role before committing
   warn commit user.name or user.email is not fully configured
   warn commit effective committer identity is incomplete or differs from the effective author identity
   warn repo   not inside a Git repository; remote push identity could not be diagnosed
+
+  next  Run doctor from the intended Git repository.
 `;
 
 interface Fixture {
