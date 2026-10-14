@@ -1,7 +1,7 @@
 {
   "name": "gitrole",
   "version": "0.13.2",
-  "description": "Switch your full git identity in one command.",
+  "description": "Switch Git name/email and load a saved SSH key when configured.",
   "type": "module",
   "bin": {
     "gitrole": "dist/cli/index.js",

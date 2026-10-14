@@ -2,41 +2,9 @@
 
 ## Unreleased
 
-### Bug Fixes
+### Tests
 
-* **use:** assess repository alignment after the saved SSH key's load attempt completes, so feedback reflects the resulting agent state. Key loading remains best-effort, and genuine alignment warnings are retained.
-
-* **ssh:** explain why account checks remain unverified, retain overlapping reasons in existing doctor JSON messages, offer bounded manual-check guidance, and clarify offline skipping and expected accounts. Verification rules, SSH invocations, short fields and exits are unchanged.
-
-* **remote:** treat explicit remote-helper destinations as unsupported instead of SSH, so status warns online and offline while doctor warns online, without executing helpers.
-
-### Push identity correctness
-
-* `status` and `doctor` inspect the effective destination of a default `git push`, including every Git-resolved push URL, instead of authenticating the fetch origin. `repository.remote` now means the first push endpoint; additive `fetchRemote` and `push.targets` retain separate context. Short field order and exit codes are unchanged; strict consumers must account for the changed remote meaning.
-* Unsupported SSH commands, alternate diagnostic binaries, incomplete or interactive SSH contexts remain unverified. Online OpenSSH inspection may execute configured `Match exec` commands or DNS lookups. Offline status and prompts invoke no SSH; HTTPS pin checks remain local. Mixed SSH/HTTPS warns online.
-* Destination and account observation does not prove refspec readiness, authorization or successful push, and excludes future explicit push arguments.
-
-### Documentation
-
-* Install instructions lead with `brew install synthesiseng/tap/gitrole`. `npm install -g gitrole` is still the other install path.
-* The shell prompt needs gitrole 0.9.0 or newer. `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified. `gitrole status --short --offline` does not emit `auth=ok`. A line that still says `auth=ok` shows ⚠, because ✓ only covers the offline contract. If `gitrole-prompt` is not on `PATH`, the snippets print nothing. A failed or unreadable status shows `gitrole:? ⚠`. Live auth is `gitrole doctor` and the optional check-only hook, not the prompt.
-
-### Breaking Changes
-
-* **repo-policy:** `.gitrole` `defaultRole` and `allowedRoles` now use the same role-name rules as saved roles (`[a-z0-9_-]`: lowercase letters, numbers, `_`, and `-`) ([#55](https://github.com/synthesiseng/gitrole/issues/55)) ([c0e6f25](https://github.com/synthesiseng/gitrole/commit/c0e6f2575c64e04c0ddd580a30b5a4b6e040e458))
-  * invalid policy names fail closed: `gitrole resolve`, `gitrole resolve --json`, `gitrole status`, `gitrole doctor`, and `gitrole doctor --json` exit `1`, write the error to stderr, and emit no stdout
-  * a missing `.gitrole` file still leaves `status` and `doctor` usable; only an invalid policy hard-fails those commands
-  * valid policy files and the `status --short` field contract are unchanged
-
-### Bug Fixes
-
-* **push:** when `url.*.pushInsteadOf` rewrites only some of a remote's fetch URLs, `status` and `doctor` check those rewritten push URLs. The other fetch URLs are not push destinations. A newline in a configured push URL is still unverified.
-* **push:** a default push destination that is not a remote name is checked as the URL or path Git pushes to. That includes an scp-style SSH URL, an HTTPS URL, and a relative or absolute local path, after `insteadOf` and `pushInsteadOf`. Resolution preserves conditional include behavior; legacy `.git/remotes` and `.git/branches` destinations remain unverified. `status --short` field order is unchanged. `.` is still a local push with no GitHub authentication.
-* **roles:** `no-role` is reserved so a saved role can't collide with the status and prompt sentinel
-  * `gitrole add no-role` and `gitrole import current --name no-role` exit `1` with a reserved-name error and don't write the role
-  * an existing saved role named `no-role` is left in place. `gitrole doctor` warns and suggests adding it under a new name, then `gitrole remove no-role`
-  * `gitrole status` and the prompt segment still run for that legacy role. Prompt glyphs stay based on the status fields, so a hand-built aligned line with `role=no-role` is still `gitrole:no-role ✓`
-* **status:** HTTPS `auth=na` only when a repo pin allows the active role and that role has a `githubUser`. No pin, or a GitHub user that doesn't match the pin, is `auth=warn` and exit `2` (previously exit `0` on those HTTPS repos)
+* **auth:** wait for synthetic SSH processes to terminate before removing fixture files, and restore patched builtins even when teardown fails ([#130](https://github.com/synthesiseng/gitrole/pull/130)). This changes test cleanup only.
 
 ## [0.13.2](https://github.com/synthesiseng/gitrole/compare/v0.13.1...v0.13.2) (2026-10-14)
 
@@ -109,6 +77,11 @@
 * **push:** resolve default destinations with Git ([#104](https://github.com/synthesiseng/gitrole/issues/104)) ([fb5a853](https://github.com/synthesiseng/gitrole/commit/fb5a85392aa997bd2e9d734768a0db234765ceee))
 * **push:** resolve literal-dot destinations before classification ([#106](https://github.com/synthesiseng/gitrole/issues/106)) ([5191fa5](https://github.com/synthesiseng/gitrole/commit/5191fa554473963bf5220240164b596b905764ee))
 
+### Push destination details
+
+* **push:** when `url.*.pushInsteadOf` rewrites only some of a remote's fetch URLs, `status` and `doctor` check those rewritten push URLs. The other fetch URLs are not push destinations. A newline in a configured push URL is still unverified.
+* **push:** a default push destination that is not a remote name is checked as the URL or path Git pushes to. That includes an scp-style SSH URL, an HTTPS URL, and a relative or absolute local path, after `insteadOf` and `pushInsteadOf`. Resolution preserves conditional include behavior; legacy `.git/remotes` and `.git/branches` destinations remain unverified. `status --short` field order is unchanged. `.` is still a local push with no GitHub authentication.
+
 ## [0.10.8](https://github.com/synthesiseng/gitrole/compare/v0.10.7...v0.10.8) (2026-10-02)
 
 
@@ -137,6 +110,12 @@
 
 * verify effective default push identity ([#90](https://github.com/synthesiseng/gitrole/issues/90)) ([eb26907](https://github.com/synthesiseng/gitrole/commit/eb26907a46785776241e3f2f013ea3d515bcc23a))
 
+### Push identity correctness
+
+* `status` and `doctor` inspect the effective destination of a default `git push`, including every Git-resolved push URL, instead of authenticating the fetch origin. `repository.remote` now means the first push endpoint; additive `fetchRemote` and `push.targets` retain separate context. Short field order and exit codes are unchanged; strict consumers must account for the changed remote meaning.
+* Unsupported SSH commands, alternate diagnostic binaries, incomplete or interactive SSH contexts remain unverified. Online OpenSSH inspection may execute configured `Match exec` commands or DNS lookups. Offline status and prompts invoke no SSH; HTTPS pin checks remain local. Mixed SSH/HTTPS warns online.
+* Destination and account observation does not prove refspec readiness, authorization or successful push, and excludes future explicit push arguments.
+
 ## [0.10.4](https://github.com/synthesiseng/gitrole/compare/v0.10.3...v0.10.4) (2026-09-30)
 
 
@@ -144,12 +123,17 @@
 
 * effective commit identity across checks and role commands ([#86](https://github.com/synthesiseng/gitrole/issues/86)) ([38aba2f](https://github.com/synthesiseng/gitrole/commit/38aba2fdfacd8ddd91694f1c0fc5a63d44605023))
 
+### Documentation
+
+* Install instructions lead with `brew install synthesiseng/tap/gitrole`. `npm install -g gitrole` is still the other install path. ([#83](https://github.com/synthesiseng/gitrole/pull/83))
+
 ## [0.10.3](https://github.com/synthesiseng/gitrole/compare/v0.10.2...v0.10.3) (2026-09-27)
 
 
 ### Bug Fixes
 
 * **roles:** `no-role` is reserved for the status line when no saved role matches, so you can't save a role with that name. `gitrole add no-role` and `gitrole import current --name no-role` exit `1` and don't write the role. A role already saved under that name is left in place ([#78](https://github.com/synthesiseng/gitrole/issues/78)) ([2c28ea8](https://github.com/synthesiseng/gitrole/commit/2c28ea8f5613caf459fa99e8198e83b55659910a))
+  * `gitrole doctor` warns about a legacy role named `no-role` and suggests saving it under a new name, then removing the old role. Status and prompt rendering remain usable for that legacy role.
 
 ## [0.10.2](https://github.com/synthesiseng/gitrole/compare/v0.10.1...v0.10.2) (2026-09-27)
 
@@ -157,6 +141,10 @@
 ### Bug Fixes
 
 * **publish:** let npm trusted publishing use GitHub OIDC ([#76](https://github.com/synthesiseng/gitrole/issues/76)) ([7a9849b](https://github.com/synthesiseng/gitrole/commit/7a9849be288cad322939cd2b165ef72c25bb25c3))
+
+### Documentation
+
+* The shell prompt needs gitrole 0.9.0 or newer. `gitrole:work ✓` means commit and policy are ok and auth was not checked. It does not mean network auth was verified. `gitrole status --short --offline` does not emit `auth=ok`. A line that still says `auth=ok` shows ⚠, because ✓ only covers the offline contract. If `gitrole-prompt` is not on `PATH`, the snippets print nothing. A failed or unreadable status shows `gitrole:? ⚠`. At this release, `gitrole doctor` and the legacy check-only hook performed live authentication checks. The hook became offline in 0.12.0; see that release's migration notes. ([#75](https://github.com/synthesiseng/gitrole/pull/75))
 
 ## [0.10.1](https://github.com/synthesiseng/gitrole/compare/v0.10.0...v0.10.1) (2026-09-27)
 
@@ -198,6 +186,11 @@
 
 
 ### Breaking Changes
+
+* **repo-policy:** `.gitrole` `defaultRole` and `allowedRoles` now use the same role-name rules as saved roles (`[a-z0-9_-]`: lowercase letters, numbers, `_`, and `-`) ([#55](https://github.com/synthesiseng/gitrole/issues/55)) ([c0e6f25](https://github.com/synthesiseng/gitrole/commit/c0e6f2575c64e04c0ddd580a30b5a4b6e040e458))
+  * invalid policy names fail closed: `gitrole resolve`, `gitrole resolve --json`, `gitrole status`, `gitrole doctor`, and `gitrole doctor --json` exit `1`, write the error to stderr, and emit no stdout
+  * a missing `.gitrole` file still leaves `status` and `doctor` usable; only an invalid policy hard-fails those commands
+  * valid policy files and the `status --short` field contract are unchanged
 
 * **status:** `gitrole status --short` grew from 7 fields to 8. `policy` is inserted before `overall`. Field order is `role scope override commit remote auth policy overall`. Parsers that treated the 7th field as `overall` must read fields by name, or use the 8th field ([#57](https://github.com/synthesiseng/gitrole/issues/57)) ([4b841e4](https://github.com/synthesiseng/gitrole/commit/4b841e4a4ca69cd208c31f459bd0871a392b8c1f))
 

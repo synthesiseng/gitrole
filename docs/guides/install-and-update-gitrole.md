@@ -51,14 +51,14 @@ Then rerun `gitrole --version` and `command -v gitrole`. If you have both instal
 
 <h2 id="versions">Source and published versions</h2>
 
-A merge to the source repository does not establish that either channel has published that change. As checked on September 30, 2026, [npm's `latest`](https://www.npmjs.com/package/gitrole) and the [Homebrew formula](https://github.com/synthesiseng/homebrew-tap/blob/main/Formula/gitrole.rb) both targeted **0.10.5**. These are metadata observations, not installation or release-recovery qualification. Check current channel metadata when choosing a version:
+A merge to the source repository does not establish that either channel has published that change. As checked on October 14, 2026, [npm's `latest`](https://www.npmjs.com/package/gitrole) and the [Homebrew formula](https://github.com/synthesiseng/homebrew-tap/blob/main/Formula/gitrole.rb) both target **0.13.2**. These are metadata observations, not installation or release-recovery qualification. Check current channel metadata when choosing a version:
 
 ```bash
 npm view gitrole version
 brew info synthesiseng/tap/gitrole
 ```
 
-The offline status flag and prompt helper require 0.9.0 or newer. This documentation describes source behavior at 0.10.5, including effective author/committer provenance and default push endpoint observation. An older installation may differ; confirm its version before comparing output.
+The offline status flag and prompt helper require 0.9.0 or newer. The current published release is 0.13.2, including effective author/committer provenance, default push endpoint observation, and the offline commit check introduced in 0.12.0. An older installation may differ; confirm its version before comparing output.
 
 <h2 id="optional-assets">Find optional assets</h2>
 
@@ -74,4 +74,4 @@ The Homebrew formula exposes the two commands. No supported Homebrew path for sk
 
 For optional setup, read <a href="{{ '/guides/show-gitrole-in-your-shell-prompt/' | url }}">Show gitrole in your shell prompt</a>, <a href="{{ '/guides/enable-shell-tab-completion/' | url }}">Enable shell tab completion</a>, or <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify Git identity before an agent commits</a>.
 
-Copied hook files do not update with the CLI. The current source hook requires `gitrole check commit`; verify that capability in the hook's environment before adopting it. Keep a reviewed backup when migrating an older hook. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}#migration">manual hook migration and rollback</a>. A new source hook does not establish that a compatible CLI has been published.
+Copied hook files do not update with the CLI. The packaged hook requires gitrole 0.12.0 or newer with `gitrole check commit`; verify that capability in the hook's environment before adopting it. Keep a reviewed backup when migrating an older hook. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}#migration">manual hook migration and rollback</a>.
