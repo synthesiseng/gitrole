@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, access } from 'node:fs/promises';
-import childProcess, { spawnSync, spawn } from 'node:child_process';
+import childProcess, { spawnSync, spawn, type ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
+import { once } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
 import os from 'node:os';
@@ -29,11 +31,15 @@ async function waitForHeartbeat(file: string, previous?: string): Promise<string
   assert.fail(`heartbeat did not ${previous === undefined ? 'start' : 'advance'}: ${file}; last sample ${JSON.stringify(sample)}`);
 }
 
+// Fixture observation must not inherit the production fault-injection mock.
+let inspectProcess = promisify(childProcess.execFile);
+const signalFixtureProcess = process.kill.bind(process);
+
 // A successful signal request does not mean the kernel has finished terminating the child.
 // Inspect only; a missing PID or the same process in zombie state can no longer write.
 async function readProcessState(pid: number): Promise<{ started: string; state: string } | undefined> {
   assert.ok(Number.isSafeInteger(pid) && pid > 0, 'invalid fixture PID');
-  const { stdout } = await promisify(childProcess.execFile)('/bin/ps', ['-e', '-o', 'pid=,stat=,lstart='], {
+  const { stdout } = await inspectProcess('/bin/ps', ['-e', '-o', 'pid=,stat=,lstart='], {
     env: { ...process.env, LC_ALL: 'C' }, timeout: 500, maxBuffer: 2 * 1024 * 1024
   });
   assert.ok(stdout.trim(), 'empty process snapshot');
@@ -84,14 +90,83 @@ async function assertTerminatedHeartbeat(
   assert.equal(after, heartbeat, 'resistant descendant survived cleanup');
 }
 
+// ChildProcess exit is the terminal boundary for children owned directly by this test.
+async function stopFixtureChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.ref(); // Production may have unref'ed an adapter-owned synthetic leader.
+  const exited = once(child, 'exit', { signal: AbortSignal.timeout(2000) });
+  child.kill('SIGKILL');
+  await exited;
+}
+
+// Orphan descendants need a retained start identity, not only a reusable PID.
+async function retainFixtureDescendant(cleanup: (() => void | Promise<void>)[], pid: number): Promise<void> {
+  const inspection = readProcessState(pid);
+  cleanup.push(async () => {
+    const identity = await inspection;
+    if (!identity || identity.state.startsWith('Z')) return;
+    const current = await readProcessState(pid);
+    if (!current) return;
+    assert.equal(current.started, identity.started, 'fixture PID identity changed before teardown');
+    if (!current.state.startsWith('Z')) {
+      try { signalFixtureProcess(pid, 'SIGKILL'); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+    await waitForTermination(pid, identity.started, 2000);
+  });
+  await inspection;
+}
+
+// Reserve a fail-closed obligation before a test waits for descendant metadata.
+function expectFixtureDescendant(cleanup: (() => void | Promise<void>)[]) {
+  let registered = false;
+  cleanup.push(() => { assert.ok(registered, 'fixture descendant ownership was not established'); });
+  return async (pid: number) => {
+    const retaining = retainFixtureDescendant(cleanup, pid);
+    registered = true;
+    await retaining;
+  };
+}
+
 const cli = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'gitrole-auth-'));
-  const cleanup: (() => void)[] = [];
-  t.after(async () => { for (const stop of cleanup) stop(); await rm(root, { recursive: true, force: true }); });
+  const cleanup: (() => void | Promise<void>)[] = [];
+  const restore: (() => void)[] = [];
+  t.after(async () => {
+    const errors: unknown[] = [];
+    try {
+      for (const stop of cleanup) {
+        try { await stop(); } catch (error) { errors.push(error); }
+      }
+      // Leave the directory for diagnosis if any writer's termination is unproven.
+      if (!errors.length) {
+        try { await rm(root, { recursive: true, force: true }); } catch (error) { errors.push(error); }
+      }
+    } finally {
+      // A failed after-hook can skip later hooks, so restoration belongs in this hook.
+      for (const reset of restore) {
+        try { reset(); } catch (error) { errors.push(error); }
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, 'auth fixture teardown failed');
+  });
   await mkdir(path.join(root, 'bin')); await mkdir(path.join(root, 'config')); await mkdir(path.join(root, 'home'));
   const env: NodeJS.ProcessEnv = { PATH: `${root}/bin:${process.env.PATH}`, HOME: `${root}/home`, XDG_CONFIG_HOME: `${root}/config`,
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', NO_COLOR: '1', ROOT: root };
+  // Capture adapter-owned leaders before readiness or inspection can fail.
+  const originalSpawn = childProcess.spawn;
+  childProcess.spawn = ((...args: Parameters<typeof originalSpawn>) => {
+    const child = originalSpawn(...args);
+    const options = args[2];
+    if (args[0] === 'ssh' && options?.env?.ROOT === root) {
+      cleanup.push(() => stopFixtureChild(child));
+    }
+    return child;
+  }) as typeof originalSpawn;
+  syncBuiltinESMExports();
+  restore.push(() => { childProcess.spawn = originalSpawn; syncBuiltinESMExports(); });
   const git = (...args: string[]) => { const r = spawnSync('git', args, { cwd: root, env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); };
   git('init', '-q'); git('config', 'user.name', 'Fixture User'); git('config', 'user.email', 'fixture@example.invalid');
   git('remote', 'add', 'origin', 'git@fixture.invalid:team/repo.git');
@@ -103,8 +178,190 @@ if(process.argv.includes('-G')) { console.log('hostname fixture.invalid\\nuser g
 else { ${extra} console.error("Hi ${account}! You've successfully authenticated, but GitHub does not provide shell access."); process.exitCode=${exit}; }`;
   await ssh(stub());
   const run = (extraEnv = {}) => spawnSync(process.execPath, [cli, 'auth', 'test'], { cwd: root, env: { ...env, ...extraEnv }, encoding: 'utf8', timeout: 15000 });
-  return { root, env, git, ssh, stub, setRole, roles, run, cleanup };
+  return { root, env, git, ssh, stub, setRole, roles, run, cleanup, restore };
 }
+
+test('fixture teardown retains files when startup fails before descendant registration', async () => {
+  const hooks: (() => Promise<void>)[] = [];
+  const f = await fixture({ after: hook => { hooks.push(hook); } });
+  expectFixtureDescendant(f.cleanup);
+  try {
+    await assert.rejects(hooks[0](), error => error instanceof AggregateError &&
+      error.errors.some(cause => /ownership was not established/.test(String(cause))));
+    await access(f.root);
+  } finally {
+    for (const restore of f.restore) restore();
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test('fixture teardown retains a writer when its initial inspection rejects', async () => {
+  const hooks: (() => Promise<void>)[] = [];
+  const f = await fixture({ after: hook => { hooks.push(hook); } });
+  const child = spawn(process.execPath, ['-e', `require('fs').writeFileSync(process.env.ROOT+'/written','yes');process.on('message',()=>{});process.send('ready');`], { env: f.env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  const originalInspect = inspectProcess;
+  const failure = Object.assign(new Error('synthetic initial inspection timeout'), { code: 'ETIMEDOUT' });
+  try {
+    await once(child, 'message');
+    assert.equal(await readFile(f.root + '/written', 'utf8'), 'yes');
+    inspectProcess = (async () => { throw failure; }) as unknown as typeof inspectProcess;
+    f.restore.push(() => { inspectProcess = originalInspect; });
+    await assert.rejects(retainFixtureDescendant(f.cleanup, child.pid!), error => error === failure);
+    await assert.rejects(hooks[0](), error => error instanceof AggregateError && error.errors.includes(failure));
+    await access(f.root);
+    assert.equal(child.exitCode, null);
+    assert.equal(child.signalCode, null);
+    assert.equal(inspectProcess, originalInspect);
+  } finally {
+    inspectProcess = originalInspect;
+    await stopFixtureChild(child);
+    // Also restore fixture spawn when a deliberately faulty teardown fails its oracle early.
+    for (const restore of f.restore) restore();
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test('fixture teardown waits for an adapter-owned leader after observation settles', async t => {
+  const hooks: (() => Promise<void>)[] = [];
+  const f = await fixture({ after: hook => { hooks.push(hook); } });
+  t.after(hooks[0]);
+  const originalKill = childProcess.ChildProcess.prototype.kill;
+  const originalRemove = fs.promises.rm;
+  const controller = new AbortController();
+  let leader: ChildProcess | undefined;
+  let leaderPid = 0, heldKills = 0, removed = false;
+  await f.ssh(`if(process.argv.includes('-G'))console.log('hostname fixture.invalid\\nuser git\\nport 22');else{const fs=require('fs');process.on('SIGTERM',()=>{});fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));setInterval(()=>${heartbeatWriter()},20);}`);
+  childProcess.ChildProcess.prototype.kill = function (signal) {
+    if (this.pid === leaderPid) {
+      leader = this;
+      if (signal === 'SIGKILL') { heldKills++; return true; }
+    }
+    return originalKill.call(this, signal);
+  };
+  f.restore.push(() => { childProcess.ChildProcess.prototype.kill = originalKill; });
+  const observation = new SystemAuthTester(true, f.env).observe(parseRemoteUrl('origin', 'git@fixture.invalid:repo'), controller.signal);
+  f.cleanup.push(async () => { controller.abort('cancelled'); await observation; });
+  try {
+    await waitForHeartbeat(f.root + '/heartbeat');
+    leaderPid = Number(await readFile(f.root + '/leader', 'utf8'));
+    controller.abort('cancelled');
+    assert.equal((await observation).outcome, 'cancelled');
+    assert.equal(heldKills, 1);
+    assert.ok(leader);
+    const heartbeat = await readFile(f.root + '/heartbeat', 'utf8');
+    await waitForHeartbeat(f.root + '/heartbeat', heartbeat);
+    fs.promises.rm = async (...args) => {
+      if (args[0] === f.root) {
+        removed = true;
+        assert.ok(leader!.exitCode !== null || leader!.signalCode !== null, 'directory removal preceded adapter leader exit');
+      }
+      return originalRemove(...args);
+    };
+    syncBuiltinESMExports();
+    const teardown = hooks[0]().then(() => undefined, error => error);
+    const deadline = performance.now() + 1000;
+    while (heldKills < 2 && !removed) {
+      assert.ok(performance.now() < deadline, 'fixture did not retain adapter leader cleanup');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    const removedWhileHeld = removed;
+    leader.ref();
+    originalKill.call(leader, 'SIGKILL');
+    const error = await teardown;
+    assert.equal(removedWhileHeld, false, 'directory removal started while adapter leader exit was held');
+    assert.equal(error, undefined);
+    assert.equal(removed, true);
+  } finally {
+    childProcess.ChildProcess.prototype.kill = originalKill;
+    fs.promises.rm = originalRemove; syncBuiltinESMExports();
+    controller.abort('cancelled');
+    // The registered hook owns terminal cleanup even if readiness/metadata failed.
+  }
+});
+
+test('fixture teardown waits for a held child exit before removing its directory', async () => {
+  const hooks: (() => Promise<void>)[] = [];
+  const f = await fixture({ after: hook => { hooks.push(hook); } });
+  const child = spawn(process.execPath, ['-e', `process.on('message',()=>process.exit(0));process.send('ready');`], { env: f.env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  const exited = once(child, 'exit');
+  const originalRemove = fs.promises.rm;
+  const originalChildKill = child.kill;
+  let signalRequested = false;
+  let removed = false;
+  try {
+    await once(child, 'message');
+    // A successful signal request is deliberately held short of actual exit.
+    child.kill = () => { signalRequested = true; return true; };
+    f.cleanup.push(() => stopFixtureChild(child));
+    fs.promises.rm = async (...args) => {
+      if (args[0] === f.root) {
+        removed = true;
+        assert.notEqual(child.exitCode, null, 'directory removal preceded actual child exit');
+      }
+      return originalRemove(...args);
+    };
+    syncBuiltinESMExports();
+    const teardown = hooks[0]().then(() => undefined, error => error);
+    // The original hook enters rm synchronously, despite the held cleanup promise.
+    const removedWhileHeld = removed;
+    assert.equal(signalRequested, true);
+    child.send('finish');
+    const error = await teardown;
+    assert.equal(removedWhileHeld, false, 'directory removal started while cleanup was held');
+    assert.equal(error, undefined);
+    assert.equal(removed, true);
+    await assert.rejects(access(f.root), { code: 'ENOENT' });
+  } finally {
+    child.kill = originalChildKill;
+    fs.promises.rm = originalRemove; syncBuiltinESMExports();
+    if (child.exitCode === null && child.signalCode === null) await stopFixtureChild(child);
+    await exited;
+    await originalRemove(f.root, { recursive: true, force: true });
+  }
+});
+
+test('fixture teardown restores patched builtins when directory removal fails', async () => {
+  const hooks: (() => Promise<void>)[] = [];
+  const f = await fixture({ after: hook => { hooks.push(hook); } });
+  const originalRemove = fs.promises.rm;
+  const originalExec = childProcess.execFile;
+  const originalKill = process.kill;
+  const originalChildKill = childProcess.ChildProcess.prototype.kill;
+  const failure = Object.assign(new Error('synthetic removal failure'), { code: 'ENOTEMPTY' });
+  try {
+    childProcess.execFile = (() => { throw new Error('truncated'); }) as unknown as typeof originalExec;
+    process.kill = (() => { throw new Error('signal mock leaked'); }) as typeof originalKill;
+    childProcess.ChildProcess.prototype.kill = () => { throw new Error('child signal mock leaked'); };
+    syncBuiltinESMExports();
+    f.restore.push(() => { childProcess.execFile = originalExec; syncBuiltinESMExports(); });
+    f.restore.push(() => { process.kill = originalKill; childProcess.ChildProcess.prototype.kill = originalChildKill; });
+    fs.promises.rm = async () => { throw failure; }; syncBuiltinESMExports();
+    await assert.rejects(hooks[0](), error => error instanceof AggregateError && error.errors.includes(failure));
+    assert.equal(childProcess.execFile, originalExec);
+    assert.equal(process.kill, originalKill);
+    assert.equal(childProcess.ChildProcess.prototype.kill, originalChildKill);
+  } finally {
+    childProcess.execFile = originalExec; process.kill = originalKill;
+    childProcess.ChildProcess.prototype.kill = originalChildKill;
+    fs.promises.rm = originalRemove; syncBuiltinESMExports();
+    await originalRemove(f.root, { recursive: true, force: true });
+  }
+});
+
+test('fixture teardown retains unproven writer state and errors while finishing other cleanup', async () => {
+  const hooks: (() => Promise<void>)[] = [];
+  const f = await fixture({ after: hook => { hooks.push(hook); } });
+  const failure = new Error('synthetic writer did not terminate');
+  let otherStopped = false, restored = false;
+  f.cleanup.push(async () => { throw failure; }, () => { otherStopped = true; });
+  f.restore.push(() => { restored = true; });
+  try {
+    await assert.rejects(hooks[0](), error => error instanceof AggregateError && error.errors.includes(failure));
+    await access(f.root);
+    assert.equal(otherStopped, true);
+    assert.equal(restored, true);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
 
 test('observed match, literal mismatch and absent expectation; no config or history writes', async t => {
   const f = await fixture(t); await f.setRole('fixture-user');
@@ -159,12 +416,13 @@ test('nonTTY argv preserves user/port, suppresses prompts and rejects RemoteComm
 test('abort kills the nonTTY process group, including a child that ignores TERM', async t => {
   const f = await fixture(t);
   await f.ssh(`const fs=require('fs'); if(process.argv.includes('-G')) console.log('hostname fixture.invalid\\nuser git\\nport 22\\nremotecommand none'); else { const {spawn}=require('child_process'); const c=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});const fs=require('fs');setInterval(()=>${heartbeatWriter()},50)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000); }`);
+  const retainDescendant = expectFixtureDescendant(f.cleanup);
   const controller = new AbortController();
   const observation = new SystemAuthTester(false, f.env).observe(parseRemoteUrl('origin','git@fixture.invalid:repo'), controller.signal);
-  f.cleanup.push(() => { controller.abort('timeout'); });
+  f.cleanup.push(async () => { controller.abort('timeout'); await observation; });
   await waitForHeartbeat(`${f.root}/heartbeat`);
   const pid = Number(await readFile(`${f.root}/child`, 'utf8'));
-  f.cleanup.push(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  await retainDescendant(pid);
   const start = performance.now(); controller.abort('timeout');
   const result = await observation;
   assert.equal(result.outcome, 'unobserved'); assert.ok(performance.now()-start < 2500);
@@ -177,7 +435,7 @@ test('abort kills the nonTTY process group, including a child that ignores TERM'
 test('termination observation rejects a surviving process and a changed identity', async t => {
   const f = await fixture(t);
   const child = spawn(process.execPath, ['-e', `const fs=require('fs');setInterval(()=>${heartbeatWriter()},20);`], { env: f.env, stdio: 'ignore' });
-  f.cleanup.push(() => { child.kill('SIGKILL'); });
+  f.cleanup.push(() => stopFixtureChild(child));
   const heartbeat = await waitForHeartbeat(`${f.root}/heartbeat`);
   const current = await readProcessState(child.pid!);
   assert.ok(current);
@@ -192,7 +450,7 @@ test('heartbeat baseline waits for observed termination after a final fixture wr
   const f = await fixture(t);
   // Hold the child alive until the observer has actually seen it; no timing-only readiness guess.
   const child = spawn(process.execPath, ['-e', `const fs=require('fs');fs.writeFileSync(process.env.ROOT+'/heartbeat','1');process.on('message',()=>{fs.writeFileSync(process.env.ROOT+'/heartbeat','2');process.exit(0);});`], { env: f.env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
-  f.cleanup.push(() => { child.kill('SIGKILL'); });
+  f.cleanup.push(() => stopFixtureChild(child));
   await waitForHeartbeat(`${f.root}/heartbeat`);
   const identity = await readProcessState(child.pid!);
   assert.ok(identity && !identity.state.startsWith('Z'));
@@ -219,7 +477,7 @@ test('heartbeat baseline waits for observed termination after a final fixture wr
 test('ordered heartbeat observation rejects a truly surviving descendant without sampling', async t => {
   const f = await fixture(t);
   const child = spawn(process.execPath, ['-e', `const fs=require('fs');setInterval(()=>${heartbeatWriter()},20);`], { env: f.env, stdio: 'ignore' });
-  f.cleanup.push(() => { child.kill('SIGKILL'); });
+  f.cleanup.push(() => stopFixtureChild(child));
   const heartbeat = await waitForHeartbeat(`${f.root}/heartbeat`);
   const identity = await readProcessState(child.pid!);
   assert.ok(identity);
@@ -239,17 +497,15 @@ test('interactive cancellation escalates known descendants after leader exit wit
     await t.test(name, async t => {
       const f = await fixture(t);
       const peer = spawn(process.execPath, ['-e', `const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(process.env.ROOT+'/peer-signalled','TERM'));setInterval(()=>${heartbeatWriter('peer-heartbeat')},20);`], { env: f.env, stdio: 'ignore' });
-      f.cleanup.push(() => { peer.kill('SIGKILL'); });
+      f.cleanup.push(() => stopFixtureChild(peer));
       await f.ssh(`const fs=require('fs');if(process.argv.includes('-G'))console.log('hostname fixture.invalid\\nuser git\\nport 22');else{
         const {spawn}=require('child_process');const c=spawn(process.execPath,['-e',${JSON.stringify(`const fs=require('fs');process.on('SIGINT',()=>{});process.on('SIGTERM',()=>{fs.writeFileSync(process.env.ROOT+'/child-term','TERM');${childResists ? '' : 'process.exit(0);'}});setInterval(()=>${heartbeatWriter()},20);`)}],{stdio:'ignore'});
         fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));process.on('SIGTERM',()=>{${leaderResists ? '' : 'process.exit(0);'}});setInterval(()=>{},1000);
       }`);
+      const retainDescendant = expectFixtureDescendant(f.cleanup);
       const controller = new AbortController();
       const observation = new SystemAuthTester(true, f.env).observe(parseRemoteUrl('origin', 'git@fixture.invalid:repo'), controller.signal);
-      t.after(async () => {
-        controller.abort('cancelled');
-        try { process.kill(Number(await readFile(`${f.root}/child`, 'utf8')), 'SIGKILL'); } catch {}
-      });
+      f.cleanup.push(async () => { controller.abort('cancelled'); await observation; });
       const deadline = Date.now() + 3000;
       while (true) {
         try { await access(`${f.root}/heartbeat`); break; } catch {
@@ -258,7 +514,7 @@ test('interactive cancellation escalates known descendants after leader exit wit
         }
       }
       const descendantPid = Number(await readFile(`${f.root}/child`, 'utf8'));
-      f.cleanup.push(() => { try { process.kill(descendantPid, 'SIGKILL'); } catch {} });
+      await retainDescendant(descendantPid);
       // Let the real platform process snapshot observe this long-lived descendant before cancellation.
       await new Promise(resolve => setTimeout(resolve, 350));
       const descendant = await readProcessState(descendantPid);
@@ -297,7 +553,7 @@ test('interactive cleanup falls back safely on incomplete inspection or a change
         if (cancelling && this.pid) attempts.push({ pid: this.pid, signal, via: 'ChildProcess.kill' });
         return originalChildKill.call(this, signal);
       };
-      t.after(() => { process.kill = originalKill; childProcess.ChildProcess.prototype.kill = originalChildKill; });
+      f.restore.push(() => { process.kill = originalKill; childProcess.ChildProcess.prototype.kill = originalChildKill; });
       const original = childProcess.execFile;
       const execute = promisify(original);
       const replacement = (...args: Parameters<typeof original>) => original(...args);
@@ -321,11 +577,12 @@ test('interactive cleanup falls back safely on incomplete inspection or a change
       // Replace the builtin itself: mock.method's proxy retains execFile's original custom promisifier.
       childProcess.execFile = replacement as typeof original;
       syncBuiltinESMExports();
-      t.after(() => { childProcess.execFile = original; syncBuiltinESMExports(); });
+      f.restore.push(() => { childProcess.execFile = original; syncBuiltinESMExports(); });
       await f.ssh(`const fs=require('fs');if(process.argv.includes('-G'))console.log('hostname fixture.invalid\\nuser git\\nport 22');else{fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));const c=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(process.env.ROOT+'/child-term','TERM'));setInterval(()=>${heartbeatWriter()},20);"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/child',String(c.pid));setInterval(()=>{},1000);}`);
+      const retainDescendant = expectFixtureDescendant(f.cleanup);
       const controller = new AbortController();
       const observation = new SystemAuthTester(true, f.env).observe(parseRemoteUrl('origin', 'git@fixture.invalid:repo'), controller.signal);
-      f.cleanup.push(() => { controller.abort('cancelled'); if (descendantPid) { try { process.kill(descendantPid, 'SIGKILL'); } catch {} } });
+      f.cleanup.push(async () => { controller.abort('cancelled'); await observation; });
       const deadline = Date.now() + 3000;
       while (true) {
         try { await access(`${f.root}/heartbeat`); break; } catch {
@@ -334,6 +591,7 @@ test('interactive cleanup falls back safely on incomplete inspection or a change
         }
       }
       descendantPid = Number(await readFile(`${f.root}/child`, 'utf8'));
+      await retainDescendant(descendantPid);
       leaderPid = Number(await readFile(`${f.root}/leader`, 'utf8'));
       const learnedDeadline = performance.now() + 5000;
       while (!learnedDescendant) {
@@ -419,12 +677,14 @@ test('CLI signals clean resistant descendants and retain the first signal exit s
     await t.test(`${scenario.stage} ${scenario.first} then ${scenario.again}`, async t => {
       const f = await fixture(t);
       await f.ssh(`const fs=require('fs');if(process.argv.includes('-G') && ${JSON.stringify(scenario.stage)}!=='config')console.log('hostname fixture.invalid\\nuser git\\nport 22');else{fs.writeFileSync(process.env.ROOT+'/leader',String(process.pid));${scenario.resistantLeader ? "process.on('SIGTERM',()=>{});" : ''}const child=require('child_process').spawn(process.execPath,['-e',"const fs=require('fs');process.on('SIGTERM',()=>{});setInterval(()=>${heartbeatWriter()},20)"],{stdio:'ignore'});fs.writeFileSync(process.env.ROOT+'/descendant',String(child.pid));setInterval(()=>{},1000);}`);
+      const retainLeader = expectFixtureDescendant(f.cleanup);
+      const retainDescendant = expectFixtureDescendant(f.cleanup);
       const peer = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
       const child = spawn(process.execPath, [cli, 'auth', 'test'], { cwd: f.root, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
       let output = '', descendant = 0, leader = 0;
       child.stdout.on('data', chunk => { output += chunk; }); child.stderr.resume();
       const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
-      t.after(() => { child.kill('SIGKILL'); peer.kill('SIGKILL'); if (leader) { try { process.kill(-leader, 'SIGKILL'); } catch {} } if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch {} } });
+      f.cleanup.push(() => stopFixtureChild(child), () => stopFixtureChild(peer));
       const samples: Record<string, unknown>[] = [];
       const record = (event: string, data: Record<string, unknown>) => samples.push({ event, at: Date.now(), ...data });
       try {
@@ -434,6 +694,8 @@ test('CLI signals clean resistant descendants and retain the first signal exit s
         }
         descendant = Number(await readFile(`${f.root}/descendant`, 'utf8'));
         leader = Number(await readFile(`${f.root}/leader`, 'utf8'));
+        await retainLeader(leader);
+        await retainDescendant(descendant);
         const identity = await readProcessState(descendant);
         record('identity', { pid: descendant, started: identity?.started, state: identity?.state ?? 'absent' });
         assert.ok(identity && !identity.state.startsWith('Z'), 'fixture descendant must be alive before cancellation');
