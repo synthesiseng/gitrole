@@ -223,7 +223,8 @@ test('role store keeps legacy blank identities readable and removable without re
   const store = new FileRoleStore({ configFilePath });
 
   assert.equal((await store.list()).length, 2);
-  assert.equal((await store.get('legacy'))?.fullName, '');
+  // Preserve unsafe legacy bytes for diagnosis and explicit recovery.
+  assert.equal((await store.get('legacy'))?.fullName, ' \t');
   assert.equal(await readFile(configFilePath, 'utf8'), raw);
   assert.equal(await store.remove('legacy'), true);
   assert.deepEqual((await store.list()).map((role) => role.name), ['work']);

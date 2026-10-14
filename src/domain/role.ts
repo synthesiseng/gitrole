@@ -16,6 +16,7 @@ export interface GitIdentity {
 }
 
 const roleNamePattern = /^[a-z0-9_-]+$/;
+const identityControlPattern = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 
 /**
  * `role=` value written when no saved role matches the commit identity.
@@ -43,8 +44,9 @@ export class ReservedRoleNameError extends InvalidRoleNameError {
 
 /** Reports a required identity field that cannot be applied safely. */
 export class InvalidRoleIdentityError extends Error {
-  constructor(field: 'full name' | 'email') {
-    super(`role ${field} must not be empty or whitespace-only`);
+  constructor(field: 'full name' | 'email', controls = false) {
+    super(controls ? `role ${field} must not contain control characters or line separators`
+      : `role ${field} must not be empty or whitespace-only`);
     this.name = 'InvalidRoleIdentityError';
   }
 }
@@ -72,10 +74,20 @@ export function getBlankRoleIdentityFields(role: Pick<Role, 'fullName' | 'email'
   return fields;
 }
 
-/** Rejects blank identities before a role is saved or applied to Git config. */
+/** Lists identity fields containing terminal controls or line separators. */
+export function getControlRoleIdentityFields(role: Pick<Role, 'fullName' | 'email'>): Array<'full name' | 'email'> {
+  const fields: Array<'full name' | 'email'> = [];
+  if (identityControlPattern.test(role.fullName)) fields.push('full name');
+  if (identityControlPattern.test(role.email)) fields.push('email');
+  return fields;
+}
+
+/** Rejects unsafe identities before a role is saved or applied to Git config. */
 export function validateRoleIdentity(role: Pick<Role, 'fullName' | 'email'>): void {
   const [field] = getBlankRoleIdentityFields(role);
   if (field) throw new InvalidRoleIdentityError(field);
+  const [controlField] = getControlRoleIdentityFields(role);
+  if (controlField) throw new InvalidRoleIdentityError(controlField, true);
 }
 
 /**
@@ -137,6 +149,8 @@ function normalizeRoleFields(input: Role, name: string): Role {
  * be valid for a new or updated saved role. Required identity fields must be nonblank.
  */
 export function normalizeRole(input: Role): Role {
+  // Check raw input so trim cannot hide leading/trailing controls.
+  validateRoleIdentity(input);
   const role = normalizeRoleFields(input, validateRoleName(input.name));
   validateRoleIdentity(role);
   validateSshKeyPath(role.sshKeyPath);
@@ -150,7 +164,12 @@ export function normalizeRole(input: Role): Role {
  * must diagnose. Creation paths keep using {@link normalizeRole}.
  */
 export function normalizeStoredRole(input: Role): Role {
-  return normalizeRoleFields(input, parseStoredRoleName(input.name));
+  const role = normalizeRoleFields(input, parseStoredRoleName(input.name));
+  // Preserve unsafe legacy fields for diagnosis and explicit repair, including
+  // when another role is saved. Reading must not silently sanitize them.
+  if (identityControlPattern.test(input.fullName)) role.fullName = input.fullName;
+  if (identityControlPattern.test(input.email)) role.email = input.email;
+  return role;
 }
 
 /**
@@ -159,5 +178,6 @@ export function normalizeStoredRole(input: Role): Role {
  * `gitrole current` relies on this strict rule to avoid ambiguous role detection.
  */
 export function matchesIdentity(role: Role, identity: GitIdentity): boolean {
-  return role.fullName === identity.fullName && role.email === identity.email;
+  return getControlRoleIdentityFields(role).length === 0
+    && role.fullName === identity.fullName && role.email === identity.email;
 }

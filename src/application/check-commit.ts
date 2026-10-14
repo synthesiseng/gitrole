@@ -1,5 +1,5 @@
 /** Local commit verdict; deliberately has no remote, authentication or history dependency. */
-import { matchesIdentity, isReservedRoleName, type Role } from '../domain/role.js';
+import { matchesIdentity, isReservedRoleName, getControlRoleIdentityFields, type Role } from '../domain/role.js';
 import type { EffectiveGitIdentity, RepoPolicy } from './contracts.js';
 import { evaluateRepoPolicy } from './repo-policy.js';
 
@@ -45,7 +45,8 @@ export async function checkCommit(load: () => Promise<CommitCheckInput>): Promis
   if (input.policy && evaluateRepoPolicy(input.policy, role?.name).status === 'notAllowed') reasons.push(`the effective role is not allowed by .gitrole; allowed roles: ${input.policy.allowedRoles.join(', ')}`);
   const preferred = input.policy ? input.roles.find((candidate) => candidate.name === input.policy?.defaultRole) : role;
   return { exitCode: reasons.length ? 2 : 0, reasons, identity,
-    suggestedRole: preferred && !isReservedRoleName(preferred.name) && preferred.fullName.trim() && preferred.email.trim() ? preferred.name : undefined };
+    suggestedRole: preferred && !isReservedRoleName(preferred.name) && preferred.fullName.trim() && preferred.email.trim()
+      && !getControlRoleIdentityFields(preferred).length ? preferred.name : undefined };
 }
 
 /** A safe stage-specific error, never raw process output or file contents. */
