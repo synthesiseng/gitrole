@@ -55,7 +55,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Run local diagnosis without any SSH execution, including <code>ssh -G</code>. Combine with <code>--json</code> in either order. SSH authentication is skipped as <code>info</code>; local warnings still cause exit <code>2</code>. Exit <code>0</code> means only that local checks have no warnings. Every push host and HTTPS pin is still checked, including mixed SSH/HTTPS destinations. No authentication history is read or saved. Default doctor retains online SSH checks and their possible network/configuration effects.</dd>
 
   <dt><code>gitrole remote set &lt;name&gt;</code></dt>
-  <dd>Rewrite origin’s fetch URL to the saved GitHub SSH host alias, preserving its owner/repository. It does not change a separate push URL or another selected push remote.</dd>
+  <dd>Rewrite origin’s fetch URL to the saved GitHub SSH host alias, preserving its owner/repository. It reports when that URL already matches and skips the write. Separate push URLs and another selected push remote are unchanged. Exit 0 confirms the fetch-URL operation, not push alignment; inspect the effective destination with <code>gitrole status --short --offline</code>.</dd>
 
   <dt><code>gitrole remove &lt;name&gt;</code></dt>
   <dd>Remove a saved role profile.</dd>

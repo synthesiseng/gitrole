@@ -131,11 +131,17 @@ export function renderSshNote(message: string): string {
 }
 
 export function renderRemoteUse(result: RemoteUseResult): string {
-  return [
-    `${chalk.green('updated remote')} ${chalk.bold('origin')} ${chalk.dim(`for ${result.role.name}`)}`,
+  const lines = result.previousUrl === result.nextUrl ? [
+    `origin fetch URL already matches ${chalk.bold(result.role.name)}`,
+    formatDetail('url', result.nextUrl)
+  ] : [
+    `${chalk.green('updated remote')} ${chalk.bold('origin')} fetch URL ${chalk.dim(`for ${result.role.name}`)}`,
     formatDetail('from', result.previousUrl),
     formatDetail('to', result.nextUrl)
-  ].join('\n');
+  ];
+  lines.push('Separate push URLs and default push selection are unchanged.',
+    formatDetail('next', 'Check the effective push destination: gitrole status --short --offline'));
+  return lines.join('\n');
 }
 
 export function renderPinnedRepoPolicy(result: PinRepoPolicyResult): string {
