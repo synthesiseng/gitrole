@@ -1,7 +1,7 @@
 /*
  * Implements repository diagnosis and post-switch alignment checks.
  */
-import { getBlankRoleIdentityFields, isReservedRoleName, type Role } from '../../domain/role.js';
+import { getBlankRoleIdentityFields, getControlRoleIdentityFields, isReservedRoleName, type Role } from '../../domain/role.js';
 import { findMatchingRole, findPinnedRole, buildPushAlignmentChecks } from '../alignment.js';
 import {
   getDoctorOverall,
@@ -173,6 +173,14 @@ function buildDoctorChecks(input: {
         status: 'warn',
         label: 'role',
         message: `saved role "${role.name}" has empty or whitespace-only ${fields.join(' and ')}; replace it with gitrole add or remove it with gitrole remove`
+      });
+    }
+    const controlFields = getControlRoleIdentityFields(role).filter((field) => !fields.includes(field));
+    if (controlFields.length > 0) {
+      checks.push({
+        status: 'warn',
+        label: 'role',
+        message: `saved role "${role.name}" has control characters or line separators in ${controlFields.join(' and ')}; replace it with gitrole add or remove it with gitrole remove`
       });
     }
   }

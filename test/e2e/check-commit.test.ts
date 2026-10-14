@@ -71,6 +71,18 @@ async function noAttempts(f: Fixture) {
   await assert.rejects(readFile(f.marker), { code: 'ENOENT' });
 }
 
+test('manual check without an installed hook qualifies bypass guidance and preserves refusal', async (t) => {
+  const f = await fixture(t);
+  await rm(path.join(f.repo, '.git/hooks/pre-commit'));
+  await roles(f, []);
+  const before = await Promise.all([readFile(f.store), readFile(path.join(f.repo, '.git/config'))]);
+  const result = check(f, 2);
+  assert.match(result.stderr, /If gitrole is installed as a pre-commit hook, git commit --no-verify/);
+  assertBypass(result.stderr);
+  assert.deepEqual(await Promise.all([readFile(f.store), readFile(path.join(f.repo, '.git/config'))]), before);
+  await noAttempts(f);
+});
+
 for (const remote of [undefined, 'https://example.test/project.git', 'git@fixture.test:project.git']) {
   test(`local guard permits correctly pinned first and established commits with ${remote ?? 'no remote'}`, async (t) => {
     const f = await fixture(t); await policy(f);
@@ -289,7 +301,7 @@ test('direct mismatch and read errors disclose bypass; hook presentation marker 
   assertBypass(direct.stderr);
   const marked = check(f, 2, { ...mismatch, GITROLE_COMMIT_HOOK: '1' });
   assert.doesNotMatch(marked.stderr, /git commit --no-verify/);
-  assert.equal(marked.stderr, direct.stderr.slice(0, direct.stderr.indexOf('git commit --no-verify')));
+  assert.equal(marked.stderr, direct.stderr.slice(0, direct.stderr.indexOf('If gitrole is installed as a pre-commit hook,')));
   assertBypass(check(f, 2, { ...mismatch, GITROLE_COMMIT_HOOK: '0' }).stderr);
   const wrapper = run(f, 'git', ['commit', '--allow-empty', '-m', 'blocked'], mismatch);
   assert.equal(wrapper.status, 1); assertBypass(wrapper.stderr);

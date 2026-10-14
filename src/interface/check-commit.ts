@@ -22,6 +22,6 @@ export function renderCommitCheck(result: CommitCheckResult, hookOwnsBypass = fa
     }
     lines.push('Review the effective author and committer above. Environment overrides and Git-prepared authors (--author, amend or reused commits) may also need correction; changing local config alone may not fix them.');
   }
-  if (!hookOwnsBypass) lines.push('git commit --no-verify bypasses this pre-commit hook and all other pre-commit checks (and commit-msg). It does not correct identity. Use it only if you deliberately accept that bypass.');
+  if (!hookOwnsBypass) lines.push('If gitrole is installed as a pre-commit hook, git commit --no-verify bypasses it and all other pre-commit checks (and commit-msg). It does not correct identity. Use it only if you deliberately accept that bypass.');
   return lines.join('\n');
 }

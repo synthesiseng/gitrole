@@ -71,7 +71,9 @@ export async function useRemoteForRole(
 
   const nextUrl = `git@${role.githubHost}:${remote.owner}/${remote.repository}.git`;
 
-  await dependencies.repository.setOriginUrl(nextUrl);
+  if (previousUrl !== nextUrl) {
+    await dependencies.repository.setOriginUrl(nextUrl);
+  }
 
   return {
     role,

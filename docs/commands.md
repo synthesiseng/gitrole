@@ -13,13 +13,13 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
 
 <dl class="command-list">
   <dt><code>gitrole add &lt;name&gt; --name "..." --email "..." [--ssh ...] [--github-user ...] [--github-host ...]</code></dt>
-  <dd>Create or replace a saved role profile; include all optional fields you intend to keep. Empty or whitespace-only full names and emails are rejected before changing saved roles.</dd>
+  <dd>Create or replace a saved role profile; include all optional fields you intend to keep. Full names and emails must be nonblank and contain no control characters or line separators; invalid values are rejected before changing saved roles.</dd>
 
   <dt><code>gitrole import current --name &lt;role&gt;</code></dt>
   <dd>Save Git’s effective current author name and email as a named role. <code>--name &lt;role&gt;</code> is required. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.</dd>
 
   <dt><code>gitrole use &lt;name&gt; [--global | --local]</code></dt>
-  <dd>Apply a saved role globally (the default) or only in the current repository with <code>--local</code>. A saved role with an empty or whitespace-only full name or email is rejected before changing Git config or loading an SSH key. A saved SSH key may be loaded with <code>ssh-add</code>.</dd>
+  <dd>Apply a saved role globally (the default) or only in the current repository with <code>--local</code>. A saved role with a blank full name/email, control characters, or line separators is rejected before changing Git config or loading an SSH key. A saved SSH key may be loaded with <code>ssh-add</code>.</dd>
 
   <dt><code>gitrole pin &lt;role&gt;</code></dt>
   <dd>Create a strict repo-local <code>.gitrole</code> policy for one role.</dd>
@@ -46,7 +46,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to <code>status</code> to invoke no SSH commands, including configuration inspection. Local HTTPS pin checks still apply.</dd>
 
   <dt><code>gitrole doctor</code></dt>
-  <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name or email, including inactive roles. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config. A read-only legacy pre-commit inspection may add an informational migration hint; it never installs, executes, or replaces hooks, and that hint does not change the verdict or exit. This hint is available in both default online diagnosis and <code>doctor --offline</code>.</dd>
+  <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name/email, control characters, or line separators, including inactive roles. Human identity output escapes controls so legacy values can be inspected safely. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config. A read-only legacy pre-commit inspection may add an informational migration hint; it never installs, executes, or replaces hooks, and that hint does not change the verdict or exit. This hint is available in both default online diagnosis and <code>doctor --offline</code>.</dd>
 
   <dt><code>gitrole doctor --json</code></dt>
   <dd>Return the full diagnosis as structured JSON.</dd>
@@ -55,7 +55,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Run local diagnosis without any SSH execution, including <code>ssh -G</code>. Combine with <code>--json</code> in either order. SSH authentication is skipped as <code>info</code>; local warnings still cause exit <code>2</code>. Exit <code>0</code> means only that local checks have no warnings. Every push host and HTTPS pin is still checked, including mixed SSH/HTTPS destinations. No authentication history is read or saved. Default doctor retains online SSH checks and their possible network/configuration effects.</dd>
 
   <dt><code>gitrole remote set &lt;name&gt;</code></dt>
-  <dd>Rewrite origin’s fetch URL to the saved GitHub SSH host alias, preserving its owner/repository. It does not change a separate push URL or another selected push remote.</dd>
+  <dd>Rewrite origin’s fetch URL to the saved GitHub SSH host alias, preserving its owner/repository. It reports when that URL already matches and skips the write. Separate push URLs and another selected push remote are unchanged. Exit 0 confirms the fetch-URL operation, not push alignment; inspect the effective destination with <code>gitrole status --short --offline</code>.</dd>
 
   <dt><code>gitrole remove &lt;name&gt;</code></dt>
   <dd>Remove a saved role profile.</dd>

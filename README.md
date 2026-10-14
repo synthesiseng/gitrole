@@ -37,7 +37,7 @@ Then check `gitrole --version` and `command -v gitrole`. Both channels expose `g
 
 Update Homebrew with `brew update`, then `brew upgrade synthesiseng/tap/gitrole`. Update npm with `npm install -g gitrole@latest`. If both are installed, the first executable on `PATH` wins.
 
-As checked on September 30, 2026, npm latest and the Homebrew formula both targeted 0.10.5. A source merge does not establish publication. See [Install and update](https://docs.gitrole.dev/guides/install-and-update-gitrole/) for version and optional-asset boundaries.
+As checked on October 14, 2026, npm latest and the Homebrew formula both target 0.13.2. A source merge does not establish publication. See [Install and update](https://docs.gitrole.dev/guides/install-and-update-gitrole/) for version and optional-asset boundaries.
 
 ## First use
 

@@ -105,7 +105,7 @@ export function renderRoleList(result: ListRolesResult): string {
       const githubHost = role.githubHost ? ` ${chalk.dim(`host:${role.githubHost}`)}` : '';
 
       return `${marker} ${chalk.bold(role.name)} ${chalk.dim(
-        `${role.fullName} <${role.email}>`
+        formatIdentityPair(role)
       )}${ssh}${githubUser}${githubHost}`;
     })
     .join('\n');
@@ -131,11 +131,17 @@ export function renderSshNote(message: string): string {
 }
 
 export function renderRemoteUse(result: RemoteUseResult): string {
-  return [
-    `${chalk.green('updated remote')} ${chalk.bold('origin')} ${chalk.dim(`for ${result.role.name}`)}`,
+  const lines = result.previousUrl === result.nextUrl ? [
+    `origin fetch URL already matches ${chalk.bold(result.role.name)}`,
+    formatDetail('url', result.nextUrl)
+  ] : [
+    `${chalk.green('updated remote')} ${chalk.bold('origin')} fetch URL ${chalk.dim(`for ${result.role.name}`)}`,
     formatDetail('from', result.previousUrl),
     formatDetail('to', result.nextUrl)
-  ].join('\n');
+  ];
+  lines.push('Separate push URLs and default push selection are unchanged.',
+    formatDetail('next', 'Check the effective push destination: gitrole status --short --offline'));
+  return lines.join('\n');
 }
 
 export function renderPinnedRepoPolicy(result: PinRepoPolicyResult): string {
@@ -159,10 +165,10 @@ export function renderStatus(result: StatusResult, options: { verbose?: boolean;
   const lines = [`${roleLabel}  ${summary}${localOnly}`];
   lines.push(formatDetail('checks', `commit ${result.commit}  remote ${result.remote}  auth ${result.auth}  policy ${result.policy}`));
 
-  lines.push(formatDetail('commit', result.commitIdentity ?? chalk.dim('unset')));
+  lines.push(formatDetail('commit', result.commitIdentity ? escapeIdentityControls(result.commitIdentity) : chalk.dim('unset')));
 
   if (result.envNote) {
-    lines.push(formatDetail('env', result.envNote));
+    lines.push(formatDetail('env', escapeIdentityControls(result.envNote)));
   }
 
   if (result.pushAuth) {
@@ -172,7 +178,7 @@ export function renderStatus(result: StatusResult, options: { verbose?: boolean;
   lines.push(formatDetail('scope', formatStatusScope(result)));
 
   if (result.historyNote) {
-    lines.push(formatDetail('history', result.historyNote));
+    lines.push(formatDetail('history', escapeIdentityControls(result.historyNote)));
   } else if (!result.lastNonMergeCommit) {
     lines.push(formatDetail('history', 'no non-merge commits yet'));
   }
@@ -264,7 +270,11 @@ export function renderDoctor(
     const status = check.status === 'ok' ? chalk.green('ok')
       : check.status === 'warn' ? chalk.yellow('warn') : chalk.blue('info');
     const continuation = ' '.repeat(2 + check.status.length + 1 + Math.max(6, check.label.length) + 1);
-    const message = summarizeCheck(check.message).replace(/\n/g, `\n${continuation}`);
+    // Identity-bearing diagnostics can include raw saved/configured values.
+    // Keep intentional multiline transport diagnostics on their existing path.
+    const rawMessage = ['role', 'fix', 'commit', 'identity', 'env'].includes(check.label)
+      ? escapeIdentityControls(check.message) : check.message;
+    const message = summarizeCheck(rawMessage).replace(/\n/g, `\n${continuation}`);
     lines.push(`  ${status} ${check.label.padEnd(6, ' ')} ${message}`);
   }
 
@@ -338,7 +348,7 @@ function formatDiagnosedValue(input: {
     return chalk.dim(`not set (${input.source})`);
   }
 
-  return `${input.value} ${chalk.dim(`(${input.source})`)}`;
+  return `${escapeIdentityControls(input.value)} ${chalk.dim(`(${input.source})`)}`;
 }
 
 function formatDiagnosedIdentity(identity: DoctorResult['commitIdentity']): string {
@@ -372,10 +382,15 @@ function shouldRenderGlobalIdentity(result: DoctorResult): boolean {
 }
 
 function formatIdentityPair(identity: { fullName?: string; email?: string }): string {
-  const fullName = identity.fullName ?? chalk.dim('not set');
-  const email = identity.email ?? chalk.dim('not set');
+  const fullName = identity.fullName === undefined ? chalk.dim('not set') : escapeIdentityControls(identity.fullName);
+  const email = identity.email === undefined ? chalk.dim('not set') : escapeIdentityControls(identity.email);
 
   return `${fullName} <${email}>`;
+}
+
+function escapeIdentityControls(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 function formatPushAuth(githubUser?: string, githubHost?: string): string | undefined {

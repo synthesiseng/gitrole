@@ -337,7 +337,8 @@ zshSyntax('zsh -n accepts the completion function', () => {
 
 const zshBehavior = commandAvailable('zsh') && commandAvailable('python3') ? test : test.skip;
 
-zshBehavior('zsh completion offers commands, flags, and saved role names', async () => {
+for (const term of ['dumb', 'xterm-256color']) {
+zshBehavior(`zsh completion offers commands, flags, and saved role names with TERM=${term}`, async () => {
   const { env } = await createRealCliEnv();
   const script = String.raw`
 import atexit, os, pty, select, json, re, sys
@@ -370,8 +371,11 @@ def wait_for_ready(seconds=8):
         if not chunk:
             break
         buf += chunk
-        # Match executed output and the following prompt, never echoed setup input.
-        if re.search(rb"(?:^|\n)COMPINIT_DONE\nGITROLE_READY> $", buf.replace(b"\r", b"")):
+        # ZLE adds CSI styling/erase sequences around prompts on capable terminals.
+        # Normalize readiness display; still require executed output followed
+        # by the prompt, never echoed setup input or a completion acknowledgement.
+        display = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"", buf).replace(b"\r", b"")
+        if re.search(rb"(?:^|\n)COMPINIT_DONE\nGITROLE_READY> $", display):
             return buf
     raise SystemExit("timed out waiting for completion setup and prompt")
 
@@ -421,7 +425,9 @@ for request, line in enumerate(cases, 1):
     drain()
     write(line + "\t")
     raw = read_completion(request)
-    text = raw.decode("utf-8", "replace").replace("\r", "")
+    # Separate cursor redraws so the last completion and the redrawn input do not
+    # become one token. Keep the raw acknowledgement and all content assertions.
+    text = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b" ", raw).decode("utf-8", "replace").replace("\r", "")
     results[line] = text
 
 print(json.dumps(results))
@@ -449,7 +455,7 @@ print(json.dumps(results))
   const result = spawnSync('python3', ['-c', script, JSON.stringify(lines), completionsDir], {
     encoding: 'utf8',
     // Supply the prompt before startup so its marker cannot match echoed setup input.
-    env: { ...env, PS1: 'GITROLE_READY> ', RPS1: '' },
+    env: { ...env, TERM: term, PS1: 'GITROLE_READY> ', RPS1: '' },
     timeout: 20000
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -485,6 +491,7 @@ print(json.dumps(results))
   assert.match(completed['gitrole doctor --offline --'], /--json/);
   assert.match(completed['gitrole resolve --'], /--json/);
 });
+}
 
 const fishSyntax = commandAvailable('fish') ? test : test.skip;
 
