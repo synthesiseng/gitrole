@@ -155,7 +155,7 @@ Examples:
     .requiredOption('--name <fullName>', 'git user.name value for this role')
     .requiredOption('--email <email>', 'git user.email value for this role')
     .option('--ssh <path>', 'SSH private key to load with ssh-add')
-    .option('--github-user <githubUser>', 'expected GitHub user for SSH pushes')
+    .option('--github-user <githubUser>', 'expected GitHub user for SSH checks and HTTPS pins')
     .option('--github-host <githubHost>', 'expected GitHub SSH host or host alias')
     .addHelpText(
       'after',
