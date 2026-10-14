@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+* **use:** assess repository alignment after the saved SSH key's load attempt completes, so feedback reflects the resulting agent state. Key loading remains best-effort, and genuine alignment warnings are retained.
+
 * **ssh:** explain why account checks remain unverified, retain overlapping reasons in existing doctor JSON messages, offer bounded manual-check guidance, and clarify offline skipping and expected accounts. Verification rules, SSH invocations, short fields and exits are unchanged.
 
 * **remote:** treat explicit remote-helper destinations as unsupported instead of SSH, so status warns online and offline while doctor warns online, without executing helpers.
