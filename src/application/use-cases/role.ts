@@ -111,17 +111,16 @@ export async function useRole(
     await dependencies.gitConfig.setGlobalUserEmail(role.email);
   }
 
-  const alignment = await assessRoleAlignmentSafely(dependencies, role);
-
   if (!role.sshKeyPath) {
     return {
       role,
       scope,
-      alignment
+      alignment: await assessRoleAlignmentSafely(dependencies, role)
     };
   }
 
   const ssh = await dependencies.sshAgent.loadKey(role.sshKeyPath);
+  const alignment = await assessRoleAlignmentSafely(dependencies, role);
 
   return {
     role,
