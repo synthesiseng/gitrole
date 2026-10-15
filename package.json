@@ -1,6 +1,6 @@
 {
   "name": "gitrole",
-  "version": "0.13.3",
+  "version": "0.13.4",
   "description": "Switch Git name/email and load a saved SSH key when configured.",
   "type": "module",
   "bin": {
