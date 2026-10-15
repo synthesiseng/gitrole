@@ -13,7 +13,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
 
 <dl class="command-list">
   <dt><code>gitrole add &lt;name&gt; --name "..." --email "..." [--ssh ...] [--github-user ...] [--github-host ...]</code></dt>
-  <dd>Create or replace a saved role profile; include all optional fields you intend to keep. Full names and emails must be nonblank and contain no control characters or line separators; invalid values are rejected before changing saved roles.</dd>
+  <dd>Create or replace a saved role profile; include all optional fields you intend to keep. Full names and emails must be nonblank and contain no control characters (including Unicode bidi/text-direction controls) or line separators; invalid values are rejected before changing saved roles.</dd>
 
   <dt><code>gitrole import current --name &lt;role&gt;</code></dt>
   <dd>Save Git’s effective current author name and email as a named role. <code>--name &lt;role&gt;</code> is required. See <a href="{{ '/guides/import-the-current-git-identity/' | url }}">Import the current Git identity</a>.</dd>
@@ -46,7 +46,7 @@ summary: Reference for gitrole CLI commands for saved roles, Git identity switch
   <dd>Show the one-line machine-friendly alignment check. Add <code>--offline</code> to <code>status</code> to invoke no SSH commands, including configuration inspection. Local HTTPS pin checks still apply.</dd>
 
   <dt><code>gitrole doctor</code></dt>
-  <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name/email, control characters, or line separators, including inactive roles. Human identity output escapes controls so legacy values can be inspected safely. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config. A read-only legacy pre-commit inspection may add an informational migration hint; it never installs, executes, or replaces hooks, and that hint does not change the verdict or exit. This hint is available in both default online diagnosis and <code>doctor --offline</code>.</dd>
+  <dd>Explain commit identity, remote configuration, and SSH auth alignment in more detail. Also warn about every saved role with a blank full name/email, control characters, or line separators, including inactive roles. Human identity output displays control characters, including bidi/text-direction controls, as visible Unicode escapes so legacy values can be inspected. Ordinary multilingual letters and join characters remain valid. JSON preserves the original values. Replace such a role with <code>gitrole add</code> using a valid identity, or remove it with <code>gitrole remove</code>; diagnosis does not rewrite saved roles or Git config. A read-only legacy pre-commit inspection may add an informational migration hint; it never installs, executes, or replaces hooks, and that hint does not change the verdict or exit. This hint is available in both default online diagnosis and <code>doctor --offline</code>.</dd>
 
   <dt><code>gitrole doctor --json</code></dt>
   <dd>Return the full diagnosis as structured JSON.</dd>

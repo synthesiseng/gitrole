@@ -389,7 +389,7 @@ function formatIdentityPair(identity: { fullName?: string; email?: string }): st
 }
 
 function escapeIdentityControls(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g,
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
     (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 

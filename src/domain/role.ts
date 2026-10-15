@@ -16,7 +16,8 @@ export interface GitIdentity {
 }
 
 const roleNamePattern = /^[a-z0-9_-]+$/;
-const identityControlPattern = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+// Include bidi formatting controls without rejecting ordinary RTL letters or join controls.
+const identityControlPattern = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/;
 
 /**
  * `role=` value written when no saved role matches the commit identity.
@@ -74,7 +75,7 @@ export function getBlankRoleIdentityFields(role: Pick<Role, 'fullName' | 'email'
   return fields;
 }
 
-/** Lists identity fields containing terminal controls or line separators. */
+/** Lists identity fields containing terminal/bidi controls or line separators. */
 export function getControlRoleIdentityFields(role: Pick<Role, 'fullName' | 'email'>): Array<'full name' | 'email'> {
   const fields: Array<'full name' | 'email'> = [];
   if (identityControlPattern.test(role.fullName)) fields.push('full name');
