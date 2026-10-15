@@ -2,8 +2,8 @@
 import type { CommitCheckResult } from '../application/check-commit.js';
 
 function display(value: string | undefined): string {
-  // JSON quoting escapes terminal controls and bounds potentially large identity values.
-  return JSON.stringify(value === undefined ? '(unset)' : value.slice(0, 512)).replace(/[\u007f-\u009f\u2028\u2029]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  // JSON quoting bounds values and escapes C0; also escape C1, line and bidi controls.
+  return JSON.stringify(value === undefined ? '(unset)' : value.slice(0, 512)).replace(/[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 export function renderCommitCheck(result: CommitCheckResult, hookOwnsBypass = false): string {
