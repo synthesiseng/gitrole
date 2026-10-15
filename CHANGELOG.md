@@ -6,6 +6,13 @@
 
 * **auth:** wait for synthetic SSH processes to terminate before removing fixture files, and restore patched builtins even when teardown fails ([#130](https://github.com/synthesiseng/gitrole/pull/130)). This changes test cleanup only.
 
+## [0.13.4](https://github.com/synthesiseng/gitrole/compare/v0.13.3...v0.13.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* **identity:** reject and escape bidi controls ([#133](https://github.com/synthesiseng/gitrole/issues/133)) ([cc6c2d7](https://github.com/synthesiseng/gitrole/commit/cc6c2d76cf214010464ea6d866a29ff7321e4b8f))
+
 ## [0.13.3](https://github.com/synthesiseng/gitrole/compare/v0.13.2...v0.13.3) (2026-10-14)
 
 
