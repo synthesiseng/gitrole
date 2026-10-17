@@ -66,7 +66,7 @@ fi
 
 <p>Mixed configured identity sources refuse. An unborn branch requires a local or worktree override; matching global-only identity can pass in an established repository. A valid unborn branch differs from damaged HEAD, index, config, or unexpected Git results, which fail with <code>1</code>. Outside a worktree and bare repositories return <code>2</code>. The check reads the invocation's effective identity, including Git-prepared author values in a hook; a standalone run cannot predict later author arguments.</p>
 
-<p>The optional packaged pre-commit wrapper delegates to this command. It preserves <code>1</code>/<code>2</code>, normalizes unexpected failures to <code>1</code>, and appends a fixed bypass disclosure on failure. Missing or incompatible CLI and missing Node never count as a pass. The wrapper is quiet on success. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">local hook setup and migration</a>. Existing status fields/exits and the packaged agent skill's strict gate remain unchanged.</p>
+<p>The optional packaged pre-commit wrapper delegates to this command. It preserves <code>1</code>/<code>2</code>, normalizes unexpected failures to <code>1</code>, and appends a fixed bypass disclosure on failure. Missing or incompatible CLI and missing Node never count as a pass. The wrapper is quiet on success. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">local hook setup and migration</a>. Existing status fields/exits remain unchanged. The packaged agent skill uses this local command for ordinary commits and diagnoses pushes separately; this is an agent policy change, not a change to status or doctor verdicts.</p>
 
 <h2 id="status-short"><code>gitrole status --short</code></h2>
 
