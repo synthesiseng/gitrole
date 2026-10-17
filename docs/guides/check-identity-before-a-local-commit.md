@@ -59,7 +59,7 @@ The wrapper refuses the commit if the CLI is missing, too old, cannot launch Nod
 
 <h2 id="migration">Migrate a copied legacy hook manually</h2>
 
-Older packaged hooks, including npm 0.10.11, run `gitrole status --short`. They check combined commit, remote, authentication, and policy alignment. Such a copied hook keeps its strict behavior after a CLI upgrade. The new local hook permits an otherwise valid commit without a remote or successful SSH probe; `status`, prompts, and the packaged agent skill retain their existing contracts.
+Older packaged hooks, including npm 0.10.11, run `gitrole status --short`. They check combined commit, remote, authentication, and policy alignment. Such a copied hook keeps its strict behavior after a CLI upgrade. The new local hook permits an otherwise valid commit without a remote or successful SSH probe; `status` and prompts retain their existing contracts. The packaged agent skill now uses the same local commit gate and diagnoses pushes separately.
 
 | Hook and CLI | Behavior |
 | --- | --- |
@@ -86,6 +86,6 @@ A finding adds at most one `info` check labeled `hook`; it does not change docto
 
 <h2 id="other-checks">Keep broader checks deliberate</h2>
 
-The packaged agent skill still runs `gitrole status --short` and stops on its warnings. Installing the local hook does not change that instruction or authorize an agent to ignore it. See <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify identity before an agent commits</a>.
+The packaged agent skill uses `gitrole check commit` for ordinary commits, with offline diagnosis for commit problems and separate status checks for pushes. Status warnings still stop pushes; they are not remote/authentication prerequisites for a local commit. Existing copied skills and hooks need deliberate review before updating. See <a href="{{ '/guides/verify-git-identity-before-an-agent-commits/' | url }}">Verify identity before an agent commits</a>.
 
 Use `status` or `doctor` deliberately for broader push diagnosis; their online modes may invoke SSH. No pre-push hook is installed or supplied by this change. A future push guard would need to check the actual push target and preserve any existing hook chain; moving the old status call to pre-push would not establish that contract.

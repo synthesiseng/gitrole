@@ -116,7 +116,7 @@ Run `gitrole doctor` to identify a warning, then use [Troubleshoot identity warn
 - [Enable shell completion](https://docs.gitrole.dev/guides/enable-shell-tab-completion/): load optional scripts from npm or a checkout.
 - [Verify identity before an agent commits](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/): use the packaged skill or an optional check-only hook within an authorized workflow.
 
-The optional `hooks/pre-commit` now runs `gitrole check commit`. It requires a complete saved author/committer identity even without a pin: save the intended identity as a role, or do not install the hook there. Existing copied hooks and the packaged agent skill retain their strict `status --short` gate. See [the local commit guide](docs/guides/check-identity-before-a-local-commit.md) for command exits, manual migration, backups, and CLI compatibility. A source change does not establish publication.
+The optional `hooks/pre-commit` now runs `gitrole check commit`. It requires a complete saved author/committer identity even without a pin: save the intended identity as a role, or do not install the hook there. The packaged agent skill uses the same local commit gate and diagnoses pushes separately. Existing copied hooks and skill files retain their old behavior until deliberately reviewed and updated. See [the local commit guide](docs/guides/check-identity-before-a-local-commit.md) for command exits, manual migration, backups, and CLI compatibility. A source change does not establish publication.
 
 The npm package includes `skills`, `hooks`, and `completions`. This guide provides no supported Homebrew path for those assets; Homebrew users can use a source checkout. Installation does not enable them automatically.
 

@@ -1,110 +1,83 @@
 ---
 name: gitrole
-description: Verify Git commit and push identity with gitrole before you commit or push. Use when creating a commit, amending a commit, or pushing, when GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, or GIT_COMMITTER_EMAIL may override Git config, and when asked if this repo's Git identity is aligned. Stop on warning and do not commit when misaligned.
-compatibility: Requires the gitrole CLI on PATH.
+description: Check Git identity before ordinary commits or pushes, and diagnose wrong author names, emails, GitHub accounts, environment overrides, or repository policy mismatches. Use for first commits and amend requests too, with separate author review for amend. Keep local commit gating separate from push diagnosis; stop on the relevant check's failure.
+compatibility: Requires gitrole 0.12.0 or newer on PATH with check commit support.
 ---
 
-# Verify identity before you commit
+# Check identity for the intended operation
 
-Git can resolve identity from configuration and environment overrides. Before `git commit`, `git commit --amend`, or `git push`, check the identity gitrole reports and stop when it is a warning.
+Verify, diagnose, then apply only user-approved corrections and recheck. These instructions do not authorize a commit or push and are not an enforced Git permission boundary.
 
-Use `gitrole status --short` as the precommit gate in the repository, including before its first commit.
+## Confirm command support
+
+In the agent's actual execution environment, check `gitrole --version` and `gitrole check commit --help`. Confirm that help describes the local commit check, not generic help from an older CLI. If the CLI is missing, unsupported, or fails, stop and report the command and error. Do not install or upgrade it automatically. Do not fall back to online status as a commit gate. A copied skill may be newer than the installed CLI.
+
+## Ordinary commits
+
+Use `gitrole check commit` as the commit gate in the repository, including before its first commit:
+
+```bash
+gitrole check commit
+```
+
+| Result | Action |
+| --- | --- |
+| Exit `0`, no output | Local identity and policy pass. Continue only within existing user authorization and the checked configuration/environment. |
+| Exit `2` | Stop. Do not commit. Report the mismatch from stderr. |
+| Exit `1`, or any unexpected result | Stop. Do not commit. Report the required-data or operational failure from stderr. |
+
+The check requires a complete effective author name/email matching a saved usable role, a matching committer, and compliance with `.gitrole` when present. Missing usable identity, mixed configured sources, mismatched identity/policy, and malformed required data block. A first commit requires a local or worktree identity override; a matching global identity alone does not pass in a fresh repository. A missing `.gitrole` file is allowed.
+
+It needs no remote, GitHub username, SSH key, or successful authentication. It runs locally without SSH, network access, or Keychain access. Do not add `--offline` or `--json`: this command accepts neither. Missing remotes, HTTPS authentication warnings and unverified SSH do not become commit prerequisites. They remain meaningful push diagnostics; do not relabel a warning result as success.
+
+## Diagnose a commit problem locally
+
+```bash
+gitrole doctor --offline --json
+```
+
+Read `overall`, `commitIdentity`, `committerIdentity`, and `checks[].status`/`checks[].label`. Do not parse `checks[].message` as a stable contract. `configuredIdentity` is raw config, not the effective identity. `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` can override configuration. Effective identity sources include `local`, `global`, `system`, `worktree`, `command`, `git`, `env`, and `unset`.
+
+Doctor is broader diagnosis, not a substitute for `check commit`. A `history` warning in a fresh repository, missing destination, or skipped/unverified authentication can coexist with a passing local commit check. Report those separately. Do not filter doctor checks or change its `overall`/exit to manufacture a pass. `info` is not a warning; exit `1` means diagnosis failed and prints no JSON. Investigate identity/policy warnings and errors, then rerun `check commit` for the commit decision. Do not make a commit merely to silence doctor.
+
+## Amend and author overrides
+
+`git commit --amend` normally retains the existing commit's author. A standalone `check commit` observes ordinary-commit identity in its current invocation; it does not validate that retained author. Inspect the existing author and intended committer, confirm the intended author with the user when unclear, and check that both match the approved saved role and policy before an authorized amend. Do not silently add `--reset-author` or rewrite authorship.
+
+Likewise, a passing check does not cover a later explicit `--author`, reused author, or later environment/configuration changes (including command-scoped `git -c`). Re-evaluate the actual intended identity and rerun the check in that context; if it cannot be established, stop. An already installed local hook can check Git's prepared environment for that attempt, but do not assume a hook exists or install one to bypass this limitation.
+
+## Pushes
+
+Determine the intended push command and destination first. `check commit` does not check pushes. For the default push context, run:
 
 ```bash
 gitrole status --short
 ```
 
-Use `gitrole doctor --json` for broader diagnosis when a check needs explanation. Doctor is not a substitute for the precommit gate.
-
-If `gitrole` is not on `PATH`, stop and tell the user. Do not commit.
-
-This skill verifies. It doesn't install hooks, switch roles, or rewrite remotes. Do those only when the user asks. Run the status command as written. Online SSH inspection may execute configured `Match exec` commands or DNS lookups. Don't add `--offline` before a commit or push, because that flag skips the SSH probe this check is here to run.
-
-## `gitrole status --short`
-
-One line on stdout. Eight `key=value` fields, separated by single spaces, in this order:
-
-```text
-role scope override commit remote auth policy overall
-```
-
-Read the fields by name. `overall` is the eighth field. `policy` is the seventh. A parser that still treats the seventh field as the summary is reading `policy`.
+The eight fields are `role scope override commit remote auth policy overall`. Read them by name; `overall` is the eighth field, after `policy`.
 
 | Result | Action |
 | --- | --- |
-| Exit `0` and `overall=aligned` | Identity checks aligned. Proceed only within the user’s existing authorization; this is not proof of push permission or success. |
-| Exit `2` or `overall=warning` | Stop. Do not commit or push. |
-| `commit`, `remote`, `auth`, or `policy` is `warn` | Stop. Do not commit or push. |
-| Exit `1` | Stop. Stdout is empty. The error is on stderr. |
+| Exit `0` and `overall=aligned` | Current default-destination identity checks align; this is not proof of refspec readiness, push permission or success. |
+| Exit `2`, `overall=warning`, or `commit`, `remote`, `auth`, or `policy` is `warn` | Stop. Do not push. Report the command, exit and warning fields. |
+| Exit `1`, missing/malformed fields, or any unexpected result | Stop. Do not push. Report the error; exit `1` leaves stdout empty. |
 
-`na` means that check doesn't apply. It doesn't by itself mean stop. `policy=na` with `overall=aligned` is aligned, because no `.gitrole` file is present.
+`na` means skipped or not applicable, not authenticated. `policy=na` can align without a policy file. HTTPS-only destinations warn unless an allowing pin and the active role's saved `githubUser` satisfy the local HTTPS expectation; even then `auth=na` does not inspect, select, or verify HTTPS credentials. Mixed SSH/HTTPS warns online. Custom SSH commands and incomplete or interactive authentication contexts remain unverified.
 
-Aligned local role, no `.gitrole` file:
+Status observes every Git-resolved default push URL, independently of fetch origin. It has no destination argument or target override option. Default status cannot approve an explicit remote, URL, refspec or other future push arguments. Inspect the actual destination configuration (including all push URLs and URL rewrites) and refspec intent separately; if the requested context is not covered, stop and explain the limitation rather than treating default alignment as verification. Never rewrite remotes merely to make the check pass.
 
-```text
-role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned
-```
+Use `gitrole doctor --json` for structured push diagnosis where online inspection is appropriate. Online checks can invoke SSH and configured `Match exec`, proxies or DNS, with effects allowed by existing SSH settings. If online inspection is not appropriate, use `gitrole doctor --offline --json` and report authentication as unverified; offline diagnosis does not establish live push authentication. Neither mode guarantees a future push after arguments, configuration or environment change.
 
-## Trust the effective identity
+## Apply only approved corrections, then verify
 
-`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` override Git config. A set `user.name` or `user.email` is not the commit identity. Trust the gitrole result. Don't read Git config and decide the repo is aligned.
+The user must choose the intended role. Do not run `gitrole use`, `gitrole pin`, `gitrole remote set`, change hooks, or edit identity/configuration without user approval for that action. Never switch globally to silence a warning. Where policy is expected, `gitrole resolve --json` can explain `defaultRole` and `allowedRoles`; it does not select a role or grant permission to switch. Its missing/invalid-policy exit `1` is a failure, not an empty policy.
 
-On `gitrole doctor --json`, `commitIdentity` reports Git’s effective author for an ordinary commit in the current environment. `commitIdentity.fullName.source` and `commitIdentity.email.source` are `local`, `global`, `system`, `worktree`, `command`, `git`, `env`, or `unset`. `configuredIdentity` is only the raw config, so it can look fine while the commit uses an env override. `committerIdentity` reports the effective committer; divergence from the author warns. Gitrole reads Git’s ordinary-commit identity, including config includes and author/committer-specific settings. Current/import use the effective author. Strict consumers must accept the expanded provenance vocabulary; eight short fields and exits are unchanged. Later `git commit --author` or config/environment changes require a new check.
+After an approved correction, repeat the check for the intended operation. A suggested repair command is not authorization to execute it.
 
-An env value that changes the effective author away from the saved role is `commit=warn` and `overall=warning`. Stop. This line is `GIT_AUTHOR_EMAIL` set to an address that matches no saved role:
+The optional `hooks/pre-commit` uses the same local `gitrole check commit` guard. Leave it uninstalled unless the user asks. Existing copied hooks or skills retain their old instructions until deliberately reviewed and migrated; this skill does not bypass a failing hook. See the [local hook and manual migration guide](https://docs.gitrole.dev/guides/check-identity-before-a-local-commit/).
 
-```text
-role=no-role scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
-```
+## Interactive account tests belong to the human
 
-`GIT_COMMITTER_EMAIL` or `GIT_COMMITTER_NAME` that disagrees with the effective author is also `commit=warn`. Stop. The saved role can still match, because the author didn't change:
+If an interactive account check is needed, ask the user to run `gitrole auth test` in a terminal. Never invoke it automatically from this skill, a hook, or a prompt. It can execute configured SSH commands, contact the network, prompt, save credentials or update known hosts under existing SSH settings.
 
-```text
-role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
-```
-
-An env value that matches the saved role can be `info` with `overall=aligned`. That `info` is not a warning. Still use the gitrole result, not the config keys.
-
-## Warnings that still stop
-
-HTTPS-only push destination with no `.gitrole` pin. `auth=warn` and `overall=warning`. Exit `2`. Stop. `auth=na` on HTTPS is only when a pin allows the active role and that role has a `githubUser`. The pin expresses an expected role and account; it does not inspect, select, or verify HTTPS credentials. Without an allowing pin, this check warns, including offline:
-
-```text
-role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
-```
-
-A repository with no commits and no local role warns on commit identity. A destination can still be resolved without HEAD; `remote=ok` does not prove refspec readiness. Stop on the warning:
-
-```text
-role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
-```
-
-An explicit local role can keep `commit=ok` and the result can be aligned when all remaining checks pass. This observes identity, not branch readiness, push permission or successful push. With a local role and an allowing HTTPS pin, status can exit `0` before the first commit even though doctor exits `2` because there are no commits to inspect. Use the status gate before the separately authorized first commit; do not create a commit merely to silence doctor.
-
-## `gitrole doctor --json`
-
-JSON on stdout. Read `overall`, `commitIdentity`, and `checks[].status`. Don't parse `checks[].message`. Don't treat `configuredIdentity` as the commit identity.
-
-Doctor includes checks beyond current identity, such as missing history. In a fresh repository, a `history` warning and exit `2` can coexist with aligned status. Doctor's result remains a warning; do not relabel it as success or filter its checks to manufacture a passing diagnosis.
-
-If doctor was run first, run `gitrole status --short` for the precommit decision. A history-only warning about an unborn repository is explained by the absence of commits. Other diagnostic warnings or errors require investigation; do not use a clean status to dismiss them. Do not bypass any status warning. Any status exit `1` or `2` still stops the commit or push.
-
-`checks[].status` of `info` is not a warning. It doesn't select exit `2`. Exit `1` means diagnosis failed, with the error on stderr; stop and investigate.
-
-## After a warning
-
-Report the command, the exit code, and `overall`. Quote any `warn` field from `status --short` and stop. For additional diagnosis, report doctor warning labels separately, including missing history; apply the diagnostic distinction above without changing the status stop rules.
-
-Don't run `gitrole use`, `gitrole pin`, or `gitrole remote set` to clear the warning unless the user asks. Fixing the identity is a separate action, and the user has to choose the role.
-
-The package also ships `hooks/pre-commit`, which runs the local `gitrole check commit` guard. It does not replace this skill's strict `gitrole status --short` precommit gate. Leave it uninstalled unless the user asks for that optional hook. Review the [local hook and manual migration guide](https://docs.gitrole.dev/guides/check-identity-before-a-local-commit/) first.
-
-## Push observation limits
-
-Default push observation checks every Git-resolved push URL, independently of fetch origin. Mixed SSH/HTTPS warns online. Custom commands, alternate diagnostic SSH binaries and interactive or incomplete SSH contexts remain unverified. Online inspection may execute configured Match commands or DNS; offline invokes no SSH. Alignment does not prove refspec readiness, push authorization or success and does not predict future explicit push arguments.
-
-## Explicit account test belongs to the human
-
-If the user wants an interactive account check, ask them to run `gitrole auth test` in a terminal. Never invoke it automatically from this skill, a hook or a prompt. It can execute configured SSH commands, contact the network and prompt through SSH. Existing SSH settings may save credentials or update known hosts.
-
-The command reports the observed account and any mismatch with the effective role's `githubUser`. A mismatch exits 2. Even exit 0 is not proof of a future push and does not override a status warning. No history is stored.
+It reports the observed account and mismatch with the effective role's `githubUser`; mismatch exits `2`. Even exit `0` does not prove a future push or override a status warning. No history is stored.

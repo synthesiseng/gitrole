@@ -2,15 +2,15 @@
 layout: layouts/base.njk
 title: Verify Git identity before an agent commits
 eyebrow: Guide
-summary: Point Claude Code, Codex, or Cursor at the gitrole skill shipped in the npm package so the agent runs status --short before it commits and stops on a warning.
+summary: Point Claude Code, Codex, or Cursor at the gitrole skill shipped in the npm package so ordinary commits use the local identity gate and pushes receive separate diagnosis.
 order: 4
 ---
 
-<p>The packaged gitrole skill instructs an agent to check the repository's effective identity and stop on warnings. It supplies instructions, not an enforced Git permission boundary.</p>
+<p>The packaged gitrole skill instructs an agent to check local identity and policy before ordinary commits, and diagnose push destinations separately. It supplies instructions, not an enforced Git permission boundary.</p>
 
 <h2 id="quick-start">Quick start</h2>
 
-<p>You need <code>gitrole</code> on <code>PATH</code> (<code>brew install synthesiseng/tap/gitrole</code>, or <code>npm install -g gitrole</code>). The skill file ships in the npm package. This quick start uses a global npm install and symlinks that folder into the two example personal skill directories. A symlink keeps the skill on the package when you upgrade, instead of copying a stale file.</p>
+<p>You need <code>gitrole</code> 0.12.0 or newer with <code>check commit</code> support on the agent’s <code>PATH</code> (<code>brew install synthesiseng/tap/gitrole</code>, or <code>npm install -g gitrole</code>). The skill file ships in the npm package. This quick start uses a global npm install and symlinks that folder into the two example personal skill directories. A symlink keeps the skill on the package when you upgrade, instead of copying a stale file.</p>
 
 ```bash
 GITROLE_SKILL="$(npm root -g)/gitrole/skills/gitrole"
@@ -32,91 +32,65 @@ fi
 
 <p>Homebrew users can set <code>GITROLE_SKILL</code> to <code>/absolute/path/to/gitrole/skills/gitrole</code> in a source checkout instead. The npm example requires the npm package to be installed. No supported Homebrew asset path is documented here.</p>
 
-<h2 id="what-the-agent-runs">How the agent reads the check</h2>
+<h2 id="what-the-agent-runs">Check ordinary commits locally</h2>
 
-<p>Use <code>gitrole status --short</code> as the precommit gate, including before the first commit:</p>
+Confirm `gitrole --version` and `gitrole check commit --help` in the agent's actual environment. Help must describe the local check. If the CLI is missing, unsupported, or fails, stop and report it. Do not install or upgrade it automatically, change PATH, or fall back to online status gating. Copied skills and CLI installations can have different versions.
+
+Use `gitrole check commit` as the commit gate, including before the first commit:
+
+```bash
+gitrole check commit
+```
+
+| Result | Action |
+| --- | --- |
+| Exit `0`, no output | Local identity and policy pass; proceed only within existing user authorization and the checked context. |
+| Exit `2` | Stop the commit and report the mismatch on stderr. |
+| Exit `1` or unexpected result | Stop the commit and report the failure; stdout is empty on exit `1`. |
+
+The full effective author must match a saved usable role, the committer must match the author, and any `.gitrole` policy must allow the role. Missing usable identity, mixed configured sources and identity/policy mismatch block; malformed required data fails. The first commit requires a local or worktree identity override, even when a global identity matches. Missing policy is allowed. No remote, GitHub username, SSH key or authentication is required. The command performs no SSH, network or Keychain access and takes no `--offline` or `--json` flag.
+
+<h2 id="trust-the-effective-identity">Trust the effective identity</h2>
+
+`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` can override Git configuration. Raw `user.name` and `user.email` are not sufficient evidence. Diagnose locally:
+
+```bash
+gitrole doctor --offline --json
+```
+
+Read `commitIdentity`, `committerIdentity`, `overall`, and `checks[].status`/`checks[].label`; `configuredIdentity` is only raw configuration. Identity sources can be `local`, `global`, `system`, `worktree`, `command`, `git`, `env`, or `unset`. Do not parse `checks[].message` as a stable contract.
+
+<h2 id="full-diagnosis">Keep diagnosis separate from the decision</h2>
+
+Doctor is broader diagnosis, not a substitute for `check commit`. A fresh repository's `history` warning, missing push destination or unverified authentication can coexist with a passing local commit check. Report those warnings separately without changing doctor's verdict or filtering checks into a fabricated pass. `info` is not a warning. Exit `1` is a diagnostic failure with no JSON. Investigate identity/policy warnings and errors, then rerun `check commit` for the commit decision. Do not create a commit merely to silence doctor.
+
+<h2 id="amend">Review retained or explicit authors separately</h2>
+
+`git commit --amend` normally retains the existing author. The standalone local check observes ordinary-commit identity, so it does not validate amend's retained author. Inspect the existing author and intended committer against the approved role and policy; clarify intent with the user if needed. Do not silently add `--reset-author` or rewrite authorship.
+
+A passing check also cannot cover a later explicit `--author`, reused author, or later configuration/environment changes, including `git -c`. Re-evaluate the actual context and rerun the check; stop if that identity cannot be established. An installed local hook can inspect Git's prepared environment for that attempt, but never assume it exists.
+
+<h2 id="warnings-that-still-stop">Push warnings still stop pushes</h2>
+
+For an authorized push, first identify the intended command and destination. The local commit check does not verify pushes. In the default push context:
 
 ```bash
 gitrole status --short
 ```
 
-<p>The line is <code>role scope override commit remote auth policy overall</code>. The agent reads the fields by name. <code>overall</code> is the eighth field, after <code>policy</code>, because a parser that still treats field seven as the summary is reading <code>policy</code>.</p>
+The eight fields remain `role scope override commit remote auth policy overall`; `overall` is the eighth field. Exit `0` with `overall=aligned` reports alignment. Exit `2`, `overall=warning`, or a `warn` in `commit`, `remote`, `auth`, or `policy` stops the push. Exit `1` or malformed/unexpected output also stops it. Do not bypass a status warning for a push or relabel it as success.
 
-<table>
-  <thead>
-    <tr><th>Result</th><th>Action</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Exit <code>0</code> and <code>overall=aligned</code></td><td>Identity checks are aligned. Proceed only within existing user authorization; this does not prove push permission or success.</td></tr>
-    <tr><td>Exit <code>2</code> or <code>overall=warning</code></td><td>Stop. Do not commit or push.</td></tr>
-    <tr><td><code>commit</code>, <code>remote</code>, <code>auth</code>, or <code>policy</code> is <code>warn</code></td><td>Stop. Do not commit or push.</td></tr>
-    <tr><td>Exit <code>1</code></td><td>Stop. The error is on stderr and stdout is empty. Do not commit or push.</td></tr>
-  </tbody>
-</table>
+Status observes every resolved default push URL, not merely fetch origin. It accepts no destination override: default alignment does not verify a future explicit remote, URL, refspec or other push arguments. Inspect actual push URLs, URL rewrites and refspec intent separately; stop and explain when that context cannot be verified. Even aligned status does not prove refspec readiness, authorization or push success.
 
-<p><code>na</code> means that check doesn't apply. It doesn't by itself mean stop. <code>policy=na</code> with <code>overall=aligned</code> is aligned, because there is no <code>.gitrole</code> file to violate.</p>
+HTTPS without an allowing pin and the role's saved `githubUser` still warns. HTTPS `auth=na` in the pinned case expresses a local expectation, not verified or selected credentials. Mixed online transports and unverified SSH still warn. Use `gitrole doctor --json` for structured push diagnosis when online inspection is appropriate; it can execute SSH, configured `Match exec`, proxies or DNS and have effects permitted by SSH settings. Offline diagnosis remains available but does not verify live authentication.
 
-<p>An aligned local role with no <code>.gitrole</code> file looks like this:</p>
+If an interactive check is needed, ask the user to run `gitrole auth test` in their terminal. Never invoke it automatically. Its result does not override a status warning or guarantee a future push.
 
-```text
-role=work scope=local override=true commit=ok remote=ok auth=ok policy=na overall=aligned
-```
+<h2 id="what-it-does-not-do">Keep corrections under user control</h2>
 
-<h2 id="trust-the-effective-identity">Trust the effective identity</h2>
+The user must choose the role and approve identity switching, pinning, remote rewrites and hook changes. A diagnostic suggestion is not approval. Never silently switch globally. Recheck after an approved correction. The skill checks; it neither installs hooks nor blocks Git itself.
 
-<p><code>GIT_AUTHOR_NAME</code>, <code>GIT_AUTHOR_EMAIL</code>, <code>GIT_COMMITTER_NAME</code>, and <code>GIT_COMMITTER_EMAIL</code> override Git config. Agents set those variables often. A present <code>user.name</code> or <code>user.email</code> doesn't mean the commit is aligned, so the agent has to read gitrole instead of the config keys.</p>
-
-<p>On <code>gitrole doctor --json</code>, <code>commitIdentity</code> is the effective name and email. Each <code>source</code> is <code>local</code>, <code>global</code>, <code>system</code>, <code>worktree</code>, <code>command</code>, <code>git</code>, <code>env</code>, or <code>unset</code>. <code>configuredIdentity</code> is only the raw config, so an env override can leave <code>configuredIdentity</code> looking fine while <code>commitIdentity</code> is someone else.</p>
-
-<p>An env value that moves the author off the saved role is <code>commit=warn</code> and <code>overall=warning</code>. This line is <code>GIT_AUTHOR_EMAIL</code> set to an address that matches no saved role, on a global identity that otherwise matches <code>work</code>:</p>
-
-```text
-role=no-role scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
-```
-
-<p><code>GIT_COMMITTER_EMAIL</code> or <code>GIT_COMMITTER_NAME</code> that disagrees with the effective author is also <code>commit=warn</code> and exit <code>2</code>. The role can still match, because the author didn't change:</p>
-
-```text
-role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
-```
-
-<p>An env value that matches the saved role can be <code>info</code> with <code>overall=aligned</code>. That <code>info</code> is not a warning. The agent still uses the gitrole result, not the config keys.</p>
-
-<h2 id="warnings-that-still-stop">Warnings that still stop</h2>
-
-<p>These are <code>overall=warning</code> and exit <code>2</code>. The agent stops and doesn't commit.</p>
-
-<p><strong>HTTPS-only push destination with no <code>.gitrole</code> pin.</strong> <code>auth=warn</code> because the local HTTPS check requires an allowing pin and a saved <code>githubUser</code>. Even then the pin does not verify or select HTTPS credentials. <code>auth=na</code> on HTTPS is only that pinned case. Anything else warns, including a clean commit identity:</p>
-
-```text
-role=work scope=local override=true commit=ok remote=ok auth=warn policy=na overall=warning
-```
-
-<p><strong>A repository with no commits and no local role.</strong> <code>commit=warn</code> protects against taking the global identity for the first commit. The push destination is checked separately; an unborn branch can still resolve a destination:</p>
-
-```text
-role=work scope=global override=false commit=warn remote=ok auth=ok policy=na overall=warning
-```
-
-<p>An explicit local role can keep <code>commit=ok</code>. If the destination, supported authentication and policy also pass, status can be aligned even before the first commit. That observes identity; it does not prove branch/refspec readiness or that a push succeeds.</p>
-
-<h2 id="full-diagnosis">Full diagnosis</h2>
-
-<p>Use doctor for broader diagnosis when a check needs explanation. Doctor is not a substitute for the precommit gate:</p>
-
-```bash
-gitrole doctor --json
-```
-
-<p>Doctor also checks history. A fresh repository with an explicit local role and an allowing HTTPS pin can have aligned status while doctor exits <code>2</code> with only a <code>history</code> warning because it has no commits. Run the status gate before the separately authorized first commit; do not create a commit just to silence doctor. If doctor was run first, use status for the precommit decision. Other diagnostic warnings or errors require investigation; a clean status does not dismiss them.</p>
-
-<p>Do not bypass any status warning. Status exit <code>1</code> or <code>2</code> still stops the agent. Doctor warnings remain warnings; do not filter checks to turn the diagnosis into a pass. <code>info</code> is not a warning. Doctor exit <code>1</code> prints no JSON. Don't parse <code>checks[].message</code>. Field names are in <a href="{{ '/machine-readable-contracts/' | url }}">Machine Readable Contracts</a>.</p>
-
-<h2 id="what-it-does-not-do">What it doesn't do</h2>
-
-<p>The skill doesn't install a git hook, switch roles, or block git. It checks, and the agent decides to stop. Scripted preflight without a skill is in <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">Use gitrole as an identity preflight for agents and automation</a>.</p>
-
-<p>The optional <code>hooks/pre-commit</code> asset now runs <code>gitrole check commit</code>, a local identity and policy guard. It requires a full saved-role match even without a pin. It does not change this skill's strict <code>status --short</code> gate. Existing copied hooks that run status keep their earlier behavior until manually migrated. For installation, compatibility, backup and rollback guidance, read <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">Check identity before a local commit</a>.</p>
+The optional `hooks/pre-commit` uses the same local `check commit` command. Existing copied hooks and skills retain their old behavior until deliberately reviewed and migrated; updating these instructions does not bypass a failing hook. See <a href="{{ '/guides/check-identity-before-a-local-commit/' | url }}">local hook compatibility and migration</a>. Scripted preflight is covered in <a href="{{ '/use-cases/use-gitrole-as-an-identity-preflight-for-agents-and-automation/' | url }}">the automation guide</a>.
 
 <h2 id="where-the-skill-lives">Where the skill lives</h2>
 

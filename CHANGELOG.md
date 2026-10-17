@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Agent skill
+
+* Use the local `check commit` gate (gitrole 0.12.0+) for ordinary agent commits and diagnose pushes separately. Status/doctor verdicts are unchanged. Clarify amend and explicit-destination limits, and require approval for remediation. Copied skills need deliberate review and update; missing/unsupported CLI stops without automatic upgrades.
+
 ### Tests
 
 * **auth:** wait for synthetic SSH processes to terminate before removing fixture files, and restore patched builtins even when teardown fails ([#130](https://github.com/synthesiseng/gitrole/pull/130)). This changes test cleanup only.
