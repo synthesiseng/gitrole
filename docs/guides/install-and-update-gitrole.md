@@ -51,14 +51,17 @@ Then rerun `gitrole --version` and `command -v gitrole`. If you have both instal
 
 <h2 id="versions">Source and published versions</h2>
 
-A merge to the source repository does not establish that either channel has published that change. As checked on October 14, 2026, [npm's `latest`](https://www.npmjs.com/package/gitrole) and the [Homebrew formula](https://github.com/synthesiseng/homebrew-tap/blob/main/Formula/gitrole.rb) both target **0.13.2**. These are metadata observations, not installation or release-recovery qualification. Check current channel metadata when choosing a version:
+A merge to the source repository does not establish that either channel has published that change. [npm's `latest`](https://www.npmjs.com/package/gitrole) and the [Homebrew formula](https://github.com/synthesiseng/homebrew-tap/blob/main/Formula/gitrole.rb) may update at different times. Check current channel metadata when choosing a version:
 
 ```bash
-npm view gitrole version
+npm view gitrole@latest version
+brew update
 brew info synthesiseng/tap/gitrole
 ```
 
-The offline status flag and prompt helper require 0.9.0 or newer. The current published release is 0.13.2, including effective author/committer provenance, default push endpoint observation, and the offline commit check introduced in 0.12.0. An older installation may differ; confirm its version before comparing output.
+These commands report channel metadata, not the version your shell runs or proof that an installation works. Compare their results with `gitrole --version` and `command -v gitrole` after installing or updating.
+
+The offline status flag and prompt helper require 0.9.0 or newer; `gitrole check commit` requires 0.12.0 or newer. Source documentation may describe changes that are not yet published to your channel. Confirm your installed version before comparing output.
 
 <h2 id="optional-assets">Find optional assets</h2>
 
