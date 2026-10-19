@@ -10,6 +10,13 @@
 
 * **auth:** wait for synthetic SSH processes to terminate before removing fixture files, and restore patched builtins even when teardown fails ([#130](https://github.com/synthesiseng/gitrole/pull/130)). This changes test cleanup only.
 
+## [0.14.0](https://github.com/synthesiseng/gitrole/compare/v0.13.5...v0.14.0) (2026-10-19)
+
+
+### Features
+
+* **skills:** organize gitrole agent workflows ([#138](https://github.com/synthesiseng/gitrole/issues/138)) ([c96f3a2](https://github.com/synthesiseng/gitrole/commit/c96f3a281fdc7420260fa6d2c5c39f630f00b9df))
+
 ## [0.13.5](https://github.com/synthesiseng/gitrole/compare/v0.13.4...v0.13.5) (2026-10-17)
 
 
