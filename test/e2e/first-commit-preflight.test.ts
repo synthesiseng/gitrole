@@ -98,7 +98,10 @@ async function agentFixture(t: TestContext): Promise<HermeticWorkspace> {
 
 async function agentGate(w: HermeticWorkspace, expected: number, env: NodeJS.ProcessEnv = {}) {
   const skill = await readFile(path.resolve('skills/gitrole/SKILL.md'), 'utf8');
-  const section = skill.split('## Ordinary commits')[1]?.split('\n## ')[0];
+  const reference = skill.match(/\[[^\]]+\]\((references\/commit-preflight\.md)\)/);
+  assert.ok(reference, 'entrypoint must route to the local commit workflow');
+  const workflow = await readFile(path.resolve('skills/gitrole', reference[1]), 'utf8');
+  const section = workflow.split('## Ordinary commits')[1]?.split('\n## ')[0];
   const command = section?.match(/```bash\n(gitrole [^\n]+)\n```/);
   assert.ok(command, 'skill must prescribe an ordinary commit command');
   const result = runCli(w, command[1].split(' ').slice(1), { env });
