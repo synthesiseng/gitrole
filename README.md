@@ -39,6 +39,16 @@ Update Homebrew with `brew update`, then `brew upgrade synthesiseng/tap/gitrole`
 
 A source merge does not establish publication, and npm and Homebrew may publish at different times. Check `npm view gitrole@latest version` or `brew info synthesiseng/tap/gitrole` for your channel, then compare with `gitrole --version`. See [Install and update](https://docs.gitrole.dev/guides/install-and-update-gitrole/) for version and optional-asset boundaries.
 
+## Agent skill
+
+Install Gitrole’s identity and policy workflows for your coding agent:
+
+```bash
+npx skills add synthesiseng/gitrole --skill gitrole
+```
+
+This installs the skill for the current project by default. Add `--agent codex` to select Codex, or `--global` for user-wide installation. Review existing skill files before replacing them. The Gitrole CLI is installed separately; skill updates and CLI updates are separate. Manual installs must include the entire `skills/gitrole` folder and its references. See [agent skill setup, discovery, updates, and migration](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/).
+
 ## First use
 
 Inside the repository, replace the example identity with yours:

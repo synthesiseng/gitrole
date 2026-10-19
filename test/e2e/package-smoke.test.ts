@@ -94,6 +94,12 @@ test('package smoke: npm pack includes the published CLI entrypoint and metadata
     'skills/gitrole/SKILL.md should be included in the tarball metadata'
   );
 
+  for (const reference of ['identity-and-policy', 'commit-preflight', 'push-diagnosis']) {
+    const asset = `skills/gitrole/references/${reference}.md`;
+    assert.ok(packInfo.files.some((file) => file.path === asset), `${asset} must be packaged`);
+    assert.ok(tarListResult.stdout.split('\n').includes(`package/${asset}`), `${asset} must exist in the tarball`);
+  }
+
   const packedManifest = JSON.parse(extractedPackageJson.stdout) as {
     name: string;
     version: string;
