@@ -10,6 +10,13 @@
 
 * **auth:** wait for synthetic SSH processes to terminate before removing fixture files, and restore patched builtins even when teardown fails ([#130](https://github.com/synthesiseng/gitrole/pull/130)). This changes test cleanup only.
 
+## [0.13.5](https://github.com/synthesiseng/gitrole/compare/v0.13.4...v0.13.5) (2026-10-17)
+
+
+### Bug Fixes
+
+* **skills:** separate commit identity checks from push checks ([#135](https://github.com/synthesiseng/gitrole/issues/135)) ([97a55ea](https://github.com/synthesiseng/gitrole/commit/97a55ea61892050543afc3e56f5b55ee1d1bb389))
+
 ## [0.13.4](https://github.com/synthesiseng/gitrole/compare/v0.13.3...v0.13.4) (2026-10-15)
 
 
