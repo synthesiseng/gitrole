@@ -44,7 +44,7 @@ A source merge does not establish publication, and npm and Homebrew may publish 
 Install Gitrole’s identity and policy workflows for your coding agent:
 
 ```bash
-npx skills add synthesiseng/gitrole --skill gitrole
+npx skills add synthesiseng/gitrole
 ```
 
 This installs the skill for the current project by default. Add `--agent codex` to select Codex, or `--global` for user-wide installation. Review existing skill files before replacing them. The Gitrole CLI is installed separately; skill updates and CLI updates are separate. Manual installs must include the entire `skills/gitrole` folder and its references. See [agent skill setup, discovery, updates, and migration](https://docs.gitrole.dev/guides/verify-git-identity-before-an-agent-commits/).

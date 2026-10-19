@@ -13,19 +13,19 @@ The Gitrole skill helps an agent save or select identities, inspect repository p
 From the project where you want the skill available:
 
 ```bash
-npx skills add synthesiseng/gitrole --skill gitrole
+npx skills add synthesiseng/gitrole
 ```
 
 The Skills installer installs project-scoped skills by default. Review its agent selection and destination before accepting. To select Codex explicitly:
 
 ```bash
-npx skills add synthesiseng/gitrole --skill gitrole --agent codex
+npx skills add synthesiseng/gitrole --agent codex
 ```
 
 For user-wide availability instead of the current project, add `--global`:
 
 ```bash
-npx skills add synthesiseng/gitrole --skill gitrole --agent codex --global
+npx skills add synthesiseng/gitrole --agent codex --global
 ```
 
 These are commands for the separate [Skills installer](https://github.com/vercel-labs/skills), not `gitrole` CLI subcommands. Do not run an installer over an existing skill without reviewing its files, ownership, destination, and proposed replacement. Keep custom instructions and older copies until you deliberately reconcile them.
